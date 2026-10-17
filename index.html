@@ -755,12 +755,20 @@
         updateCursor();
       }
       // Mac keyboards label Backspace "delete".
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectionItems().length) {
+      const deleting = e.key === 'Delete' || e.key === 'Backspace';
+      const fillIndex = selected?.area ? fills.findIndex((fill) => samePoints(fill, selected.area)) : -1;
+      if (deleting && selectionItems().length) {
         e.preventDefault();
         recordUndo();
         deleteSelected();
         draw();
         updateCursor();
+      } else if (deleting && fillIndex !== -1) {
+        // On a selected area, Delete only ever removes its fill.
+        e.preventDefault();
+        recordUndo();
+        fills.splice(fillIndex, 1);
+        draw();
       } else if (e.key === 'Escape') {
         // An embedding page may otherwise take Esc as a cue to move focus out
         // of this frame, and then the next Esc never arrives here.

@@ -111,7 +111,7 @@
       </label>
       <label class="field">
         Path color
-        <input id="path-color" type="color" value="#1a73e8">
+        <input id="path-color" type="color" value="#ffbf17">
       </label>
     </div>
     <div id="background-panel">
@@ -168,8 +168,9 @@
       button.addEventListener('click', () => setTool(button.dataset.tool));
     }
 
-    // A path is a set of points joined by segments; each segment is a pair of
-    // point objects, so moving a point moves its segments with it.
+    // A path is a set of points joined by segments. A segment is [a, b] or
+    // [a, b, control]: its ends are the point objects themselves, so moving a
+    // point moves its segments, and a control point bends it into a curve.
     const paths = [];
     let selected = null; // { path, point } or { path, segment }
     const DOT_RADIUS = 5;
@@ -204,13 +205,29 @@
       return nearestPoint(sx, sy, SELECTED_DOT_RADIUS);
     }
 
-    // The closest spot on segment [a, b] to p, all in background coordinates.
-    function projectOntoSegment([a, b], p) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const lengthSq = dx * dx + dy * dy;
-      const t = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
-      return { x: a.x + t * dx, y: a.y + t * dy };
+    const lerp = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+
+    function segmentPoint([a, b, c], t) {
+      return c ? lerp(lerp(a, c, t), lerp(c, b, t), t) : lerp(a, b, t);
+    }
+
+    // The closest spot on a segment to p, all in background coordinates.
+    // Curves are approximated by short straight pieces.
+    function closestOnSegment(segment, p) {
+      const steps = segment[2] ? 32 : 1;
+      let best = null;
+      for (let i = 0; i < steps; i++) {
+        const a = segmentPoint(segment, i / steps);
+        const b = segmentPoint(segment, (i + 1) / steps);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSq = dx * dx + dy * dy;
+        const u = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+        const q = lerp(a, b, u);
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (!best || d < best.distance) best = { point: q, t: (i + u) / steps, distance: d };
+      }
+      return best;
     }
 
     function segmentAt(sx, sy) {
@@ -219,8 +236,7 @@
       let bestDistance = SEGMENT_HIT_DISTANCE;
       for (const path of paths) {
         for (const segment of path.segments) {
-          const q = projectOntoSegment(segment, p);
-          const d = Math.hypot(q.x - p.x, q.y - p.y) * view.scale;
+          const d = closestOnSegment(segment, p).distance * view.scale;
           if (d <= bestDistance) {
             best = { path, segment };
             bestDistance = d;
@@ -230,11 +246,33 @@
       return best;
     }
 
-    function insertOnSegment(point) {
-      const { path, segment } = selected;
+    // The bend handle sits at the middle of the segment.
+    function bendHandleAt(sx, sy) {
+      for (const path of paths) {
+        for (const segment of path.segments) {
+          const m = segmentPoint(segment, 0.5);
+          if (Math.hypot(m.x * view.scale + view.x - sx, m.y * view.scale + view.y - sy) <= SELECTED_DOT_RADIUS) {
+            return { path, segment };
+          }
+        }
+      }
+      return null;
+    }
+
+    // Choose the control point so the curve's midpoint lands on m.
+    function bendSegment(segment, m) {
       const [a, b] = segment;
+      segment[2] = { x: 2 * m.x - (a.x + b.x) / 2, y: 2 * m.y - (a.y + b.y) / 2 };
+    }
+
+    function insertOnSegment({ point, t }) {
+      const { path, segment } = selected;
+      const [a, b, c] = segment;
       path.points.push(point);
-      path.segments.splice(path.segments.indexOf(segment), 1, [a, point], [point, b]);
+      const halves = c
+        ? [[a, point, lerp(a, c, t)], [point, b, lerp(c, b, t)]]
+        : [[a, point], [point, b]];
+      path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
       selected = { path, point };
     }
 
@@ -268,6 +306,12 @@
       const { path, point, segment } = selected;
       if (segment) {
         path.segments.splice(path.segments.indexOf(segment), 1);
+        for (const end of segment.slice(0, 2)) {
+          if (!path.segments.some(([a, b]) => a === end || b === end)) {
+            path.points.splice(path.points.indexOf(end), 1);
+          }
+        }
+        if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
       } else {
         path.points.splice(path.points.indexOf(point), 1);
         path.segments = path.segments.filter(([a, b]) => a !== point && b !== point);
@@ -361,24 +405,19 @@
       ctx.beginPath();
       for (const path of paths) {
         for (const segment of path.segments) {
-          if (segment === selected?.segment) continue;
-          const [a, b] = segment;
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
+          if (segment !== selected?.segment) traceSegment(segment);
         }
       }
       ctx.stroke();
 
       if (selected?.segment) {
-        const [a, b] = selected.segment;
         ctx.save();
         ctx.lineCap = 'round';
         shadow();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 7 * px;
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+        traceSegment(selected.segment);
         ctx.stroke();
         ctx.restore();
         ctx.lineWidth = 3 * px;
@@ -424,14 +463,21 @@
       if (hovered) emphasise(hovered, 0.7);
       if (selected?.point) emphasise(selected.point, 1);
 
-      if (target?.insert) {
+      const ghost = target?.insert?.point ?? bendGhost();
+      if (ghost) {
         ctx.save();
         ctx.globalAlpha = 0.5;
         ctx.beginPath();
-        ctx.arc(target.insert.x, target.insert.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
+        ctx.arc(ghost.x, ghost.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
+    }
+
+    function traceSegment([a, b, c]) {
+      ctx.moveTo(a.x, a.y);
+      if (c) ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
+      else ctx.lineTo(b.x, b.y);
     }
 
     canvas.addEventListener('wheel', (e) => {
@@ -495,9 +541,22 @@
         return inBackground(p) ? { add: p } : null;
       }
       if (hit) return null;
-      if (selected?.segment) return { insert: projectOntoSegment(selected.segment, p) };
+      if (selected?.segment) {
+        const { t } = closestOnSegment(selected.segment, p);
+        return { insert: { point: segmentPoint(selected.segment, t), t } };
+      }
       if (segmentAt(s.x, s.y)) return null;
       return inBackground(p) ? { add: p } : null;
+    }
+
+    // In the cursor tool, the segment under the pointer (or being bent) shows
+    // its bend handle as a ghost dot.
+    function bendGhost() {
+      if (drag?.bend) return segmentPoint(drag.bend, 0.5);
+      if (!pointer || drag || tool !== 'select' || pathTools.hidden) return null;
+      if (pointAt(pointer.x, pointer.y)) return null;
+      const hit = bendHandleAt(pointer.x, pointer.y) ?? segmentAt(pointer.x, pointer.y);
+      return hit && segmentPoint(hit.segment, 0.5);
     }
 
     function hoveredPoint(target) {
@@ -525,10 +584,16 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
+      const handle = !hit && tool === 'select' && !pathTools.hidden ? bendHandleAt(s.x, s.y) : null;
+      const p = toBackground(s.x, s.y);
       if (hit) {
         selected = hit;
-        const p = toBackground(s.x, s.y);
         drag = { point: hit.point, dx: hit.point.x - p.x, dy: hit.point.y - p.y };
+        draw();
+      } else if (handle) {
+        selected = handle;
+        const m = segmentPoint(handle.segment, 0.5);
+        drag = { bend: handle.segment, dx: m.x - p.x, dy: m.y - p.y };
         draw();
       } else {
         drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
@@ -542,6 +607,9 @@
         const p = toBackground(pointer.x, pointer.y);
         drag.point.x = clampToBackground(p.x + drag.dx);
         drag.point.y = clampToBackground(p.y + drag.dy);
+      } else if (drag?.bend) {
+        const p = toBackground(pointer.x, pointer.y);
+        bendSegment(drag.bend, { x: p.x + drag.dx, y: p.y + drag.dy });
       } else if (drag) {
         view.x += e.clientX - drag.x;
         view.y += e.clientY - drag.y;
@@ -560,7 +628,7 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      const wasPan = !drag.point;
+      const wasPan = !drag.point && !drag.bend;
       const moved = wasPan && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       drag = null;
       if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {

@@ -73,8 +73,10 @@
       display: flex;
       padding: 0;
     }
-    #color-field {
+    .field {
       display: block;
+    }
+    * + .field {
       margin-top: 8px;
     }
   </style>
@@ -101,7 +103,17 @@
     </div>
   </div>
   <div id="panel">
-    <div id="path-panel" hidden></div>
+    <div id="path-panel" hidden>
+      <label class="field">
+        Snap distance
+        <input id="snap-distance" type="range" min="0" max="50" value="15">
+        <output for="snap-distance"></output>
+      </label>
+      <label class="field">
+        Path color
+        <input id="path-color" type="color" value="#1a73e8">
+      </label>
+    </div>
     <div id="background-panel">
       <input id="image-upload" type="file" accept="image/*">
       <div id="image-preview" hidden>
@@ -110,9 +122,9 @@
           <span class="material-symbols-rounded">delete</span>
         </button>
       </div>
-      <label id="color-field">
+      <label class="field">
         Background color
-        <input id="canvas-color" type="color" value="#eeeeee">
+        <input id="canvas-color" type="color" value="#7b8365">
       </label>
     </div>
   </div>
@@ -163,17 +175,32 @@
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
 
-    function pointAt(sx, sy) {
-      for (let i = paths.length - 1; i >= 0; i--) {
-        const path = paths[i];
-        for (let j = path.points.length - 1; j >= 0; j--) {
-          const point = path.points[j];
-          const dx = point.x * view.scale + view.x - sx;
-          const dy = point.y * view.scale + view.y - sy;
-          if (Math.hypot(dx, dy) <= SELECTED_DOT_RADIUS) return { path, point };
+    const snapInput = document.getElementById('snap-distance');
+    const snapOutput = document.querySelector('output[for="snap-distance"]');
+    const pathColor = document.getElementById('path-color');
+    snapOutput.value = `${snapInput.value}px`;
+    snapInput.addEventListener('input', () => { snapOutput.value = `${snapInput.value}px`; });
+    pathColor.addEventListener('input', () => draw());
+
+    // Distances are in screen pixels so they feel the same at any zoom.
+    function nearestPoint(sx, sy, maxDistance, exclude) {
+      let best = null;
+      let bestDistance = maxDistance;
+      for (const path of paths) {
+        for (const point of path.points) {
+          if (point === exclude) continue;
+          const d = Math.hypot(point.x * view.scale + view.x - sx, point.y * view.scale + view.y - sy);
+          if (d <= bestDistance) {
+            best = { path, point };
+            bestDistance = d;
+          }
         }
       }
-      return null;
+      return best;
+    }
+
+    function pointAt(sx, sy) {
+      return nearestPoint(sx, sy, SELECTED_DOT_RADIUS);
     }
 
     function addPoint(point) {
@@ -282,7 +309,7 @@
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
 
       // Lines and dots keep the same on-screen size at any zoom.
-      ctx.strokeStyle = '#1a73e8';
+      ctx.strokeStyle = pathColor.value;
       ctx.lineWidth = 2 / view.scale;
       ctx.beginPath();
       for (const path of paths) {
@@ -296,7 +323,7 @@
       if (selected && showingAddCursor()) {
         const target = connectTarget()?.point ?? toBackground(pointer.x, pointer.y);
         ctx.save();
-        ctx.strokeStyle = 'rgba(26, 115, 232, 0.5)';
+        ctx.globalAlpha = 0.5;
         ctx.setLineDash([6 / view.scale, 4 / view.scale]);
         ctx.beginPath();
         ctx.moveTo(selected.point.x, selected.point.y);
@@ -305,7 +332,7 @@
         ctx.restore();
       }
 
-      ctx.fillStyle = '#1a73e8';
+      ctx.fillStyle = pathColor.value;
       for (const path of paths) {
         for (const point of path.points) {
           if (point === selected?.point) continue;
@@ -379,8 +406,9 @@
     // where the next segment will end.
     function connectTarget(s = pointer) {
       if (!s || tool !== 'add' || !selected) return null;
-      const hit = pointAt(s.x, s.y);
-      return hit && hit.point !== selected.point ? hit : null;
+      if (pointAt(s.x, s.y)?.point === selected.point) return null;
+      const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
+      return nearestPoint(s.x, s.y, reach, selected.point);
     }
 
     function showingAddCursor() {

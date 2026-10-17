@@ -679,13 +679,14 @@
         ctx.restore();
       }
 
-      if (drag?.guides?.length) {
+      const guides = drag?.guides ?? target?.guides;
+      if (guides?.length) {
         const length = 4 * BACKGROUND;
         ctx.save();
         ctx.strokeStyle = 'red';
         ctx.lineWidth = px;
         ctx.beginPath();
-        for (const { origin, dx, dy } of drag.guides) {
+        for (const { origin, dx, dy } of guides) {
           ctx.moveTo(origin.x - dx * length, origin.y - dy * length);
           ctx.lineTo(origin.x + dx * length, origin.y + dy * length);
         }
@@ -828,7 +829,36 @@
       const dx = Math.cos(angle);
       const dy = Math.sin(angle);
       const reach = Math.max(0, (s.x - ox) * dx + (s.y - oy) * dy);
-      return { x: ox + dx * reach, y: oy + dy * reach };
+      return { x: ox + dx * reach, y: oy + dy * reach, dx, dy };
+    }
+
+    // Shift while drawing: lock to 45° steps from the point being drawn from,
+    // then, within snap distance, slide along that ray to where it crosses a
+    // 45° line through the point nearest the cursor. Returns the screen point
+    // and the guide lines used.
+    function shiftSnapFrom(from, s) {
+      const locked = lockAngle(from, s);
+      const guides = [{ origin: from, dx: locked.dx, dy: locked.dy }];
+      const nearest = nearestPoint(s.x, s.y, Infinity, from);
+      if (!nearest) return { q: locked, guides };
+      const p = toBackground(locked.x, locked.y);
+      const n = nearest.point;
+      const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS) / view.scale;
+      let best = null;
+      for (let k = 0; k < 4; k++) {
+        const dx = Math.cos((k * Math.PI) / 4);
+        const dy = Math.sin((k * Math.PI) / 4);
+        const denom = locked.dx * dy - locked.dy * dx;
+        if (Math.abs(denom) < 1e-9) continue;
+        const u = ((n.x - from.x) * dy - (n.y - from.y) * dx) / denom;
+        if (u < 0) continue;
+        const x = { x: from.x + locked.dx * u, y: from.y + locked.dy * u };
+        const d = Math.hypot(x.x - p.x, x.y - p.y);
+        if (d <= reach && (!best || d < best.d)) best = { x, d, guide: { origin: n, dx, dy } };
+      }
+      if (!best) return { q: locked, guides };
+      guides.push(best.guide);
+      return { q: { x: best.x.x * view.scale + view.x, y: best.x.y * view.scale + view.y }, guides };
     }
 
     // Pulls a dragged point onto lines at multiples of 45° through the points
@@ -884,15 +914,15 @@
       const p = toBackground(s.x, s.y);
       if (selected?.point) {
         if (hit?.point === selected.point) return null;
-        const q = shiftHeld ? lockAngle(selected.point, s) : s;
+        const { q, guides } = shiftHeld ? shiftSnapFrom(selected.point, s) : { q: s, guides: [] };
         const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
         const snap = nearestPoint(q.x, q.y, reach, selected.point);
-        if (snap) return { connect: snap };
+        if (snap) return { connect: snap, guides };
         const from = selected.point;
         const onto = segmentHit(q.x, q.y, reach, ([a, b]) => a === from || b === from);
-        if (onto) return { split: { ...onto, point: segmentPoint(onto.segment, onto.t) } };
+        if (onto) return { split: { ...onto, point: segmentPoint(onto.segment, onto.t) }, guides };
         const end = toBackground(q.x, q.y);
-        return inBackground(end) ? { add: end } : null;
+        return inBackground(end) ? { add: end, guides } : null;
       }
       if (hit) return null;
       if (selected?.segment) {

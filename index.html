@@ -1140,13 +1140,10 @@
       } else if (handle) {
         const item = { path: handle.path, segment: handle.segment };
         if (!toggling) selected = item;
-        // A new bend replaces any old one: the bend comes only from how far
-        // the pointer moves, measured from the straight line between the ends.
-        const grab = segmentPoint(handle.segment, bendT(handle.t));
-        const [a, b] = handle.segment;
-        const t = bendT(closestOnSegment([a, b], grab).t);
-        const base = lerp(a, b, t);
-        drag = { bend: handle.segment, t, grab, dx: base.x - p.x, dy: base.y - p.y, startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
+        // The curve is pinned to pass through the pointer at the grabbed spot,
+        // so that spot stays under the cursor for the whole drag.
+        const t = bendT(handle.t);
+        drag = { bend: handle.segment, t, grab: segmentPoint(handle.segment, t), startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
         draw();
       } else if (tool === 'select' && !pathTools.hidden) {
         drag = { marquee: true, x0: s.x, y0: s.y, startX: e.clientX, startY: e.clientY, base: toggling ? selectionItems() : [] };
@@ -1182,7 +1179,7 @@
           }
           drag.bending = true;
           const p = toBackground(pointer.x, pointer.y);
-          bendSegment(drag.bend, drag.t, { x: p.x + drag.dx, y: p.y + drag.dy });
+          bendSegment(drag.bend, drag.t, p);
         }
       } else if (drag?.group) {
         if (drag.moving || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {

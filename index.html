@@ -110,6 +110,11 @@
         <output for="snap-distance"></output>
       </label>
       <label class="field">
+        Segment hover distance
+        <input id="segment-distance" type="range" min="1" max="50" value="10">
+        <output for="segment-distance"></output>
+      </label>
+      <label class="field">
         Path color
         <input id="path-color" type="color" value="#ffbf17">
       </label>
@@ -175,13 +180,21 @@
     let selected = null; // { path, point } or { path, segment }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
-    const SEGMENT_HIT_DISTANCE = 5;
+    // Bending near an end would swing the control point wildly, so the grab
+    // point stays this far (as a fraction of the segment) from either end.
+    const BEND_END_MARGIN = 0.1;
 
-    const snapInput = document.getElementById('snap-distance');
-    const snapOutput = document.querySelector('output[for="snap-distance"]');
+    function pixelSlider(id) {
+      const input = document.getElementById(id);
+      const output = document.querySelector(`output[for="${id}"]`);
+      const show = () => { output.value = `${input.value}px`; };
+      show();
+      input.addEventListener('input', show);
+      return input;
+    }
+    const snapInput = pixelSlider('snap-distance');
+    const segmentDistanceInput = pixelSlider('segment-distance');
     const pathColor = document.getElementById('path-color');
-    snapOutput.value = `${snapInput.value}px`;
-    snapInput.addEventListener('input', () => { snapOutput.value = `${snapInput.value}px`; });
     pathColor.addEventListener('input', () => draw());
 
     // Distances are in screen pixels so they feel the same at any zoom.
@@ -230,39 +243,40 @@
       return best;
     }
 
-    function segmentAt(sx, sy) {
+    // The segment nearest screen point s within the hover distance, and t,
+    // where along it the nearest spot is.
+    function segmentHit(sx, sy) {
       const p = toBackground(sx, sy);
       let best = null;
-      let bestDistance = SEGMENT_HIT_DISTANCE;
+      let bestDistance = Number(segmentDistanceInput.value);
       for (const path of paths) {
         for (const segment of path.segments) {
-          const d = closestOnSegment(segment, p).distance * view.scale;
-          if (d <= bestDistance) {
-            best = { path, segment };
-            bestDistance = d;
+          const { t, distance } = closestOnSegment(segment, p);
+          if (distance * view.scale <= bestDistance) {
+            best = { path, segment, t };
+            bestDistance = distance * view.scale;
           }
         }
       }
       return best;
     }
 
-    // The bend handle sits at the middle of the segment.
-    function bendHandleAt(sx, sy) {
-      for (const path of paths) {
-        for (const segment of path.segments) {
-          const m = segmentPoint(segment, 0.5);
-          if (Math.hypot(m.x * view.scale + view.x - sx, m.y * view.scale + view.y - sy) <= SELECTED_DOT_RADIUS) {
-            return { path, segment };
-          }
-        }
-      }
-      return null;
+    function segmentAt(sx, sy) {
+      const hit = segmentHit(sx, sy);
+      return hit && { path: hit.path, segment: hit.segment };
     }
 
-    // Choose the control point so the curve's midpoint lands on m.
-    function bendSegment(segment, m) {
+    const bendT = (t) => Math.min(1 - BEND_END_MARGIN, Math.max(BEND_END_MARGIN, t));
+
+    // Choose the control point so the curve passes through m at t.
+    function bendSegment(segment, t, m) {
       const [a, b] = segment;
-      segment[2] = { x: 2 * m.x - (a.x + b.x) / 2, y: 2 * m.y - (a.y + b.y) / 2 };
+      const u = 1 - t;
+      const k = 2 * t * u;
+      segment[2] = {
+        x: (m.x - u * u * a.x - t * t * b.x) / k,
+        y: (m.y - u * u * a.y - t * t * b.y) / k,
+      };
     }
 
     function insertOnSegment({ point, t }) {
@@ -322,6 +336,9 @@
 
     document.addEventListener('keydown', (e) => {
       if (pathTools.hidden || e.target.closest('input')) return;
+      const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+      if (plain && e.key === '1') setTool('select');
+      if (plain && e.key === '2') setTool('add');
       // Mac keyboards label Backspace "delete".
       if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
         e.preventDefault();
@@ -549,14 +566,14 @@
       return inBackground(p) ? { add: p } : null;
     }
 
-    // In the cursor tool, the segment under the pointer (or being bent) shows
-    // its bend handle as a ghost dot.
+    // In the cursor tool, a ghost dot marks where a segment would be grabbed
+    // for bending: the spot on it nearest the pointer.
     function bendGhost() {
-      if (drag?.bend) return segmentPoint(drag.bend, 0.5);
+      if (drag?.bend) return segmentPoint(drag.bend, drag.t);
       if (!pointer || drag || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y)) return null;
-      const hit = bendHandleAt(pointer.x, pointer.y) ?? segmentAt(pointer.x, pointer.y);
-      return hit && segmentPoint(hit.segment, 0.5);
+      const hit = segmentHit(pointer.x, pointer.y);
+      return hit && segmentPoint(hit.segment, bendT(hit.t));
     }
 
     function hoveredPoint(target) {
@@ -584,16 +601,17 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
-      const handle = !hit && tool === 'select' && !pathTools.hidden ? bendHandleAt(s.x, s.y) : null;
+      const handle = !hit && tool === 'select' && !pathTools.hidden ? segmentHit(s.x, s.y) : null;
       const p = toBackground(s.x, s.y);
       if (hit) {
         selected = hit;
         drag = { point: hit.point, dx: hit.point.x - p.x, dy: hit.point.y - p.y };
         draw();
       } else if (handle) {
-        selected = handle;
-        const m = segmentPoint(handle.segment, 0.5);
-        drag = { bend: handle.segment, dx: m.x - p.x, dy: m.y - p.y };
+        selected = { path: handle.path, segment: handle.segment };
+        const t = bendT(handle.t);
+        const m = segmentPoint(handle.segment, t);
+        drag = { bend: handle.segment, t, dx: m.x - p.x, dy: m.y - p.y, startX: e.clientX, startY: e.clientY };
         draw();
       } else {
         drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
@@ -608,8 +626,12 @@
         drag.point.x = clampToBackground(p.x + drag.dx);
         drag.point.y = clampToBackground(p.y + drag.dy);
       } else if (drag?.bend) {
-        const p = toBackground(pointer.x, pointer.y);
-        bendSegment(drag.bend, { x: p.x + drag.dx, y: p.y + drag.dy });
+        // Ignore jitter so a plain click doesn't bend a straight segment.
+        if (drag.bending || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
+          drag.bending = true;
+          const p = toBackground(pointer.x, pointer.y);
+          bendSegment(drag.bend, drag.t, { x: p.x + drag.dx, y: p.y + drag.dy });
+        }
       } else if (drag) {
         view.x += e.clientX - drag.x;
         view.y += e.clientY - drag.y;

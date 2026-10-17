@@ -515,6 +515,31 @@
       return null;
     }
 
+    // Folds point `from` into `onto`, keeping every connection either had.
+    // Segments between the two vanish, and duplicates collapse to one.
+    function mergePoints(path, from, onto) {
+      const into = onto.path;
+      mergePaths(into, path);
+      for (const segment of into.segments) {
+        if (segment[0] === from) segment[0] = onto.point;
+        if (segment[1] === from) segment[1] = onto.point;
+      }
+      into.points.splice(into.points.indexOf(from), 1);
+      const seen = new Set();
+      into.segments = into.segments.filter(([a, b]) => {
+        const key = [into.points.indexOf(a), into.points.indexOf(b)].sort().join();
+        if (a === b || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      for (const fill of fills) {
+        if (fill.delete(from)) fill.add(onto.point);
+      }
+      onto.point.intersection ||= from.intersection;
+      pruneGroups();
+      selected = { path: into, point: onto.point };
+    }
+
     function mergePaths(into, from) {
       if (into === from) return;
       into.points.push(...from.points);
@@ -891,7 +916,7 @@
         ctx.restore();
       }
 
-      const hovered = hoveredPoint(target);
+      const hovered = drag?.snapTo?.point ?? hoveredPoint(target);
       ctx.fillStyle = color;
       for (const path of paths) {
         for (const point of path.points) {
@@ -1473,6 +1498,10 @@
           if (drag.toggle) setSelectionItems([drag.toggle]);
           drag.toggle = null;
         }
+        // Near another point, sit exactly on it; letting go there merges them.
+        const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
+        drag.snapTo = nearestPoint(target.x * view.scale + view.x, target.y * view.scale + view.y, reach, drag.point);
+        if (drag.snapTo) target = { x: drag.snapTo.point.x, y: drag.snapTo.point.y };
         drag.point.x = clampToBackground(target.x);
         drag.point.y = clampToBackground(target.y);
       } else if (drag?.bend) {
@@ -1520,6 +1549,7 @@
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
       const { toggle, marquee, active, base, group, moving, item } = drag;
+      if (drag.point && drag.snapTo) mergePoints(drag.path, drag.point, drag.snapTo);
       const wasClick = !drag.point && !drag.bend && !drag.spacePan && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;

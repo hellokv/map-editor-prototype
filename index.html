@@ -37,6 +37,10 @@
     #image-delete {
       flex: none;
     }
+    #color-field {
+      display: block;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -51,6 +55,10 @@
         </svg>
       </button>
     </div>
+    <label id="color-field">
+      Background color
+      <input id="canvas-color" type="color" value="#eeeeee">
+    </label>
   </div>
   <script>
     const BACKGROUND = 1500;
@@ -59,6 +67,9 @@
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+
+    const canvasColor = document.getElementById('canvas-color');
+    canvasColor.addEventListener('input', () => draw());
 
     const view = { scale: 1, x: 0, y: 0 };
     let size = null;
@@ -91,7 +102,7 @@
     function draw() {
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = '#eeeeee';
+      ctx.fillStyle = canvasColor.value;
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
       ctx.translate(view.x, view.y);

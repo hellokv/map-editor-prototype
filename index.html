@@ -568,6 +568,12 @@
         selected = null;
         draw();
         updateCursor();
+      } else if (e.key === 'Enter') {
+        // Stops a focused toolbar button from being pressed.
+        e.preventDefault();
+        selected = null;
+        draw();
+        updateCursor();
       }
     });
 

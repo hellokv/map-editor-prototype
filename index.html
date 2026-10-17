@@ -120,7 +120,10 @@
         <input id="path-color" type="color" value="#ffbf17">
       </label>
       <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
-      <button id="fill-area" class="field" type="button" hidden>Fill area</button>
+      <label id="fill-area-field" class="field" hidden>
+        <input id="fill-area" type="checkbox">
+        Fill area
+      </label>
     </div>
     <div id="background-panel">
       <input id="image-upload" type="file" accept="image/*">
@@ -516,9 +519,12 @@
         ctx.fill();
       };
       ctx.fillStyle = color;
+      ctx.save();
+      ctx.globalAlpha = 0.8;
       for (const area of areas) {
         if (isFilled(area)) fillArea(area);
       }
+      ctx.restore();
       const hoveredArea = hoveredAreaIn(areas);
       if (hoveredArea && !isFilled(hoveredArea)) {
         ctx.save();
@@ -621,9 +627,14 @@
       draw();
     });
 
-    const fillAreaButton = document.getElementById('fill-area');
-    fillAreaButton.addEventListener('click', () => {
-      fills.push(new Set(selected.area));
+    const fillAreaField = document.getElementById('fill-area-field');
+    const fillAreaToggle = document.getElementById('fill-area');
+    fillAreaToggle.addEventListener('change', () => {
+      const index = fills.findIndex((fill) => samePoints(fill, selected.area));
+      if (fillAreaToggle.checked && index === -1) fills.push(new Set(selected.area));
+      if (!fillAreaToggle.checked && index !== -1) fills.splice(index, 1);
+      // Hand focus back so keyboard shortcuts keep working.
+      fillAreaToggle.blur();
       draw();
     });
 
@@ -631,8 +642,8 @@
     function updatePanel() {
       deleteBendButton.hidden = !selected?.segment;
       deleteBendButton.disabled = !selected?.segment?.[2];
-      fillAreaButton.hidden = !selected?.area;
-      fillAreaButton.disabled = !!selected?.area && fills.some((fill) => samePoints(fill, selected.area));
+      fillAreaField.hidden = !selected?.area;
+      fillAreaToggle.checked = !!selected?.area && fills.some((fill) => samePoints(fill, selected.area));
     }
 
     function traceSegment([a, b, c]) {

@@ -118,6 +118,7 @@
         Path color
         <input id="path-color" type="color" value="#ffbf17">
       </label>
+      <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
     </div>
     <div id="background-panel">
       <input id="image-upload" type="file" accept="image/*">
@@ -489,6 +490,19 @@
         ctx.fill();
         ctx.restore();
       }
+      updatePanel();
+    }
+
+    const deleteBendButton = document.getElementById('delete-bend');
+    deleteBendButton.addEventListener('click', () => {
+      selected.segment.length = 2;
+      draw();
+    });
+
+    // Runs after every draw, which follows every change to the selection.
+    function updatePanel() {
+      deleteBendButton.hidden = !selected?.segment;
+      deleteBendButton.disabled = !selected?.segment?.[2];
     }
 
     function traceSegment([a, b, c]) {

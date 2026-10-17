@@ -548,10 +548,7 @@
         // Background pixels, so a nudge is the same distance on the map at any zoom.
         const step = Number(nudgeInput.value) * (e.shiftKey ? SHIFT_NUDGE_FACTOR : 1);
         recordUndo();
-        for (const point of movingPoints()) {
-          point.x = clampToBackground(point.x + nudge[0] * step);
-          point.y = clampToBackground(point.y + nudge[1] * step);
-        }
+        moveSelection(nudge[0] * step, nudge[1] * step);
         draw();
         updateCursor();
       }
@@ -1059,23 +1056,43 @@
     }
 
     // Moves every selected dot and selected segment's ends together, keeping
-    // the whole set inside the background. Bends move along when both of a
-    // segment's ends move, so curves keep their shape.
+    // the whole set inside the background. Each bend touching a moved point is
+    // held relative to its segment's ends, so curves keep their shape rather
+    // than being pulled toward a control point left behind.
     function moveSelection(dx, dy) {
       const moving = movingPoints();
       const xs = [...moving].map((p) => p.x);
       const ys = [...moving].map((p) => p.y);
       dx = Math.min(BACKGROUND - Math.max(...xs), Math.max(-Math.min(...xs), dx));
       dy = Math.min(BACKGROUND - Math.max(...ys), Math.max(-Math.min(...ys), dy));
-      const controls = new Set();
+
+      // A control point as (along, across) the segment, in units of its length.
+      const bends = [];
       for (const path of paths) {
-        for (const [a, b, c] of path.segments) {
-          if (c && moving.has(a) && moving.has(b)) controls.add(c);
+        for (const segment of path.segments) {
+          const [a, b, c] = segment;
+          if (!c || !(moving.has(a) || moving.has(b))) continue;
+          const ex = b.x - a.x;
+          const ey = b.y - a.y;
+          const lengthSq = ex * ex + ey * ey;
+          if (lengthSq === 0) continue;
+          const cx = c.x - a.x;
+          const cy = c.y - a.y;
+          bends.push({ segment, along: (cx * ex + cy * ey) / lengthSq, across: (cy * ex - cx * ey) / lengthSq });
         }
       }
-      for (const p of [...moving, ...controls]) {
+
+      for (const p of moving) {
         p.x += dx;
         p.y += dy;
+      }
+
+      for (const { segment, along, across } of bends) {
+        const [a, b, c] = segment;
+        const ex = b.x - a.x;
+        const ey = b.y - a.y;
+        c.x = a.x + along * ex - across * ey;
+        c.y = a.y + along * ey + across * ex;
       }
     }
 

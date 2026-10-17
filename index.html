@@ -86,13 +86,13 @@
   <div id="canvas-area">
     <canvas id="canvas"></canvas>
     <div id="mode-menu">
-      <button type="button" data-mode="path" aria-label="Path editing mode" aria-pressed="false">
+      <button type="button" data-mode="path" aria-label="Path editing mode" aria-pressed="true">
         <span class="material-symbols-rounded">route</span>
       </button>
-      <button type="button" data-mode="background" aria-label="Background mode" aria-pressed="true">
+      <button type="button" data-mode="background" aria-label="Background mode" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
       </button>
-      <div id="path-tools" hidden>
+      <div id="path-tools">
         <hr>
         <button type="button" data-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
@@ -104,7 +104,7 @@
     </div>
   </div>
   <div id="panel">
-    <div id="path-panel" hidden>
+    <div id="path-panel">
       <label class="field">
         Snap distance
         <input id="snap-distance" type="range" min="0" max="50" value="15">
@@ -130,7 +130,7 @@
         Fill area
       </label>
     </div>
-    <div id="background-panel">
+    <div id="background-panel" hidden>
       <input id="image-upload" type="file" accept="image/*">
       <div id="image-preview" hidden>
         <img alt="Background image">
@@ -264,12 +264,13 @@
 
     // The segment nearest screen point s within the hover distance, and t,
     // where along it the nearest spot is.
-    function segmentHit(sx, sy) {
+    function segmentHit(sx, sy, maxDistance = Number(segmentDistanceInput.value), skip = () => false) {
       const p = toBackground(sx, sy);
       let best = null;
-      let bestDistance = Number(segmentDistanceInput.value);
+      let bestDistance = maxDistance;
       for (const path of paths) {
         for (const segment of path.segments) {
+          if (skip(segment)) continue;
           const { t, distance } = closestOnSegment(segment, p);
           if (distance * view.scale <= bestDistance) {
             best = { path, segment, t };
@@ -298,9 +299,10 @@
       };
     }
 
-    function insertOnSegment({ point, t }) {
-      const { path, segment } = selected;
+    // Splits a segment at t with a new point, keeping any bend's shape.
+    function splitSegment(path, segment, t) {
       const [a, b, c] = segment;
+      const point = segmentPoint(segment, t);
       path.points.push(point);
       const halves = c
         ? [[a, point, lerp(a, c, t)], [point, b, lerp(c, b, t)]]
@@ -309,7 +311,12 @@
       for (const fill of fills) {
         if (fill.has(a) && fill.has(b)) fill.add(point);
       }
-      selected = { path, point };
+      return point;
+    }
+
+    function insertOnSegment({ t }) {
+      const { path, segment } = selected;
+      selected = { path, point: splitSegment(path, segment, t) };
     }
 
     // An area is a bounded face of a path: the smallest loop of segments
@@ -594,7 +601,7 @@
       }
 
       const target = addTarget();
-      const lineEnd = target?.connect?.point ?? target?.add;
+      const lineEnd = target?.connect?.point ?? target?.split?.point ?? target?.add;
       if (selected?.point && lineEnd) {
         ctx.save();
         ctx.globalAlpha = 0.5;
@@ -646,7 +653,7 @@
       if (hovered) emphasise(hovered, 0.7);
       if (selected?.point) emphasise(selected.point, 1);
 
-      const ghost = target?.insert?.point ?? bendGhost();
+      const ghost = target?.insert?.point ?? target?.split?.point ?? bendGhost();
       if (ghost) {
         ctx.save();
         ctx.globalAlpha = 0.5;
@@ -813,6 +820,9 @@
         const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
         const snap = nearestPoint(q.x, q.y, reach, selected.point);
         if (snap) return { connect: snap };
+        const from = selected.point;
+        const onto = segmentHit(q.x, q.y, reach, ([a, b]) => a === from || b === from);
+        if (onto) return { split: { ...onto, point: segmentPoint(onto.segment, onto.t) } };
         const end = toBackground(q.x, q.y);
         return inBackground(end) ? { add: end } : null;
       }
@@ -953,6 +963,9 @@
           addPoint(target.add);
         } else if (target?.insert) {
           insertOnSegment(target.insert);
+        } else if (target?.split) {
+          const { path, segment, t } = target.split;
+          connectTo({ path, point: splitSegment(path, segment, t) });
         } else {
           const area = tool === 'select' ? areaAt(computeAreas(), s.x, s.y) : null;
           selected = segmentAt(s.x, s.y) ?? (area && { path: area.path, area: area.points });

@@ -127,6 +127,7 @@
       addingPath = on;
       addPathButton.setAttribute('aria-pressed', on);
       updateCursor();
+      draw();
     }
 
     function setMode(mode) {
@@ -138,9 +139,8 @@
       }
       pathTools.hidden = mode !== 'path';
       if (mode !== 'path') {
+        selected = null;
         setAddingPath(false);
-        selectedPath = null;
-        draw();
       }
     }
 
@@ -149,31 +149,59 @@
     }
     addPathButton.addEventListener('click', () => setAddingPath(!addingPath));
 
+    // A path is a set of points joined by segments; each segment is a pair of
+    // point objects, so moving a point moves its segments with it.
     const paths = [];
-    let selectedPath = null;
+    let selected = null; // { path, point }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
 
-    function pathAt(sx, sy) {
+    function pointAt(sx, sy) {
       for (let i = paths.length - 1; i >= 0; i--) {
-        const start = paths[i].points[0];
-        const dx = start.x * view.scale + view.x - sx;
-        const dy = start.y * view.scale + view.y - sy;
-        if (Math.hypot(dx, dy) <= SELECTED_DOT_RADIUS) return paths[i];
+        const path = paths[i];
+        for (let j = path.points.length - 1; j >= 0; j--) {
+          const point = path.points[j];
+          const dx = point.x * view.scale + view.x - sx;
+          const dy = point.y * view.scale + view.y - sy;
+          if (Math.hypot(dx, dy) <= SELECTED_DOT_RADIUS) return { path, point };
+        }
       }
       return null;
     }
 
+    function addPoint(point) {
+      if (selected) {
+        selected.path.points.push(point);
+        selected.path.segments.push([selected.point, point]);
+        selected = { path: selected.path, point };
+      } else {
+        const path = { points: [point], segments: [] };
+        paths.push(path);
+        selected = { path, point };
+      }
+    }
+
+    function deleteSelected() {
+      const { path, point } = selected;
+      path.points.splice(path.points.indexOf(point), 1);
+      path.segments = path.segments.filter(([a, b]) => a !== point && b !== point);
+      if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
+      selected = null;
+    }
+
     document.addEventListener('keydown', (e) => {
-      if (!selectedPath || e.target.closest('input')) return;
+      if (!selected || e.target.closest('input')) return;
       // Mac keyboards label Backspace "delete".
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        paths.splice(paths.indexOf(selectedPath), 1);
-        selectedPath = null;
-        draw();
-        updateCursor();
+        deleteSelected();
+      } else if (e.key === 'Escape') {
+        selected = null;
+      } else {
+        return;
       }
+      draw();
+      updateCursor();
     });
 
     const BACKGROUND = 1500;
@@ -233,17 +261,41 @@
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
 
-      // Dots keep the same on-screen size at any zoom.
+      // Lines and dots keep the same on-screen size at any zoom.
+      ctx.strokeStyle = '#1a73e8';
+      ctx.lineWidth = 2 / view.scale;
+      ctx.beginPath();
+      for (const path of paths) {
+        for (const [a, b] of path.segments) {
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        }
+      }
+      ctx.stroke();
+
+      if (selected && showingAddCursor()) {
+        const target = toBackground(pointer.x, pointer.y);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(26, 115, 232, 0.5)';
+        ctx.setLineDash([6 / view.scale, 4 / view.scale]);
+        ctx.beginPath();
+        ctx.moveTo(selected.point.x, selected.point.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.fillStyle = '#1a73e8';
       for (const path of paths) {
-        if (path === selectedPath) continue;
-        const start = path.points[0];
-        ctx.beginPath();
-        ctx.arc(start.x, start.y, DOT_RADIUS / view.scale, 0, Math.PI * 2);
-        ctx.fill();
+        for (const point of path.points) {
+          if (point === selected?.point) continue;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, DOT_RADIUS / view.scale, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
-      if (selectedPath) {
-        const start = selectedPath.points[0];
+      if (selected) {
+        const start = selected.point;
         ctx.save();
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 4 * dpr;
@@ -303,13 +355,13 @@
 
     let pointer = null;
 
+    function showingAddCursor() {
+      return pointer && !drag && addingPath && !pointAt(pointer.x, pointer.y)
+        && inBackground(toBackground(pointer.x, pointer.y));
+    }
+
     function updateCursor() {
-      let cursor = '';
-      if (pointer && !drag && addingPath && !pathAt(pointer.x, pointer.y)
-          && inBackground(toBackground(pointer.x, pointer.y))) {
-        cursor = addCursor;
-      }
-      canvas.style.cursor = cursor;
+      canvas.style.cursor = showingAddCursor() ? addCursor : '';
     }
 
     // Movement below this many pixels counts as a click rather than a pan.
@@ -325,12 +377,11 @@
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
-      const hit = pathTools.hidden ? null : pathAt(s.x, s.y);
+      const hit = pathTools.hidden ? null : pointAt(s.x, s.y);
       if (hit) {
-        selectedPath = hit;
+        selected = hit;
         const p = toBackground(s.x, s.y);
-        const start = hit.points[0];
-        drag = { path: hit, dx: start.x - p.x, dy: start.y - p.y };
+        drag = { point: hit.point, dx: hit.point.x - p.x, dy: hit.point.y - p.y };
         draw();
       } else {
         drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
@@ -340,39 +391,41 @@
 
     canvas.addEventListener('pointermove', (e) => {
       pointer = canvasPoint(e);
-      if (drag?.path) {
+      if (drag?.point) {
         const p = toBackground(pointer.x, pointer.y);
-        const start = drag.path.points[0];
-        start.x = clampToBackground(p.x + drag.dx);
-        start.y = clampToBackground(p.y + drag.dy);
-        draw();
+        drag.point.x = clampToBackground(p.x + drag.dx);
+        drag.point.y = clampToBackground(p.y + drag.dy);
       } else if (drag) {
         view.x += e.clientX - drag.x;
         view.y += e.clientY - drag.y;
         drag.x = e.clientX;
         drag.y = e.clientY;
-        draw();
       }
+      draw();
       updateCursor();
     });
 
     canvas.addEventListener('pointerleave', () => {
       pointer = null;
+      draw();
       updateCursor();
     });
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      const wasPan = !drag.path;
+      const wasPan = !drag.point;
       const moved = wasPan && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       drag = null;
       if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {
-        selectedPath = null;
         const s = canvasPoint(e);
         const p = toBackground(s.x, s.y);
-        if (addingPath && inBackground(p)) paths.push({ points: [p] });
-        draw();
+        if (addingPath && inBackground(p)) {
+          addPoint(p);
+        } else {
+          selected = null;
+        }
       }
+      draw();
       updateCursor();
     });
     canvas.addEventListener('pointercancel', () => { drag = null; });

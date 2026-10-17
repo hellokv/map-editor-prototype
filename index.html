@@ -5,6 +5,10 @@
   <title>Map Editor Prototype</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_selector_tool,delete,image,route">
   <style>
+    /* Without this, any display rule on an element overrides its hidden attribute. */
+    [hidden] {
+      display: none !important;
+    }
     html, body {
       margin: 0;
       height: 100%;
@@ -61,9 +65,6 @@
       align-items: flex-start;
       gap: 8px;
     }
-    #image-preview[hidden] {
-      display: none;
-    }
     #image-preview img {
       min-width: 0;
       max-width: 100%;
@@ -119,6 +120,7 @@
         <input id="path-color" type="color" value="#ffbf17">
       </label>
       <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
+      <button id="fill-area" class="field" type="button" hidden>Fill area</button>
     </div>
     <div id="background-panel">
       <input id="image-upload" type="file" accept="image/*">
@@ -178,7 +180,7 @@
     // [a, b, control]: its ends are the point objects themselves, so moving a
     // point moves its segments, and a control point bends it into a curve.
     const paths = [];
-    let selected = null; // { path, point } or { path, segment }
+    let selected = null; // { path, point }, { path, segment } or { path, area: Set of its points }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
     // Bending near an end would swing the control point wildly, so the grab
@@ -288,7 +290,94 @@
         ? [[a, point, lerp(a, c, t)], [point, b, lerp(c, b, t)]]
         : [[a, point], [point, b]];
       path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
+      for (const fill of fills) {
+        if (fill.has(a) && fill.has(b)) fill.add(point);
+      }
       selected = { path, point };
+    }
+
+    // An area is a bounded face of a path: the smallest loop of segments
+    // around a spot. Fills are remembered by the set of points on the loop,
+    // so they survive moving and bending.
+    const fills = [];
+
+    // Points along a segment walked from one end, without the far end.
+    function sampleEdge({ from, segment }) {
+      const steps = segment[2] ? 16 : 1;
+      const forward = segment[0] === from;
+      const points = [];
+      for (let i = 0; i < steps; i++) points.push(segmentPoint(segment, forward ? i / steps : 1 - i / steps));
+      return points;
+    }
+
+    function computeAreas() {
+      const areas = [];
+      for (const path of paths) {
+        const out = new Map();
+        const addEdge = (from, to, segment, toward) => {
+          if (!out.has(from)) out.set(from, []);
+          out.get(from).push({ from, to, segment, angle: Math.atan2(toward.y - from.y, toward.x - from.x) });
+        };
+        for (const segment of path.segments) {
+          const [a, b, c] = segment;
+          addEdge(a, b, segment, c ?? b);
+          addEdge(b, a, segment, c ?? a);
+        }
+        for (const edges of out.values()) edges.sort((p, q) => p.angle - q.angle);
+
+        // Walk each face by always taking the next edge clockwise at every
+        // point. Bounded faces come out with positive area, the outer one negative.
+        const seen = new Set();
+        for (const edges of out.values()) {
+          for (const start of edges) {
+            if (seen.has(start)) continue;
+            const loop = [];
+            let edge = start;
+            do {
+              seen.add(edge);
+              loop.push(edge);
+              const next = out.get(edge.to);
+              const back = next.findIndex((e) => e.segment === edge.segment && e.to === edge.from);
+              edge = next[(back - 1 + next.length) % next.length];
+            } while (edge !== start);
+            const polygon = loop.flatMap(sampleEdge);
+            let area = 0;
+            for (let i = 0; i < polygon.length; i++) {
+              const p = polygon[i];
+              const q = polygon[(i + 1) % polygon.length];
+              area += p.x * q.y - q.x * p.y;
+            }
+            if (area > 1e-6) {
+              areas.push({ path, loop, polygon, area: area / 2, points: new Set(loop.map((e) => e.from)) });
+            }
+          }
+        }
+      }
+      return areas;
+    }
+
+    const samePoints = (s, t) => s.size === t.size && [...s].every((p) => t.has(p));
+    const isFilled = (area) => fills.some((fill) => samePoints(fill, area.points));
+
+    function insidePolygon(polygon, p) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const a = polygon[i];
+        const b = polygon[j];
+        if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    }
+
+    function areaAt(areas, sx, sy) {
+      const p = toBackground(sx, sy);
+      let best = null;
+      for (const area of areas) {
+        if (insidePolygon(area.polygon, p) && (!best || area.area < best.area)) best = area;
+      }
+      return best;
     }
 
     function addPoint(point) {
@@ -341,7 +430,7 @@
       if (plain && e.key === '1') setTool('select');
       if (plain && e.key === '2') setTool('add');
       // Mac keyboards label Backspace "delete".
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selected?.point || selected?.segment)) {
         e.preventDefault();
         deleteSelected();
         draw();
@@ -417,6 +506,39 @@
         ctx.shadowBlur = 4 * dpr;
         ctx.shadowOffsetY = 1 * dpr;
       };
+
+      const areas = computeAreas();
+      if (selected?.area && !areas.some((area) => samePoints(area.points, selected.area))) selected = null;
+      const fillArea = (area) => {
+        ctx.beginPath();
+        area.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.fill();
+      };
+      ctx.fillStyle = color;
+      for (const area of areas) {
+        if (isFilled(area)) fillArea(area);
+      }
+      const hoveredArea = hoveredAreaIn(areas);
+      if (hoveredArea && !isFilled(hoveredArea)) {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        fillArea(hoveredArea);
+        ctx.restore();
+      }
+
+      const selectedArea = selected?.area && areas.find((area) => samePoints(area.points, selected.area));
+      if (selectedArea) {
+        ctx.save();
+        ctx.lineCap = ctx.lineJoin = 'round';
+        shadow();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 7 * px;
+        ctx.beginPath();
+        for (const edge of selectedArea.loop) traceSegment(edge.segment);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.strokeStyle = color;
       ctx.lineWidth = 2 * px;
@@ -499,10 +621,18 @@
       draw();
     });
 
+    const fillAreaButton = document.getElementById('fill-area');
+    fillAreaButton.addEventListener('click', () => {
+      fills.push(new Set(selected.area));
+      draw();
+    });
+
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
       deleteBendButton.hidden = !selected?.segment;
       deleteBendButton.disabled = !selected?.segment?.[2];
+      fillAreaButton.hidden = !selected?.area;
+      fillAreaButton.disabled = !!selected?.area && fills.some((fill) => samePoints(fill, selected.area));
     }
 
     function traceSegment([a, b, c]) {
@@ -588,6 +718,12 @@
       if (pointAt(pointer.x, pointer.y)) return null;
       const hit = segmentHit(pointer.x, pointer.y);
       return hit && segmentPoint(hit.segment, bendT(hit.t));
+    }
+
+    function hoveredAreaIn(areas) {
+      if (!pointer || drag || tool !== 'select' || pathTools.hidden) return null;
+      if (pointAt(pointer.x, pointer.y) || segmentHit(pointer.x, pointer.y)) return null;
+      return areaAt(areas, pointer.x, pointer.y);
     }
 
     function hoveredPoint(target) {
@@ -677,7 +813,8 @@
         } else if (target?.insert) {
           insertOnSegment(target.insert);
         } else {
-          selected = segmentAt(s.x, s.y);
+          const area = tool === 'select' ? areaAt(computeAreas(), s.x, s.y) : null;
+          selected = segmentAt(s.x, s.y) ?? (area && { path: area.path, area: area.points });
         }
       }
       draw();

@@ -171,9 +171,10 @@
     // A path is a set of points joined by segments; each segment is a pair of
     // point objects, so moving a point moves its segments with it.
     const paths = [];
-    let selected = null; // { path, point }
+    let selected = null; // { path, point } or { path, segment }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
+    const SEGMENT_HIT_DISTANCE = 5;
 
     const snapInput = document.getElementById('snap-distance');
     const snapOutput = document.querySelector('output[for="snap-distance"]');
@@ -203,8 +204,42 @@
       return nearestPoint(sx, sy, SELECTED_DOT_RADIUS);
     }
 
+    // The closest spot on segment [a, b] to p, all in background coordinates.
+    function projectOntoSegment([a, b], p) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSq = dx * dx + dy * dy;
+      const t = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+      return { x: a.x + t * dx, y: a.y + t * dy };
+    }
+
+    function segmentAt(sx, sy) {
+      const p = toBackground(sx, sy);
+      let best = null;
+      let bestDistance = SEGMENT_HIT_DISTANCE;
+      for (const path of paths) {
+        for (const segment of path.segments) {
+          const q = projectOntoSegment(segment, p);
+          const d = Math.hypot(q.x - p.x, q.y - p.y) * view.scale;
+          if (d <= bestDistance) {
+            best = { path, segment };
+            bestDistance = d;
+          }
+        }
+      }
+      return best;
+    }
+
+    function insertOnSegment(point) {
+      const { path, segment } = selected;
+      const [a, b] = segment;
+      path.points.push(point);
+      path.segments.splice(path.segments.indexOf(segment), 1, [a, point], [point, b]);
+      selected = { path, point };
+    }
+
     function addPoint(point) {
-      if (selected) {
+      if (selected?.point) {
         selected.path.points.push(point);
         selected.path.segments.push([selected.point, point]);
         selected = { path: selected.path, point };
@@ -230,10 +265,14 @@
     }
 
     function deleteSelected() {
-      const { path, point } = selected;
-      path.points.splice(path.points.indexOf(point), 1);
-      path.segments = path.segments.filter(([a, b]) => a !== point && b !== point);
-      if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
+      const { path, point, segment } = selected;
+      if (segment) {
+        path.segments.splice(path.segments.indexOf(segment), 1);
+      } else {
+        path.points.splice(path.points.indexOf(point), 1);
+        path.segments = path.segments.filter(([a, b]) => a !== point && b !== point);
+        if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
+      }
       selected = null;
     }
 
@@ -309,51 +348,89 @@
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
 
       // Lines and dots keep the same on-screen size at any zoom.
-      ctx.strokeStyle = pathColor.value;
-      ctx.lineWidth = 2 / view.scale;
+      const px = 1 / view.scale;
+      const color = pathColor.value;
+      const shadow = () => {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 4 * dpr;
+        ctx.shadowOffsetY = 1 * dpr;
+      };
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * px;
       ctx.beginPath();
       for (const path of paths) {
-        for (const [a, b] of path.segments) {
+        for (const segment of path.segments) {
+          if (segment === selected?.segment) continue;
+          const [a, b] = segment;
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
         }
       }
       ctx.stroke();
 
-      if (selected && showingAddCursor()) {
-        const target = connectTarget()?.point ?? toBackground(pointer.x, pointer.y);
+      if (selected?.segment) {
+        const [a, b] = selected.segment;
+        ctx.save();
+        ctx.lineCap = 'round';
+        shadow();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 7 * px;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.restore();
+        ctx.lineWidth = 3 * px;
+        ctx.stroke();
+      }
+
+      const target = addTarget();
+      const lineEnd = target?.connect?.point ?? target?.add;
+      if (selected?.point && lineEnd) {
         ctx.save();
         ctx.globalAlpha = 0.5;
-        ctx.setLineDash([6 / view.scale, 4 / view.scale]);
+        ctx.lineWidth = 2 * px;
+        ctx.setLineDash([6 * px, 4 * px]);
         ctx.beginPath();
         ctx.moveTo(selected.point.x, selected.point.y);
-        ctx.lineTo(target.x, target.y);
+        ctx.lineTo(lineEnd.x, lineEnd.y);
         ctx.stroke();
         ctx.restore();
       }
 
-      ctx.fillStyle = pathColor.value;
+      const hovered = hoveredPoint(target);
+      ctx.fillStyle = color;
       for (const path of paths) {
         for (const point of path.points) {
-          if (point === selected?.point) continue;
+          if (point === selected?.point || point === hovered) continue;
           ctx.beginPath();
-          ctx.arc(point.x, point.y, DOT_RADIUS / view.scale, 0, Math.PI * 2);
+          ctx.arc(point.x, point.y, DOT_RADIUS * px, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-      if (selected) {
-        const start = selected.point;
+
+      const emphasise = (point, outlineAlpha) => {
         ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-        ctx.shadowBlur = 4 * dpr;
-        ctx.shadowOffsetY = 1 * dpr;
+        shadow();
         ctx.beginPath();
-        ctx.arc(start.x, start.y, SELECTED_DOT_RADIUS / view.scale, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2 / view.scale;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${outlineAlpha})`;
+        ctx.lineWidth = 2 * px;
         ctx.stroke();
+      };
+      if (hovered) emphasise(hovered, 0.7);
+      if (selected?.point) emphasise(selected.point, 1);
+
+      if (target?.insert) {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(target.insert.x, target.insert.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -402,23 +479,36 @@
 
     let pointer = null;
 
-    // While drawing from a selected point, another point under the cursor is
-    // where the next segment will end.
-    function connectTarget(s = pointer) {
-      if (!s || tool !== 'add' || !selected) return null;
-      if (pointAt(s.x, s.y)?.point === selected.point) return null;
-      const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
-      return nearestPoint(s.x, s.y, reach, selected.point);
+    // What a click with the add tool at screen point s would do:
+    // { connect: {path, point} } joins the selected point to an existing one,
+    // { add: p } places a new point, { insert: p } splits the selected segment.
+    // null means the click selects or deselects instead.
+    function addTarget(s = pointer) {
+      if (!s || drag || tool !== 'add' || pathTools.hidden) return null;
+      const hit = pointAt(s.x, s.y);
+      const p = toBackground(s.x, s.y);
+      if (selected?.point) {
+        if (hit?.point === selected.point) return null;
+        const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
+        const snap = nearestPoint(s.x, s.y, reach, selected.point);
+        if (snap) return { connect: snap };
+        return inBackground(p) ? { add: p } : null;
+      }
+      if (hit) return null;
+      if (selected?.segment) return { insert: projectOntoSegment(selected.segment, p) };
+      if (segmentAt(s.x, s.y)) return null;
+      return inBackground(p) ? { add: p } : null;
     }
 
-    function showingAddCursor() {
-      if (!pointer || drag || tool !== 'add') return false;
-      if (pointAt(pointer.x, pointer.y)) return !!connectTarget();
-      return inBackground(toBackground(pointer.x, pointer.y));
+    function hoveredPoint(target) {
+      if (!pointer || drag || pathTools.hidden) return null;
+      if (target?.connect) return target.connect.point;
+      const hit = pointAt(pointer.x, pointer.y);
+      return hit && hit.point !== selected?.point ? hit.point : null;
     }
 
     function updateCursor() {
-      canvas.style.cursor = showingAddCursor() ? addCursor : '';
+      canvas.style.cursor = addTarget() ? addCursor : '';
     }
 
     // Movement below this many pixels counts as a click rather than a pan.
@@ -434,7 +524,7 @@
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
-      const hit = pathTools.hidden || connectTarget(s) ? null : pointAt(s.x, s.y);
+      const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
       if (hit) {
         selected = hit;
         const p = toBackground(s.x, s.y);
@@ -475,14 +565,15 @@
       drag = null;
       if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {
         const s = canvasPoint(e);
-        const p = toBackground(s.x, s.y);
-        const target = connectTarget(s);
-        if (target) {
-          connectTo(target);
-        } else if (tool === 'add' && inBackground(p)) {
-          addPoint(p);
+        const target = addTarget(s);
+        if (target?.connect) {
+          connectTo(target.connect);
+        } else if (target?.add) {
+          addPoint(target.add);
+        } else if (target?.insert) {
+          insertOnSegment(target.insert);
         } else {
-          selected = null;
+          selected = segmentAt(s.x, s.y);
         }
       }
       draw();

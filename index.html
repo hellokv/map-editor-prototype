@@ -136,7 +136,8 @@
       <div id="path-width-fields" hidden>
         <label class="field">
           Width
-          <input id="path-width" type="number" min="0" step="1">
+          <input id="path-width" type="range" min="1" max="100">
+          <output for="path-width"></output>
         </label>
         <label class="field">
           Width color
@@ -863,7 +864,7 @@
       const segments = selectionItems().filter((item) => item.segment);
       for (const { segment } of segments) groupOf(segment)?.segments.delete(segment);
       pruneGroups();
-      groups.push({ segments: new Set(segments.map((item) => item.segment)), visible: false, width: 0, widthColor: '#000000' });
+      groups.push({ segments: new Set(segments.map((item) => item.segment)), visible: false, width: 20, widthColor: '#000000' });
       setSelectionItems(segments);
       draw();
     });
@@ -890,11 +891,15 @@
       input.addEventListener('change', () => {
         if (before) recordUndo(before);
         before = null;
+        // Hand focus back so keyboard shortcuts keep working.
+        input.blur();
       });
       return input;
     }
     const pathWidthFields = document.getElementById('path-width-fields');
-    const pathWidthInput = groupField('path-width', 'width', (input) => Math.max(0, Number(input.value) || 0));
+    pixelSlider('path-width');
+    const pathWidthInput = groupField('path-width', 'width', (input) => Number(input.value));
+    const pathWidthOutput = document.querySelector('output[for="path-width"]');
     const pathWidthColor = groupField('path-width-color', 'widthColor', (input) => input.value);
 
     const pathVisibleField = document.getElementById('path-visible-field');
@@ -946,9 +951,9 @@
       pathVisibleToggle.checked = !!selected?.group?.visible;
       pathWidthFields.hidden = !selected?.group;
       if (selected?.group) {
-        // Leave a field alone while it's being typed in.
-        if (document.activeElement !== pathWidthInput) pathWidthInput.value = selected.group.width;
-        if (document.activeElement !== pathWidthColor) pathWidthColor.value = selected.group.widthColor;
+        pathWidthInput.value = selected.group.width;
+        pathWidthOutput.value = `${selected.group.width}px`;
+        pathWidthColor.value = selected.group.widthColor;
       }
       const points = selectedPointsList();
       intersectionField.hidden = points.length === 0;

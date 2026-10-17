@@ -124,6 +124,10 @@
         Path color
         <input id="path-color" type="color" value="#ffbf17">
       </label>
+      <label id="intersection-field" class="field" hidden>
+        <input id="intersection" type="checkbox">
+        Intersection
+      </label>
       <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
       <label id="fill-area-field" class="field" hidden>
         <input id="fill-area" type="checkbox">
@@ -171,10 +175,8 @@
         panel.hidden = name !== mode;
       }
       pathTools.hidden = mode !== 'path';
-      if (mode !== 'path') {
-        selected = null;
-        setTool('select');
-      }
+      if (mode !== 'path') selected = null;
+      setTool('select');
     }
 
     for (const button of modeButtons) {
@@ -188,7 +190,23 @@
     // [a, b, control]: its ends are the point objects themselves, so moving a
     // point moves its segments, and a control point bends it into a curve.
     const paths = [];
-    let selected = null; // { path, point }, { path, segment } or { path, area: Set of its points }
+    // { path, point }, { path, segment }, { path, area: Set of its points }, or
+    // { items: [...] } for two or more dots and segments.
+    let selected = null;
+
+    const selectionItems = () => selected?.items ?? (selected?.point || selected?.segment ? [selected] : []);
+
+    function setSelectionItems(items) {
+      selected = items.length === 0 ? null : items.length === 1 ? items[0] : { items };
+    }
+
+    const sameItem = (a, b) => (a.point ? a.point === b.point : a.segment === b.segment);
+
+    function toggleInSelection(item) {
+      const items = selectionItems();
+      const kept = items.filter((other) => !sameItem(other, item));
+      setSelectionItems(kept.length === items.length ? [...items, item] : kept);
+    }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
     // Bending near an end would swing the control point wildly, so the grab
@@ -429,21 +447,28 @@
       selected = { path, point: to };
     }
 
-    function deleteSelected() {
-      const { path, point, segment } = selected;
+    // An item may already be gone when an earlier deletion in the same
+    // selection took it along, as an orphaned end or a dot's segment.
+    function deleteItem({ path, point, segment }) {
+      if (!paths.includes(path)) return;
       if (segment) {
+        if (!path.segments.includes(segment)) return;
         path.segments.splice(path.segments.indexOf(segment), 1);
         for (const end of segment.slice(0, 2)) {
           if (!path.segments.some(([a, b]) => a === end || b === end)) {
             path.points.splice(path.points.indexOf(end), 1);
           }
         }
-        if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
       } else {
+        if (!path.points.includes(point)) return;
         path.points.splice(path.points.indexOf(point), 1);
         path.segments = path.segments.filter(([a, b]) => a !== point && b !== point);
-        if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
       }
+      if (path.points.length === 0) paths.splice(paths.indexOf(path), 1);
+    }
+
+    function deleteSelected() {
+      for (const item of selectionItems()) deleteItem(item);
       selected = null;
     }
 
@@ -455,18 +480,20 @@
     function snapshot() {
       const copies = new Map();
       const copy = (p) => {
-        if (!copies.has(p)) copies.set(p, { x: p.x, y: p.y });
+        if (!copies.has(p)) copies.set(p, { ...p });
         return copies.get(p);
       };
       const copiedPaths = paths.map((path) => ({
         points: path.points.map(copy),
         segments: path.segments.map(([a, b, c]) => (c ? [copy(a), copy(b), { ...c }] : [copy(a), copy(b)])),
       }));
-      const pathIndex = paths.indexOf(selected?.path);
-      let copiedSelection = null;
-      if (selected?.point) copiedSelection = { pathIndex, point: copy(selected.point) };
-      if (selected?.segment) copiedSelection = { pathIndex, segmentIndex: selected.path.segments.indexOf(selected.segment) };
-      if (selected?.area) copiedSelection = { pathIndex, area: new Set([...selected.area].map(copy)) };
+      const copyItem = ({ path, point, segment }) => ({
+        pathIndex: paths.indexOf(path),
+        point: point && copy(point),
+        segmentIndex: segment && path.segments.indexOf(segment),
+      });
+      let copiedSelection = { items: selectionItems().map(copyItem) };
+      if (selected?.area) copiedSelection = { pathIndex: paths.indexOf(selected.path), area: new Set([...selected.area].map(copy)) };
       return {
         paths: copiedPaths,
         fills: fills.map((fill) => new Set([...fill].filter((p) => copies.has(p)).map(copy))),
@@ -484,12 +511,13 @@
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       fills.splice(0, fills.length, ...restoredFills);
-      selected = null;
-      if (selection) {
-        const path = restoredPaths[selection.pathIndex];
-        if (selection.point) selected = { path, point: selection.point };
-        if (selection.segmentIndex !== undefined) selected = { path, segment: path.segments[selection.segmentIndex] };
-        if (selection.area) selected = { path, area: selection.area };
+      if (selection.area) {
+        selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
+      } else {
+        setSelectionItems(selection.items.map(({ pathIndex, point, segmentIndex }) => {
+          const path = restoredPaths[pathIndex];
+          return point ? { path, point } : { path, segment: path.segments[segmentIndex] };
+        }));
       }
       drag = null;
       draw();
@@ -510,18 +538,21 @@
       if (plain && e.key === '1') setTool('select');
       if (plain && e.key === '2') setTool('add');
       const nudge = NUDGE_DIRECTIONS[e.key];
-      if (nudge && selected?.point) {
+      if (nudge && selectionItems().length) {
         e.preventDefault();
         // Background pixels, so a nudge is the same distance on the map at any zoom.
         const step = Number(nudgeInput.value) * (e.shiftKey ? SHIFT_NUDGE_FACTOR : 1);
         recordUndo();
-        selected.point.x = clampToBackground(selected.point.x + nudge[0] * step);
-        selected.point.y = clampToBackground(selected.point.y + nudge[1] * step);
+        const moving = new Set(selectionItems().flatMap((item) => (item.point ? [item.point] : item.segment.slice(0, 2))));
+        for (const point of moving) {
+          point.x = clampToBackground(point.x + nudge[0] * step);
+          point.y = clampToBackground(point.y + nudge[1] * step);
+        }
         draw();
         updateCursor();
       }
       // Mac keyboards label Backspace "delete".
-      if ((e.key === 'Delete' || e.key === 'Backspace') && (selected?.point || selected?.segment)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectionItems().length) {
         e.preventDefault();
         recordUndo();
         deleteSelected();
@@ -595,9 +626,16 @@
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
+      if (pathTools.hidden) {
+        updatePanel();
+        return;
+      }
 
       // Lines and dots keep the same on-screen size at any zoom.
       const px = 1 / view.scale;
+      const items = selectionItems();
+      const selectedPoints = new Set(items.map((item) => item.point).filter(Boolean));
+      const selectedSegments = new Set(items.map((item) => item.segment).filter(Boolean));
       const color = pathColor.value;
       const shadow = () => {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -646,19 +684,19 @@
       ctx.beginPath();
       for (const path of paths) {
         for (const segment of path.segments) {
-          if (segment !== selected?.segment) traceSegment(segment);
+          if (!selectedSegments.has(segment)) traceSegment(segment);
         }
       }
       ctx.stroke();
 
-      if (selected?.segment) {
+      if (selectedSegments.size) {
         ctx.save();
         ctx.lineCap = 'round';
         shadow();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 7 * px;
         ctx.beginPath();
-        traceSegment(selected.segment);
+        for (const segment of selectedSegments) traceSegment(segment);
         ctx.stroke();
         ctx.restore();
         ctx.lineWidth = 3 * px;
@@ -698,7 +736,7 @@
       ctx.fillStyle = color;
       for (const path of paths) {
         for (const point of path.points) {
-          if (point === selected?.point || point === hovered) continue;
+          if (selectedPoints.has(point) || point === hovered) continue;
           ctx.beginPath();
           ctx.arc(point.x, point.y, DOT_RADIUS * px, 0, Math.PI * 2);
           ctx.fill();
@@ -717,7 +755,7 @@
         ctx.stroke();
       };
       if (hovered) emphasise(hovered, 0.7);
-      if (selected?.point) emphasise(selected.point, 1);
+      for (const point of selectedPoints) emphasise(point, 1);
 
       const ghost = target?.insert?.point ?? target?.split?.point ?? bendGhost();
       if (ghost) {
@@ -727,6 +765,16 @@
         ctx.arc(ghost.x, ghost.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+      }
+
+      if (drag?.marquee && drag.active) {
+        const box = marqueeBox();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w, box.h);
       }
       updatePanel();
     }
@@ -750,8 +798,21 @@
       draw();
     });
 
+    const intersectionField = document.getElementById('intersection-field');
+    const intersectionToggle = document.getElementById('intersection');
+    const selectedPointsList = () => selectionItems().map((item) => item.point).filter(Boolean);
+    intersectionToggle.addEventListener('change', () => {
+      recordUndo();
+      for (const point of selectedPointsList()) point.intersection = intersectionToggle.checked;
+      intersectionToggle.blur();
+      draw();
+    });
+
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
+      const points = selectedPointsList();
+      intersectionField.hidden = points.length === 0;
+      intersectionToggle.checked = points.length > 0 && points.every((point) => point.intersection);
       deleteBendButton.hidden = !selected?.segment;
       deleteBendButton.disabled = !selected?.segment?.[2];
       fillAreaField.hidden = !selected?.area;
@@ -982,6 +1043,35 @@
     const CLICK_SLOP = 4;
     let drag = null;
 
+    // The marquee being dragged, in screen pixels.
+    function marqueeBox() {
+      const x = Math.min(drag.x0, pointer.x);
+      const y = Math.min(drag.y0, pointer.y);
+      return { x, y, w: Math.abs(pointer.x - drag.x0), h: Math.abs(pointer.y - drag.y0) };
+    }
+
+    // Dots inside the box, and segments lying wholly inside it.
+    function itemsInBox(box) {
+      const inside = (p) => {
+        const sx = p.x * view.scale + view.x;
+        const sy = p.y * view.scale + view.y;
+        return sx >= box.x && sx <= box.x + box.w && sy >= box.y && sy <= box.y + box.h;
+      };
+      const items = [];
+      for (const path of paths) {
+        for (const point of path.points) {
+          if (inside(point)) items.push({ path, point });
+        }
+        for (const segment of path.segments) {
+          const steps = segment[2] ? 16 : 1;
+          let all = true;
+          for (let i = 0; i <= steps && all; i++) all = inside(segmentPoint(segment, i / steps));
+          if (all) items.push({ path, segment });
+        }
+      }
+      return items;
+    }
+
     function canvasPoint(e) {
       const rect = canvas.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -999,17 +1089,23 @@
       const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
       const handle = !hit && tool === 'select' && !pathTools.hidden ? segmentHit(s.x, s.y) : null;
       const p = toBackground(s.x, s.y);
+      // With Shift in the cursor tool, a click adds to or removes from the
+      // selection; a drag still moves or bends as usual.
+      const toggling = shiftHeld && tool === 'select';
       if (hit) {
-        selected = hit;
+        if (!toggling) selected = hit;
         // The snapshot only becomes the undo step once the point actually moves.
-        drag = { point: hit.point, path: hit.path, dx: hit.point.x - p.x, dy: hit.point.y - p.y, before: snapshot() };
+        drag = { point: hit.point, path: hit.path, dx: hit.point.x - p.x, dy: hit.point.y - p.y, before: snapshot(), toggle: toggling && hit };
         draw();
       } else if (handle) {
-        selected = { path: handle.path, segment: handle.segment };
+        const item = { path: handle.path, segment: handle.segment };
+        if (!toggling) selected = item;
         const t = bendT(handle.t);
         const m = segmentPoint(handle.segment, t);
-        drag = { bend: handle.segment, t, dx: m.x - p.x, dy: m.y - p.y, startX: e.clientX, startY: e.clientY, before: snapshot() };
+        drag = { bend: handle.segment, t, dx: m.x - p.x, dy: m.y - p.y, startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
         draw();
+      } else if (tool === 'select' && !pathTools.hidden) {
+        drag = { marquee: true, x0: s.x, y0: s.y, startX: e.clientX, startY: e.clientY, base: toggling ? selectionItems() : [] };
       } else {
         drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
       }
@@ -1027,16 +1123,28 @@
         if (drag.before) {
           recordUndo(drag.before);
           drag.before = null;
+          if (drag.toggle) selected = drag.toggle;
+          drag.toggle = null;
         }
         drag.point.x = clampToBackground(target.x);
         drag.point.y = clampToBackground(target.y);
       } else if (drag?.bend) {
         // Ignore jitter so a plain click doesn't bend a straight segment.
         if (drag.bending || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
-          if (!drag.bending) recordUndo(drag.before);
+          if (!drag.bending) {
+            recordUndo(drag.before);
+            if (drag.toggle) selected = drag.toggle;
+            drag.toggle = null;
+          }
           drag.bending = true;
           const p = toBackground(pointer.x, pointer.y);
           bendSegment(drag.bend, drag.t, { x: p.x + drag.dx, y: p.y + drag.dy });
+        }
+      } else if (drag?.marquee) {
+        if (drag.active || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
+          drag.active = true;
+          const inside = itemsInBox(marqueeBox());
+          setSelectionItems([...drag.base, ...inside.filter((item) => !drag.base.some((b) => sameItem(b, item)))]);
         }
       } else if (drag) {
         view.x += e.clientX - drag.x;
@@ -1056,10 +1164,15 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      const wasClick = !drag.point && !drag.bend && !drag.spacePan
+      const { toggle, marquee, active, base } = drag;
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !active
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
-      if (wasClick && !pathTools.hidden) {
+      if (toggle) {
+        toggleInSelection(toggle);
+      } else if (marquee && wasClick && base.length) {
+        // A Shift-click on empty space leaves the selection alone.
+      } else if (wasClick && !pathTools.hidden) {
         const s = canvasPoint(e);
         const target = addTarget(s);
         if (target) recordUndo();

@@ -584,6 +584,20 @@
         ctx.restore();
       }
 
+      if (drag?.guides?.length) {
+        const length = 4 * BACKGROUND;
+        ctx.save();
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = px;
+        ctx.beginPath();
+        for (const { origin, dx, dy } of drag.guides) {
+          ctx.moveTo(origin.x - dx * length, origin.y - dy * length);
+          ctx.lineTo(origin.x + dx * length, origin.y + dy * length);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
       const hovered = hoveredPoint(target);
       ctx.fillStyle = color;
       for (const path of paths) {
@@ -724,8 +738,50 @@
       return { x: ox + dx * reach, y: oy + dy * reach };
     }
 
+    // Pulls a dragged point onto lines at multiples of 45° through the points
+    // it connects to, when it comes within snap distance of them. Near a
+    // crossing of two such lines it goes to the crossing. Returns the guide
+    // lines it snapped to, as { origin, angle }.
+    function snapToNeighbourAngles(path, point, target) {
+      const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS) / view.scale;
+      const lines = [];
+      for (const [a, b] of path.segments) {
+        const origin = a === point ? b : b === point ? a : null;
+        if (!origin) continue;
+        let best = null;
+        for (let k = 0; k < 4; k++) {
+          const angle = (k * Math.PI) / 4;
+          const dx = Math.cos(angle);
+          const dy = Math.sin(angle);
+          const offset = Math.abs((target.x - origin.x) * dy - (target.y - origin.y) * dx);
+          if (offset <= reach && (!best || offset < best.offset)) best = { origin, angle, dx, dy, offset };
+        }
+        if (best) lines.push(best);
+      }
+
+      let crossing = null;
+      for (let i = 0; i < lines.length; i++) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const l = lines[i];
+          const m = lines[j];
+          const denom = l.dx * m.dy - l.dy * m.dx;
+          if (Math.abs(denom) < 1e-9) continue;
+          const u = ((m.origin.x - l.origin.x) * m.dy - (m.origin.y - l.origin.y) * m.dx) / denom;
+          const x = { x: l.origin.x + l.dx * u, y: l.origin.y + l.dy * u };
+          const d = Math.hypot(x.x - target.x, x.y - target.y);
+          if (d <= reach * Math.SQRT2 && (!crossing || d < crossing.d)) crossing = { point: x, lines: [l, m], d };
+        }
+      }
+      if (crossing) return { target: crossing.point, guides: crossing.lines };
+
+      if (lines.length === 0) return { target, guides: [] };
+      const l = lines.reduce((p, q) => (q.offset < p.offset ? q : p));
+      const along = (target.x - l.origin.x) * l.dx + (target.y - l.origin.y) * l.dy;
+      return { target: { x: l.origin.x + l.dx * along, y: l.origin.y + l.dy * along }, guides: [l] };
+    }
+
     function addTarget(s = pointer) {
-      if (!s || drag || tool !== 'add' || pathTools.hidden) return null;
+      if (!s || drag || spaceHeld || tool !== 'add' || pathTools.hidden) return null;
       const hit = pointAt(s.x, s.y);
       const p = toBackground(s.x, s.y);
       if (selected?.point) {
@@ -750,28 +806,45 @@
     // for bending: the spot on it nearest the pointer.
     function bendGhost() {
       if (drag?.bend) return segmentPoint(drag.bend, drag.t);
-      if (!pointer || drag || tool !== 'select' || pathTools.hidden) return null;
+      if (!pointer || drag || spaceHeld || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y)) return null;
       const hit = segmentHit(pointer.x, pointer.y);
       return hit && segmentPoint(hit.segment, bendT(hit.t));
     }
 
     function hoveredAreaIn(areas) {
-      if (!pointer || drag || tool !== 'select' || pathTools.hidden) return null;
+      if (!pointer || drag || spaceHeld || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y) || segmentHit(pointer.x, pointer.y)) return null;
       return areaAt(areas, pointer.x, pointer.y);
     }
 
     function hoveredPoint(target) {
-      if (!pointer || drag || pathTools.hidden) return null;
+      if (!pointer || drag || spaceHeld || pathTools.hidden) return null;
       if (target?.connect) return target.connect.point;
       const hit = pointAt(pointer.x, pointer.y);
       return hit && hit.point !== selected?.point ? hit.point : null;
     }
 
     function updateCursor() {
-      canvas.style.cursor = addTarget() ? addCursor : '';
+      if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      else canvas.style.cursor = addTarget() ? addCursor : '';
     }
+
+    // Holding space turns every press on the canvas into a pan.
+    let spaceHeld = false;
+    const trackSpace = (e) => {
+      if (e.code !== 'Space' || e.target.closest('input[type="text"], textarea')) return;
+      // Stops the page scrolling and a focused button being pressed.
+      e.preventDefault();
+      const down = e.type === 'keydown';
+      if (spaceHeld === down) return;
+      spaceHeld = down;
+      draw();
+      updateCursor();
+    };
+    document.addEventListener('keydown', trackSpace);
+    document.addEventListener('keyup', trackSpace);
+    window.addEventListener('blur', () => { spaceHeld = false; });
 
     // Movement below this many pixels counts as a click rather than a pan.
     const CLICK_SLOP = 4;
@@ -786,12 +859,17 @@
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
+      if (spaceHeld) {
+        drag = { x: e.clientX, y: e.clientY, spacePan: true };
+        updateCursor();
+        return;
+      }
       const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
       const handle = !hit && tool === 'select' && !pathTools.hidden ? segmentHit(s.x, s.y) : null;
       const p = toBackground(s.x, s.y);
       if (hit) {
         selected = hit;
-        drag = { point: hit.point, dx: hit.point.x - p.x, dy: hit.point.y - p.y };
+        drag = { point: hit.point, path: hit.path, dx: hit.point.x - p.x, dy: hit.point.y - p.y };
         draw();
       } else if (handle) {
         selected = { path: handle.path, segment: handle.segment };
@@ -810,8 +888,11 @@
       shiftHeld = e.shiftKey;
       if (drag?.point) {
         const p = toBackground(pointer.x, pointer.y);
-        drag.point.x = clampToBackground(p.x + drag.dx);
-        drag.point.y = clampToBackground(p.y + drag.dy);
+        let target = { x: p.x + drag.dx, y: p.y + drag.dy };
+        drag.guides = [];
+        if (shiftHeld) ({ target, guides: drag.guides } = snapToNeighbourAngles(drag.path, drag.point, target));
+        drag.point.x = clampToBackground(target.x);
+        drag.point.y = clampToBackground(target.y);
       } else if (drag?.bend) {
         // Ignore jitter so a plain click doesn't bend a straight segment.
         if (drag.bending || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
@@ -837,10 +918,10 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      const wasPan = !drag.point && !drag.bend;
-      const moved = wasPan && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan
+        && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
-      if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {
+      if (wasClick && !pathTools.hidden) {
         const s = canvasPoint(e);
         const target = addTarget(s);
         if (target?.connect) {

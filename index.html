@@ -528,6 +528,8 @@
         draw();
         updateCursor();
       } else if (e.key === 'Escape') {
+        // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
+        if (!selected) setTool('select');
         selected = null;
         draw();
         updateCursor();

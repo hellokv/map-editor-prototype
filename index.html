@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,delete,image,route">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_selector_tool,delete,image,route">
   <style>
     html, body {
       margin: 0;
@@ -91,7 +91,10 @@
       </button>
       <div id="path-tools" hidden>
         <hr>
-        <button id="add-path" type="button" aria-label="Add path" aria-pressed="false">
+        <button type="button" data-tool="select" aria-label="Select" aria-pressed="true">
+          <span class="material-symbols-rounded">arrow_selector_tool</span>
+        </button>
+        <button type="button" data-tool="add" aria-label="Add path" aria-pressed="false">
           <span class="material-symbols-rounded">add_circle</span>
         </button>
       </div>
@@ -120,12 +123,14 @@
       background: document.getElementById('background-panel'),
     };
     const pathTools = document.getElementById('path-tools');
-    const addPathButton = document.getElementById('add-path');
-    let addingPath = false;
+    const toolButtons = document.querySelectorAll('#path-tools [data-tool]');
+    let tool = 'select';
 
-    function setAddingPath(on) {
-      addingPath = on;
-      addPathButton.setAttribute('aria-pressed', on);
+    function setTool(name) {
+      tool = name;
+      for (const button of toolButtons) {
+        button.setAttribute('aria-pressed', button.dataset.tool === name);
+      }
       updateCursor();
       draw();
     }
@@ -140,14 +145,16 @@
       pathTools.hidden = mode !== 'path';
       if (mode !== 'path') {
         selected = null;
-        setAddingPath(false);
+        setTool('select');
       }
     }
 
     for (const button of modeButtons) {
       button.addEventListener('click', () => setMode(button.dataset.mode));
     }
-    addPathButton.addEventListener('click', () => setAddingPath(!addingPath));
+    for (const button of toolButtons) {
+      button.addEventListener('click', () => setTool(button.dataset.tool));
+    }
 
     // A path is a set of points joined by segments; each segment is a pair of
     // point objects, so moving a point moves its segments with it.
@@ -181,6 +188,20 @@
       }
     }
 
+    function connectTo(target) {
+      const path = selected.path;
+      const from = selected.point;
+      const to = target.point;
+      if (target.path !== path) {
+        path.points.push(...target.path.points);
+        path.segments.push(...target.path.segments);
+        paths.splice(paths.indexOf(target.path), 1);
+      }
+      const exists = path.segments.some(([a, b]) => (a === from && b === to) || (a === to && b === from));
+      if (!exists) path.segments.push([from, to]);
+      selected = { path, point: to };
+    }
+
     function deleteSelected() {
       const { path, point } = selected;
       path.points.splice(path.points.indexOf(point), 1);
@@ -190,18 +211,17 @@
     }
 
     document.addEventListener('keydown', (e) => {
-      if (!selected || e.target.closest('input')) return;
+      if (pathTools.hidden || e.target.closest('input')) return;
       // Mac keyboards label Backspace "delete".
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
         e.preventDefault();
         deleteSelected();
+        draw();
+        updateCursor();
       } else if (e.key === 'Escape') {
         selected = null;
-      } else {
-        return;
+        setTool('select');
       }
-      draw();
-      updateCursor();
     });
 
     const BACKGROUND = 1500;
@@ -274,7 +294,7 @@
       ctx.stroke();
 
       if (selected && showingAddCursor()) {
-        const target = toBackground(pointer.x, pointer.y);
+        const target = connectTarget()?.point ?? toBackground(pointer.x, pointer.y);
         ctx.save();
         ctx.strokeStyle = 'rgba(26, 115, 232, 0.5)';
         ctx.setLineDash([6 / view.scale, 4 / view.scale]);
@@ -355,9 +375,18 @@
 
     let pointer = null;
 
+    // While drawing from a selected point, another point under the cursor is
+    // where the next segment will end.
+    function connectTarget(s = pointer) {
+      if (!s || tool !== 'add' || !selected) return null;
+      const hit = pointAt(s.x, s.y);
+      return hit && hit.point !== selected.point ? hit : null;
+    }
+
     function showingAddCursor() {
-      return pointer && !drag && addingPath && !pointAt(pointer.x, pointer.y)
-        && inBackground(toBackground(pointer.x, pointer.y));
+      if (!pointer || drag || tool !== 'add') return false;
+      if (pointAt(pointer.x, pointer.y)) return !!connectTarget();
+      return inBackground(toBackground(pointer.x, pointer.y));
     }
 
     function updateCursor() {
@@ -377,7 +406,7 @@
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
-      const hit = pathTools.hidden ? null : pointAt(s.x, s.y);
+      const hit = pathTools.hidden || connectTarget(s) ? null : pointAt(s.x, s.y);
       if (hit) {
         selected = hit;
         const p = toBackground(s.x, s.y);
@@ -419,7 +448,10 @@
       if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {
         const s = canvasPoint(e);
         const p = toBackground(s.x, s.y);
-        if (addingPath && inBackground(p)) {
+        const target = connectTarget(s);
+        if (target) {
+          connectTo(target);
+        } else if (tool === 'add' && inBackground(p)) {
           addPoint(p);
         } else {
           selected = null;

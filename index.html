@@ -172,6 +172,14 @@
         <input id="fill-area" type="checkbox">
         Fill area
       </label>
+      <label id="fill-visible-field" class="field" hidden>
+        <input id="fill-visible" type="checkbox">
+        Visible
+      </label>
+      <label id="fill-color-field" class="field" hidden>
+        Fill color
+        <input id="fill-color" type="color">
+      </label>
     </div>
     <div id="background-panel" hidden>
       <input id="image-upload" type="file" accept="image/*">
@@ -510,7 +518,10 @@
     }
 
     const samePoints = (s, t) => s.size === t.size && [...s].every((p) => t.has(p));
-    const isFilled = (area) => fills.some((fill) => samePoints(fill, area.points));
+    // Each fill is a Set of its area's points, carrying `visible` and `color`
+    // like a path: a visible fill shows in its own color in both modes.
+    const fillOf = (points) => fills.find((fill) => samePoints(fill, points));
+    const isFilled = (area) => !!fillOf(area.points);
 
     function insidePolygon(polygon, p) {
       let inside = false;
@@ -701,7 +712,7 @@
       if (selected?.area) copiedSelection = { pathIndex: paths.indexOf(selected.path), area: new Set([...selected.area].map(copy)) };
       return {
         paths: copiedPaths,
-        fills: fills.map((fill) => new Set([...fill].filter((p) => copies.has(p)).map(copy))),
+        fills: fills.map((fill) => Object.assign(new Set([...fill].filter((p) => copies.has(p)).map(copy)), { visible: fill.visible, color: fill.color })),
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         selection: copiedSelection,
       };
@@ -845,6 +856,13 @@
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
       if (pathTools.hidden) {
+        for (const area of computeAreas()) {
+          const fill = fillOf(area.points);
+          if (!fill?.visible) continue;
+          ctx.fillStyle = fill.color;
+          traceArea(area);
+          ctx.fill();
+        }
         for (const group of groups) {
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
@@ -867,18 +885,23 @@
       const areas = computeAreas();
       if (selected?.area && !areas.some((area) => samePoints(area.points, selected.area))) selected = null;
       const fillArea = (area) => {
-        ctx.beginPath();
-        area.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-        ctx.closePath();
+        traceArea(area);
         ctx.fill();
       };
-      ctx.fillStyle = color;
-      ctx.save();
-      ctx.globalAlpha = 0.8;
       for (const area of areas) {
-        if (isFilled(area)) fillArea(area);
+        const fill = fillOf(area.points);
+        if (!fill) continue;
+        ctx.save();
+        if (fill.visible) {
+          ctx.fillStyle = fill.color;
+        } else {
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.8;
+        }
+        fillArea(area);
+        ctx.restore();
       }
-      ctx.restore();
+      ctx.fillStyle = color;
       // A hovered area shows a ghost fill, and a selected one keeps it.
       const selectedArea = selected?.area && areas.find((area) => samePoints(area.points, selected.area));
       const ghostAreas = new Set([hoveredAreaIn(areas), selectedArea].filter((area) => area && !isFilled(area)));
@@ -892,8 +915,7 @@
       if (selectedArea) {
         ctx.save();
         ctx.beginPath();
-        selectedArea.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-        ctx.closePath();
+        traceArea(selectedArea);
         ctx.clip();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 6 * px;
@@ -1025,15 +1047,16 @@
       draw();
     });
 
-    // Fields that edit the selected group live as they change, and become one
-    // undo step when the edit is committed.
-    function groupField(id, key, read) {
+    // A field that sets a property of the selected path (or another target)
+    // as it changes, and becomes one undo step when the edit is committed.
+    function liveField(id, key, read, target = () => selected?.group) {
       const input = document.getElementById(id);
       let before = null;
       input.addEventListener('input', () => {
-        if (!selected?.group) return;
+        const object = target();
+        if (!object) return;
         before ??= snapshot();
-        selected.group[key] = read(input);
+        object[key] = read(input);
         draw();
       });
       input.addEventListener('change', () => {
@@ -1046,9 +1069,20 @@
     }
     const pathWidthFields = document.getElementById('path-width-fields');
     labelledSlider('path-width');
-    const pathWidthInput = groupField('path-width', 'width', (input) => Number(input.value));
+    const pathWidthInput = liveField('path-width', 'width', (input) => Number(input.value));
     const pathWidthOutput = document.querySelector('output[for="path-width"]');
-    const pathWidthColor = groupField('path-width-color', 'widthColor', (input) => input.value);
+    const pathWidthColor = liveField('path-width-color', 'widthColor', (input) => input.value);
+    const selectedFill = () => selected?.area && fillOf(selected.area);
+    const fillColorInput = liveField('fill-color', 'color', (input) => input.value, selectedFill);
+    const fillVisibleField = document.getElementById('fill-visible-field');
+    const fillColorField = document.getElementById('fill-color-field');
+    const fillVisibleToggle = document.getElementById('fill-visible');
+    fillVisibleToggle.addEventListener('change', () => {
+      recordUndo();
+      selectedFill().visible = fillVisibleToggle.checked;
+      fillVisibleToggle.blur();
+      draw();
+    });
 
     const pathVisibleField = document.getElementById('path-visible-field');
     const pathVisibleToggle = document.getElementById('path-visible');
@@ -1111,7 +1145,7 @@
     fillAreaToggle.addEventListener('change', () => {
       const index = fills.findIndex((fill) => samePoints(fill, selected.area));
       recordUndo();
-      if (fillAreaToggle.checked && index === -1) fills.push(new Set(selected.area));
+      if (fillAreaToggle.checked && index === -1) fills.push(Object.assign(new Set(selected.area), { visible: false, color: '#000000' }));
       if (!fillAreaToggle.checked && index !== -1) fills.splice(index, 1);
       // Hand focus back so keyboard shortcuts keep working.
       fillAreaToggle.blur();
@@ -1149,6 +1183,11 @@
       deleteBendButton.disabled = !selectedSegments.some((item) => item.segment[2]);
       fillAreaField.hidden = !selected?.area;
       fillAreaToggle.checked = !!selected?.area && fills.some((fill) => samePoints(fill, selected.area));
+      const fill = selectedFill();
+      fillVisibleField.hidden = !fill;
+      fillVisibleToggle.checked = !!fill?.visible;
+      fillColorField.hidden = !fill?.visible;
+      if (fill) fillColorInput.value = fill.color;
     }
 
     function strokeGroupWidth(group) {
@@ -1160,6 +1199,12 @@
       group.segments.forEach(traceSegment);
       ctx.stroke();
       ctx.restore();
+    }
+
+    function traceArea(area) {
+      ctx.beginPath();
+      area.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
     }
 
     function traceSegment([a, b, c1, c2]) {

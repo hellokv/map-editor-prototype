@@ -802,10 +802,6 @@
 
     let pointer = null;
 
-    // What a click with the add tool at screen point s would do:
-    // { connect: {path, point} } joins the selected point to an existing one,
-    // { add: p } places a new point, { insert: p } splits the selected segment.
-    // null means the click selects or deselects instead.
     let shiftHeld = false;
     const trackShift = (e) => {
       if (e.key !== 'Shift' || shiftHeld === (e.type === 'keydown')) return;
@@ -871,6 +867,11 @@
       return { target: { x: l.origin.x + l.dx * along, y: l.origin.y + l.dy * along }, guides: [l] };
     }
 
+    // What a click with the add tool at screen point s would do:
+    // { connect: {path, point} } joins the selected point to an existing one,
+    // { add: p } places a new point, { insert: {point, t} } splits the selected
+    // segment, and { split: {path, segment, t, point} } splits a segment the
+    // pointer snapped to. null means the click selects or deselects instead.
     function addTarget(s = pointer) {
       if (!s || drag || spaceHeld || tool !== 'add' || pathTools.hidden) return null;
       const hit = pointAt(s.x, s.y);
@@ -892,7 +893,8 @@
         const { t } = closestOnSegment(selected.segment, p);
         return { insert: { point: segmentPoint(selected.segment, t), t } };
       }
-      if (segmentAt(s.x, s.y)) return null;
+      const onto = segmentHit(s.x, s.y, Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS));
+      if (onto) return { split: { ...onto, point: segmentPoint(onto.segment, onto.t) } };
       return inBackground(p) ? { add: p } : null;
     }
 
@@ -1033,7 +1035,9 @@
           insertOnSegment(target.insert);
         } else if (target?.split) {
           const { path, segment, t } = target.split;
-          connectTo({ path, point: splitSegment(path, segment, t) });
+          const point = splitSegment(path, segment, t);
+          if (selected?.point) connectTo({ path, point });
+          else selected = { path, point };
         } else {
           const area = tool === 'select' ? areaAt(computeAreas(), s.x, s.y) : null;
           selected = segmentAt(s.x, s.y) ?? (area && { path: area.path, area: area.points });

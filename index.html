@@ -529,7 +529,8 @@
         updateCursor();
       } else if (e.key === 'Escape') {
         selected = null;
-        setTool('select');
+        draw();
+        updateCursor();
       }
     });
 

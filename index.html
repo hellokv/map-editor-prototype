@@ -29,6 +29,18 @@
       width: 100%;
       height: 100%;
     }
+    #crossing-dialog {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font: 13px sans-serif;
+      white-space: nowrap;
+    }
     #mode-menu {
       position: absolute;
       top: 8px;
@@ -85,6 +97,11 @@
 <body>
   <div id="canvas-area">
     <canvas id="canvas"></canvas>
+    <div id="crossing-dialog" hidden>
+      Add intersections?
+      <button id="crossing-yes" type="button">Yes</button>
+      <button id="crossing-no" type="button">No</button>
+    </div>
     <div id="mode-menu">
       <button type="button" data-mode="path" aria-label="Path editing mode" aria-pressed="true">
         <span class="material-symbols-rounded">route</span>
@@ -193,6 +210,7 @@
       }
       pathTools.hidden = mode !== 'path';
       if (mode !== 'path') selected = null;
+      closeCrossingDialog();
       setTool('select');
     }
 
@@ -373,11 +391,11 @@
       };
     }
 
-    // Splits a segment at t with a new point, keeping any bend's shape.
-    function splitSegment(path, segment, t) {
+    // Splits a segment at t, keeping any bend's shape. The split point is new
+    // unless one already in the path is given.
+    function splitSegment(path, segment, t, point = segmentPoint(segment, t)) {
       const [a, b, c] = segment;
-      const point = segmentPoint(segment, t);
-      path.points.push(point);
+      if (!path.points.includes(point)) path.points.push(point);
       const halves = c
         ? [[a, point, lerp(a, c, t)], [point, b, lerp(c, b, t)]]
         : [[a, point], [point, b]];
@@ -482,30 +500,91 @@
       return best;
     }
 
+    // Returns the segment drawn to the new point, if any.
     function addPoint(point) {
       if (selected?.point) {
+        const segment = [selected.point, point];
         selected.path.points.push(point);
-        selected.path.segments.push([selected.point, point]);
+        selected.path.segments.push(segment);
         selected = { path: selected.path, point };
-      } else {
-        const path = { points: [point], segments: [] };
-        paths.push(path);
-        selected = { path, point };
+        return segment;
       }
+      const path = { points: [point], segments: [] };
+      paths.push(path);
+      selected = { path, point };
+      return null;
     }
 
+    function mergePaths(into, from) {
+      if (into === from) return;
+      into.points.push(...from.points);
+      into.segments.push(...from.segments);
+      paths.splice(paths.indexOf(from), 1);
+    }
+
+    // Returns the segment it creates, or null if the two were already joined.
     function connectTo(target) {
       const path = selected.path;
       const from = selected.point;
       const to = target.point;
-      if (target.path !== path) {
-        path.points.push(...target.path.points);
-        path.segments.push(...target.path.segments);
-        paths.splice(paths.indexOf(target.path), 1);
-      }
-      const exists = path.segments.some(([a, b]) => (a === from && b === to) || (a === to && b === from));
-      if (!exists) path.segments.push([from, to]);
+      mergePaths(path, target.path);
       selected = { path, point: to };
+      if (path.segments.some(([a, b]) => (a === from && b === to) || (a === to && b === from))) return null;
+      const segment = [from, to];
+      path.segments.push(segment);
+      return segment;
+    }
+
+    // Where a segment crosses others away from either one's ends, as
+    // { path, segment, t (along that segment), s (along this one), point }.
+    // Curves are approximated by short straight pieces.
+    function findCrossings(piece) {
+      const pieces = (segment) => {
+        const steps = segment[2] ? 32 : 1;
+        return Array.from({ length: steps }, (_, i) => [segmentPoint(segment, i / steps), segmentPoint(segment, (i + 1) / steps), i, steps]);
+      };
+      const mine = pieces(piece);
+      const crossings = [];
+      const nearEnd = (t) => t < 1e-4 || t > 1 - 1e-4;
+      for (const path of paths) {
+        for (const segment of path.segments) {
+          if (segment === piece) continue;
+          for (const [m0, m1, i, mSteps] of mine) {
+            for (const [o0, o1, j, oSteps] of pieces(segment)) {
+              const rx = m1.x - m0.x, ry = m1.y - m0.y, sx = o1.x - o0.x, sy = o1.y - o0.y;
+              const denom = rx * sy - ry * sx;
+              if (Math.abs(denom) < 1e-9) continue;
+              const u = ((o0.x - m0.x) * sy - (o0.y - m0.y) * sx) / denom;
+              const v = ((o0.x - m0.x) * ry - (o0.y - m0.y) * rx) / denom;
+              if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+              const t = (j + v) / oSteps;
+              const s = (i + u) / mSteps;
+              if (nearEnd(t) || nearEnd(s)) continue;
+              crossings.push({ path, segment, t, s, point: lerp(m0, m1, u) });
+            }
+          }
+        }
+      }
+      return crossings;
+    }
+
+    // Adds a shared intersection node wherever the segment crosses another,
+    // splitting both.
+    function addCrossingNodes(start) {
+      const work = [start];
+      for (let guard = 0; work.length && guard < 200; guard++) {
+        const piece = work.pop();
+        const path = pathOf(piece);
+        const hit = path && findCrossings(piece)[0];
+        if (!hit) continue;
+        mergePaths(path, hit.path);
+        const point = splitSegment(path, hit.segment, hit.t);
+        point.intersection = true;
+        const at = path.segments.indexOf(piece);
+        splitSegment(path, piece, hit.s, point);
+        work.push(path.segments[at], path.segments[at + 1]);
+      }
+      if (selected?.point) selected = { path: paths.find((path) => path.points.includes(selected.point)), point: selected.point };
     }
 
     // An item may already be gone when an earlier deletion in the same
@@ -628,6 +707,7 @@
         // An embedding page may otherwise take Esc as a cue to move focus out
         // of this frame, and then the next Esc never arrives here.
         e.preventDefault();
+        closeCrossingDialog();
         // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
         if (!selected) setTool('select');
         selected = null;
@@ -911,6 +991,44 @@
       draw();
     });
 
+    // Asks whether to add intersection nodes where a newly drawn segment
+    // crosses others. The dialog sits beside the crossing and follows it as
+    // the view pans and zooms.
+    const crossingDialog = document.getElementById('crossing-dialog');
+    let pendingCrossing = null; // { segment, anchor }
+
+    function askAboutCrossings(segment, anchor) {
+      pendingCrossing = { segment, anchor };
+    }
+
+    function closeCrossingDialog() {
+      pendingCrossing = null;
+      crossingDialog.hidden = true;
+    }
+
+    function placeCrossingDialog() {
+      // Undo or a deletion may have taken the segment away.
+      if (pendingCrossing && !pathOf(pendingCrossing.segment)) pendingCrossing = null;
+      crossingDialog.hidden = !pendingCrossing;
+      if (!pendingCrossing) return;
+      const { anchor } = pendingCrossing;
+      crossingDialog.style.left = `${anchor.x * view.scale + view.x + 12}px`;
+      crossingDialog.style.top = `${anchor.y * view.scale + view.y + 12}px`;
+    }
+
+    document.getElementById('crossing-yes').addEventListener('click', () => {
+      recordUndo();
+      addCrossingNodes(pendingCrossing.segment);
+      closeCrossingDialog();
+      document.activeElement.blur();
+      draw();
+      updateCursor();
+    });
+    document.getElementById('crossing-no').addEventListener('click', () => {
+      closeCrossingDialog();
+      draw();
+    });
+
     const deleteBendButton = document.getElementById('delete-bend');
     deleteBendButton.addEventListener('click', () => {
       recordUndo();
@@ -944,6 +1062,7 @@
 
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
+      placeCrossingDialog();
       const selectedSegments = selectionItems().filter((item) => item.segment);
       createPathButton.hidden = !!selected?.group || selectedSegments.length === 0;
       destroyPathButton.hidden = !selected?.group;
@@ -1415,17 +1534,22 @@
         const s = canvasPoint(e);
         const target = addTarget(s);
         if (target) recordUndo();
+        let drawn = null;
         if (target?.connect) {
-          connectTo(target.connect);
+          drawn = connectTo(target.connect);
         } else if (target?.add) {
-          addPoint(target.add);
+          drawn = addPoint(target.add);
         } else if (target?.insert) {
           insertOnSegment(target.insert);
         } else if (target?.split) {
           const { path, segment, t } = target.split;
           const point = splitSegment(path, segment, t);
-          if (selected?.point) connectTo({ path, point });
+          if (selected?.point) drawn = connectTo({ path, point });
           else selected = { path, point };
+        }
+        if (target) {
+          const crossing = drawn && findCrossings(drawn)[0];
+          if (crossing) askAboutCrossings(drawn, crossing.point);
         } else {
           const area = tool === 'select' ? areaAt(computeAreas(), s.x, s.y) : null;
           selected = segmentAt(s.x, s.y) ?? (area && { path: area.path, area: area.points });

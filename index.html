@@ -528,6 +528,9 @@
         draw();
         updateCursor();
       } else if (e.key === 'Escape') {
+        // An embedding page may otherwise take Esc as a cue to move focus out
+        // of this frame, and then the next Esc never arrives here.
+        e.preventDefault();
         // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
         if (!selected) setTool('select');
         selected = null;

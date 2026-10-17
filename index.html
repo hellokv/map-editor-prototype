@@ -467,9 +467,7 @@
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
 
-    upload.addEventListener('change', () => {
-      const file = upload.files[0];
-      if (!file) return;
+    function setBackgroundImage(src) {
       const img = new Image();
       img.onload = () => {
         backgroundImage = img;
@@ -478,11 +476,18 @@
         preview.hidden = false;
         draw();
       };
-      img.src = URL.createObjectURL(file);
+      img.src = src;
+    }
+
+    upload.addEventListener('change', () => {
+      const file = upload.files[0];
+      if (file) setBackgroundImage(URL.createObjectURL(file));
     });
 
+    setBackgroundImage('demo-park.svg');
+
     document.getElementById('image-delete').addEventListener('click', () => {
-      URL.revokeObjectURL(backgroundImage.src);
+      if (backgroundImage.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundImage = null;
       previewImg.removeAttribute('src');
       upload.value = '';

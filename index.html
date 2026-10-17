@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=delete,image,route">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,delete,image,route">
   <style>
     html, body {
       margin: 0;
@@ -45,6 +45,11 @@
     #mode-menu button[aria-pressed="true"] {
       background: #ddd;
     }
+    #mode-menu hr {
+      margin: 2px 4px;
+      border: none;
+      border-top: 1px solid #ddd;
+    }
     #panel {
       flex: none;
       width: 300px;
@@ -84,6 +89,12 @@
       <button type="button" data-mode="background" aria-label="Background mode" aria-pressed="true">
         <span class="material-symbols-rounded">image</span>
       </button>
+      <div id="path-tools" hidden>
+        <hr>
+        <button id="add-path" type="button" aria-label="Add path" aria-pressed="false">
+          <span class="material-symbols-rounded">add_circle</span>
+        </button>
+      </div>
     </div>
   </div>
   <div id="panel">
@@ -103,11 +114,19 @@
     </div>
   </div>
   <script>
-    const modeButtons = document.querySelectorAll('#mode-menu button');
+    const modeButtons = document.querySelectorAll('#mode-menu [data-mode]');
     const modePanels = {
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
     };
+    const pathTools = document.getElementById('path-tools');
+    const addPathButton = document.getElementById('add-path');
+    let addingPath = false;
+
+    function setAddingPath(on) {
+      addingPath = on;
+      addPathButton.setAttribute('aria-pressed', on);
+    }
 
     function setMode(mode) {
       for (const button of modeButtons) {
@@ -116,11 +135,16 @@
       for (const [name, panel] of Object.entries(modePanels)) {
         panel.hidden = name !== mode;
       }
+      pathTools.hidden = mode !== 'path';
+      if (mode !== 'path') setAddingPath(false);
     }
 
     for (const button of modeButtons) {
       button.addEventListener('click', () => setMode(button.dataset.mode));
     }
+    addPathButton.addEventListener('click', () => setAddingPath(!addingPath));
+
+    const paths = [];
 
     const BACKGROUND = 1500;
     const MIN_SCALE = 0.1;
@@ -178,6 +202,15 @@
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
+
+      // Dots keep the same on-screen size at any zoom.
+      ctx.fillStyle = '#1a73e8';
+      for (const path of paths) {
+        const start = path.points[0];
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, 5 / view.scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     canvas.addEventListener('wheel', (e) => {
@@ -193,23 +226,39 @@
       draw();
     }, { passive: false });
 
+    // Movement below this many pixels counts as a click rather than a pan.
+    const CLICK_SLOP = 4;
     let drag = null;
 
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY };
+      drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
     });
 
     canvas.addEventListener('pointermove', (e) => {
       if (!drag) return;
       view.x += e.clientX - drag.x;
       view.y += e.clientY - drag.y;
-      drag = { x: e.clientX, y: e.clientY };
+      drag.x = e.clientX;
+      drag.y = e.clientY;
       draw();
     });
 
-    canvas.addEventListener('pointerup', () => { drag = null; });
+    canvas.addEventListener('pointerup', (e) => {
+      if (!drag) return;
+      const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      drag = null;
+      if (moved < CLICK_SLOP && addingPath) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left - view.x) / view.scale;
+        const y = (e.clientY - rect.top - view.y) / view.scale;
+        if (x >= 0 && x <= BACKGROUND && y >= 0 && y <= BACKGROUND) {
+          paths.push({ points: [{ x, y }] });
+          draw();
+        }
+      }
+    });
     canvas.addEventListener('pointercancel', () => { drag = null; });
 
     const upload = document.getElementById('image-upload');

@@ -755,7 +755,7 @@
       }
 
       for (const group of groups) {
-        if (group.width > 0) strokeGroupWidth(group);
+        if (group.visible && group.width > 0) strokeGroupWidth(group);
       }
 
       ctx.strokeStyle = color;
@@ -949,7 +949,7 @@
       destroyPathButton.hidden = !selected?.group;
       pathVisibleField.hidden = !selected?.group;
       pathVisibleToggle.checked = !!selected?.group?.visible;
-      pathWidthFields.hidden = !selected?.group;
+      pathWidthFields.hidden = !selected?.group?.visible;
       if (selected?.group) {
         pathWidthInput.value = selected.group.width;
         pathWidthOutput.value = `${selected.group.width}px`;
@@ -1207,7 +1207,7 @@
     // The path whose width band covers screen point s.
     function groupBandAt(sx, sy) {
       const p = toBackground(sx, sy);
-      return groups.find((group) => group.width > 0
+      return groups.find((group) => group.visible && group.width > 0
         && [...group.segments].some((segment) => closestOnSegment(segment, p).distance <= group.width / 2)) ?? null;
     }
 

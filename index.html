@@ -126,6 +126,7 @@
     function setAddingPath(on) {
       addingPath = on;
       addPathButton.setAttribute('aria-pressed', on);
+      updateCursor();
     }
 
     function setMode(mode) {
@@ -171,6 +172,7 @@
         paths.splice(paths.indexOf(selectedPath), 1);
         selectedPath = null;
         draw();
+        updateCursor();
       }
     });
 
@@ -267,47 +269,111 @@
       view.y = my - (my - view.y) * (next / view.scale);
       view.scale = next;
       draw();
+      updateCursor();
     }, { passive: false });
+
+    function toBackground(sx, sy) {
+      return { x: (sx - view.x) / view.scale, y: (sy - view.y) / view.scale };
+    }
+
+    function inBackground(p) {
+      return p.x >= 0 && p.x <= BACKGROUND && p.y >= 0 && p.y <= BACKGROUND;
+    }
+
+    function clampToBackground(v) {
+      return Math.min(BACKGROUND, Math.max(0, v));
+    }
+
+    let addCursor = 'crosshair';
+    document.fonts.load('300 24px "Material Symbols Rounded"', 'add_circle').then(() => {
+      const icon = document.createElement('canvas');
+      icon.width = icon.height = 24;
+      const c = icon.getContext('2d');
+      c.font = '300 24px "Material Symbols Rounded"';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      // A white halo keeps the icon visible over dark background images.
+      c.strokeStyle = '#fff';
+      c.lineWidth = 3;
+      c.strokeText('add_circle', 12, 12);
+      c.fillText('add_circle', 12, 12);
+      addCursor = `url(${icon.toDataURL()}) 12 12, crosshair`;
+      updateCursor();
+    });
+
+    let pointer = null;
+
+    function updateCursor() {
+      let cursor = '';
+      if (pointer && !drag && addingPath && !pathAt(pointer.x, pointer.y)
+          && inBackground(toBackground(pointer.x, pointer.y))) {
+        cursor = addCursor;
+      }
+      canvas.style.cursor = cursor;
+    }
 
     // Movement below this many pixels counts as a click rather than a pan.
     const CLICK_SLOP = 4;
     let drag = null;
 
+    function canvasPoint(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
+      const s = canvasPoint(e);
+      const hit = pathTools.hidden ? null : pathAt(s.x, s.y);
+      if (hit) {
+        selectedPath = hit;
+        const p = toBackground(s.x, s.y);
+        const start = hit.points[0];
+        drag = { path: hit, dx: start.x - p.x, dy: start.y - p.y };
+        draw();
+      } else {
+        drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
+      }
+      updateCursor();
     });
 
     canvas.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      view.x += e.clientX - drag.x;
-      view.y += e.clientY - drag.y;
-      drag.x = e.clientX;
-      drag.y = e.clientY;
-      draw();
+      pointer = canvasPoint(e);
+      if (drag?.path) {
+        const p = toBackground(pointer.x, pointer.y);
+        const start = drag.path.points[0];
+        start.x = clampToBackground(p.x + drag.dx);
+        start.y = clampToBackground(p.y + drag.dy);
+        draw();
+      } else if (drag) {
+        view.x += e.clientX - drag.x;
+        view.y += e.clientY - drag.y;
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        draw();
+      }
+      updateCursor();
+    });
+
+    canvas.addEventListener('pointerleave', () => {
+      pointer = null;
+      updateCursor();
     });
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      const wasPan = !drag.path;
+      const moved = wasPan && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       drag = null;
-      if (moved >= CLICK_SLOP || pathTools.hidden) return;
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const hit = pathAt(sx, sy);
-      if (hit) {
-        selectedPath = hit;
-      } else {
+      if (wasPan && moved < CLICK_SLOP && !pathTools.hidden) {
         selectedPath = null;
-        const x = (sx - view.x) / view.scale;
-        const y = (sy - view.y) / view.scale;
-        if (addingPath && x >= 0 && x <= BACKGROUND && y >= 0 && y <= BACKGROUND) {
-          paths.push({ points: [{ x, y }] });
-        }
+        const s = canvasPoint(e);
+        const p = toBackground(s.x, s.y);
+        if (addingPath && inBackground(p)) paths.push({ points: [p] });
+        draw();
       }
-      draw();
+      updateCursor();
     });
     canvas.addEventListener('pointercancel', () => { drag = null; });
 

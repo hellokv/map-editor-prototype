@@ -879,26 +879,13 @@
         if (isFilled(area)) fillArea(area);
       }
       ctx.restore();
-      const hoveredArea = hoveredAreaIn(areas);
-      if (hoveredArea && !isFilled(hoveredArea)) {
-        ctx.save();
-        ctx.globalAlpha = 0.3;
-        fillArea(hoveredArea);
-        ctx.restore();
-      }
-
+      // A hovered area shows a ghost fill, and a selected one keeps it.
       const selectedArea = selected?.area && areas.find((area) => samePoints(area.points, selected.area));
-      if (selectedArea) {
-        ctx.save();
-        ctx.lineCap = ctx.lineJoin = 'round';
-        shadow();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 7 * px;
-        ctx.beginPath();
-        for (const edge of selectedArea.loop) traceSegment(edge.segment);
-        ctx.stroke();
-        ctx.restore();
-      }
+      const ghostAreas = new Set([hoveredAreaIn(areas), selectedArea].filter((area) => area && !isFilled(area)));
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ghostAreas.forEach(fillArea);
+      ctx.restore();
 
       for (const group of groups) {
         if (group.visible && group.width > 0) strokeGroupWidth(group);

@@ -699,16 +699,7 @@
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
       if (pathTools.hidden) {
         for (const group of groups) {
-          if (!group.visible) continue;
-          if (group.width > 0) {
-            strokeGroupWidth(group);
-          } else {
-            ctx.strokeStyle = pathColor.value;
-            ctx.lineWidth = 2 / view.scale;
-            ctx.beginPath();
-            group.segments.forEach(traceSegment);
-            ctx.stroke();
-          }
+          if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
         updatePanel();
         return;
@@ -918,7 +909,9 @@
     const deleteBendButton = document.getElementById('delete-bend');
     deleteBendButton.addEventListener('click', () => {
       recordUndo();
-      selected.segment.length = 2;
+      for (const { segment } of selectionItems()) {
+        if (segment) segment.length = 2;
+      }
       draw();
     });
 
@@ -947,7 +940,7 @@
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
       const selectedSegments = selectionItems().filter((item) => item.segment);
-      createPathButton.hidden = !!selected?.group || selectedSegments.length < 2;
+      createPathButton.hidden = !!selected?.group || selectedSegments.length === 0;
       destroyPathButton.hidden = !selected?.group;
       pathVisibleField.hidden = !selected?.group;
       pathVisibleToggle.checked = !!selected?.group?.visible;
@@ -960,8 +953,8 @@
       const points = selectedPointsList();
       intersectionField.hidden = points.length === 0;
       intersectionToggle.checked = points.length > 0 && points.every((point) => point.intersection);
-      deleteBendButton.hidden = !selected?.segment;
-      deleteBendButton.disabled = !selected?.segment?.[2];
+      deleteBendButton.hidden = selectedSegments.length === 0;
+      deleteBendButton.disabled = !selectedSegments.some((item) => item.segment[2]);
       fillAreaField.hidden = !selected?.area;
       fillAreaToggle.checked = !!selected?.area && fills.some((fill) => samePoints(fill, selected.area));
     }
@@ -1160,7 +1153,7 @@
       if (!pointer || drag || spaceHeld || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y)) return null;
       const hit = segmentHit(pointer.x, pointer.y);
-      if (!hit || grabbedSelectionItem(null, hit) || groupOf(hit.segment)) return null;
+      if (!hit || grabbedSelectionItem(null, hit)) return null;
       return segmentPoint(hit.segment, bendT(hit.t));
     }
 
@@ -1204,9 +1197,18 @@
 
     // With two or more things selected, pressing on one of them grabs the
     // whole selection. Returns the item pressed, or null.
+    // A selection that is exactly one path is the exception: its segments
+    // still bend, and it moves from its width band instead.
+    // The path whose width band covers screen point s.
+    function groupBandAt(sx, sy) {
+      const p = toBackground(sx, sy);
+      return groups.find((group) => group.width > 0
+        && [...group.segments].some((segment) => closestOnSegment(segment, p).distance <= group.width / 2)) ?? null;
+    }
+
     function grabbedSelectionItem(hit, handle) {
       const items = selectionItems();
-      if (items.length < 2) return null;
+      if (items.length < 2 || selected?.group) return null;
       if (hit) return items.find((item) => item.point === hit.point) ?? null;
       if (handle) return items.find((item) => item.segment === handle.segment) ?? null;
       return null;
@@ -1303,6 +1305,7 @@
       // selection; a drag still moves or bends as usual.
       const toggling = shiftHeld && tool === 'select';
       const grabbed = !toggling && tool === 'select' && grabbedSelectionItem(hit, handle);
+      const band = !hit && !handle && tool === 'select' && !pathTools.hidden ? groupBandAt(s.x, s.y) : null;
       if (grabbed) {
         // The snapshot only becomes the undo step once the selection actually moves.
         drag = { group: true, item: grabbed, last: p, startX: e.clientX, startY: e.clientY, before: snapshot() };
@@ -1311,18 +1314,18 @@
         // The snapshot only becomes the undo step once the point actually moves.
         drag = { point: hit.point, path: hit.path, dx: hit.point.x - p.x, dy: hit.point.y - p.y, before: snapshot(), toggle: toggling && hit };
         draw();
-      } else if (handle && !toggling && groupOf(handle.segment)) {
-        const item = { path: handle.path, segment: handle.segment };
-        setSelectionItems([item]);
-        drag = { group: true, item, last: p, startX: e.clientX, startY: e.clientY, before: snapshot() };
-        draw();
       } else if (handle) {
         const item = { path: handle.path, segment: handle.segment };
-        if (!toggling) selected = item;
+        if (!toggling) setSelectionItems([item]);
         // The curve is pinned to pass through the pointer at the grabbed spot,
         // so that spot stays under the cursor for the whole drag.
         const t = bendT(handle.t);
         drag = { bend: handle.segment, t, grab: segmentPoint(handle.segment, t), startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
+        draw();
+      } else if (band && !toggling) {
+        const [item] = groupItems(band);
+        setSelectionItems([item]);
+        drag = { group: true, item, last: p, startX: e.clientX, startY: e.clientY, before: snapshot() };
         draw();
       } else if (tool === 'select' && !pathTools.hidden) {
         drag = { marquee: true, x0: s.x, y0: s.y, startX: e.clientX, startY: e.clientY, base: toggling ? selectionItems() : [] };

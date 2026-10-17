@@ -116,6 +116,11 @@
         <output for="segment-distance"></output>
       </label>
       <label class="field">
+        Nudge amount
+        <input id="nudge-amount" type="range" min="1" max="20" value="1">
+        <output for="nudge-amount"></output>
+      </label>
+      <label class="field">
         Path color
         <input id="path-color" type="color" value="#ffbf17">
       </label>
@@ -200,6 +205,14 @@
     }
     const snapInput = pixelSlider('snap-distance');
     const segmentDistanceInput = pixelSlider('segment-distance');
+    const nudgeInput = pixelSlider('nudge-amount');
+    const SHIFT_NUDGE_FACTOR = 10;
+    const NUDGE_DIRECTIONS = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    };
     const pathColor = document.getElementById('path-color');
     pathColor.addEventListener('input', () => draw());
 
@@ -432,6 +445,16 @@
       const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
       if (plain && e.key === '1') setTool('select');
       if (plain && e.key === '2') setTool('add');
+      const nudge = NUDGE_DIRECTIONS[e.key];
+      if (nudge && selected?.point) {
+        e.preventDefault();
+        // Background pixels, so a nudge is the same distance on the map at any zoom.
+        const step = Number(nudgeInput.value) * (e.shiftKey ? SHIFT_NUDGE_FACTOR : 1);
+        selected.point.x = clampToBackground(selected.point.x + nudge[0] * step);
+        selected.point.y = clampToBackground(selected.point.y + nudge[1] * step);
+        draw();
+        updateCursor();
+      }
       // Mac keyboards label Backspace "delete".
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selected?.point || selected?.segment)) {
         e.preventDefault();

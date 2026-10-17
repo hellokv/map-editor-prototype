@@ -4,22 +4,81 @@
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
   <style>
-    body {
+    html, body {
       margin: 0;
+      height: 100%;
+    }
+    body {
       display: flex;
-      align-items: flex-start;
     }
     #canvas {
-      flex: none;
-      border: 1px solid #000;
+      flex: 1;
+      min-width: 0;
+      display: block;
     }
     #panel {
-      flex: 1;
+      flex: none;
+      width: 300px;
     }
   </style>
 </head>
 <body>
-  <canvas id="canvas" width="1500" height="1500"></canvas>
+  <canvas id="canvas"></canvas>
   <div id="panel"></div>
+  <script>
+    const AREA = 1500;
+    const MIN_SCALE = 0.1;
+    const MAX_SCALE = 20;
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const view = { scale: 1, x: 0, y: 0 };
+
+    function fitArea() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      view.scale = Math.min(w, h) / AREA * 0.9;
+      view.x = (w - AREA * view.scale) / 2;
+      view.y = (h - AREA * view.scale) / 2;
+    }
+
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = canvas.clientWidth * dpr;
+      canvas.height = canvas.clientHeight * dpr;
+      draw();
+    }
+
+    function draw() {
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#eeeeee';
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+      ctx.translate(view.x, view.y);
+      ctx.scale(view.scale, view.scale);
+      ctx.strokeStyle = '#c8c8c8';
+      ctx.lineWidth = 1 / view.scale;
+      ctx.strokeRect(0, 0, AREA, AREA);
+    }
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-e.deltaY * 0.001)));
+      // Keep the point under the cursor fixed while zooming.
+      view.x = mx - (mx - view.x) * (next / view.scale);
+      view.y = my - (my - view.y) * (next / view.scale);
+      view.scale = next;
+      draw();
+    }, { passive: false });
+
+    window.addEventListener('resize', resize);
+    fitArea();
+    resize();
+  </script>
 </body>
 </html>

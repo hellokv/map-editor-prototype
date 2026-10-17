@@ -701,16 +701,41 @@
     // { connect: {path, point} } joins the selected point to an existing one,
     // { add: p } places a new point, { insert: p } splits the selected segment.
     // null means the click selects or deselects instead.
+    let shiftHeld = false;
+    const trackShift = (e) => {
+      if (e.key !== 'Shift' || shiftHeld === (e.type === 'keydown')) return;
+      shiftHeld = e.type === 'keydown';
+      draw();
+      updateCursor();
+    };
+    document.addEventListener('keydown', trackShift);
+    document.addEventListener('keyup', trackShift);
+    window.addEventListener('blur', () => { shiftHeld = false; });
+
+    // Moves screen point s onto the nearest of the 8 rays (every 45°) out of
+    // the given point, keeping how far along that ray it reaches.
+    function lockAngle(from, s) {
+      const ox = from.x * view.scale + view.x;
+      const oy = from.y * view.scale + view.y;
+      const angle = Math.round(Math.atan2(s.y - oy, s.x - ox) / (Math.PI / 4)) * (Math.PI / 4);
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const reach = Math.max(0, (s.x - ox) * dx + (s.y - oy) * dy);
+      return { x: ox + dx * reach, y: oy + dy * reach };
+    }
+
     function addTarget(s = pointer) {
       if (!s || drag || tool !== 'add' || pathTools.hidden) return null;
       const hit = pointAt(s.x, s.y);
       const p = toBackground(s.x, s.y);
       if (selected?.point) {
         if (hit?.point === selected.point) return null;
+        const q = shiftHeld ? lockAngle(selected.point, s) : s;
         const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
-        const snap = nearestPoint(s.x, s.y, reach, selected.point);
+        const snap = nearestPoint(q.x, q.y, reach, selected.point);
         if (snap) return { connect: snap };
-        return inBackground(p) ? { add: p } : null;
+        const end = toBackground(q.x, q.y);
+        return inBackground(end) ? { add: end } : null;
       }
       if (hit) return null;
       if (selected?.segment) {
@@ -782,6 +807,7 @@
 
     canvas.addEventListener('pointermove', (e) => {
       pointer = canvasPoint(e);
+      shiftHeld = e.shiftKey;
       if (drag?.point) {
         const p = toBackground(pointer.x, pointer.y);
         drag.point.x = clampToBackground(p.x + drag.dx);

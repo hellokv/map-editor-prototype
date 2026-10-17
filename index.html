@@ -26,7 +26,7 @@
   <canvas id="canvas"></canvas>
   <div id="panel"></div>
   <script>
-    const AREA = 1500;
+    const BACKGROUND = 1500;
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 20;
 
@@ -34,19 +34,30 @@
     const ctx = canvas.getContext('2d');
 
     const view = { scale: 1, x: 0, y: 0 };
+    let size = null;
 
-    function fitArea() {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      view.scale = Math.min(w, h) / AREA * 0.9;
-      view.x = (w - AREA * view.scale) / 2;
-      view.y = (h - AREA * view.scale) / 2;
+    function centerBackground(w, h) {
+      view.scale = Math.min(w, h) / BACKGROUND * 0.9;
+      view.x = (w - BACKGROUND * view.scale) / 2;
+      view.y = (h - BACKGROUND * view.scale) / 2;
     }
 
     function resize() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (w === 0 || h === 0) return;
+      // The canvas can still be settling into its final size after load, so
+      // centre on the first real size and keep the view centred through resizes.
+      if (size === null) {
+        centerBackground(w, h);
+      } else {
+        view.x += (w - size.w) / 2;
+        view.y += (h - size.h) / 2;
+      }
+      size = { w, h };
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * dpr;
-      canvas.height = canvas.clientHeight * dpr;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
       draw();
     }
 
@@ -60,7 +71,7 @@
       ctx.scale(view.scale, view.scale);
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1 / view.scale;
-      ctx.strokeRect(0, 0, AREA, AREA);
+      ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
     }
 
     canvas.addEventListener('wheel', (e) => {
@@ -76,9 +87,26 @@
       draw();
     }, { passive: false });
 
-    window.addEventListener('resize', resize);
-    fitArea();
-    resize();
+    let drag = null;
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      canvas.setPointerCapture(e.pointerId);
+      drag = { x: e.clientX, y: e.clientY };
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      view.x += e.clientX - drag.x;
+      view.y += e.clientY - drag.y;
+      drag = { x: e.clientX, y: e.clientY };
+      draw();
+    });
+
+    canvas.addEventListener('pointerup', () => { drag = null; });
+    canvas.addEventListener('pointercancel', () => { drag = null; });
+
+    new ResizeObserver(resize).observe(canvas);
   </script>
 </body>
 </html>

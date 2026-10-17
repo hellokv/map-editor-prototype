@@ -887,6 +887,21 @@
       ghostAreas.forEach(fillArea);
       ctx.restore();
 
+      // The selected area gets a white border just inside its edges: a wide
+      // stroke clipped to the area, whose inner rim the edge lines then cover.
+      if (selectedArea) {
+        ctx.save();
+        ctx.beginPath();
+        selectedArea.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.clip();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 6 * px;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+        ctx.restore();
+      }
+
       for (const group of groups) {
         if (group.visible && group.width > 0) strokeGroupWidth(group);
       }

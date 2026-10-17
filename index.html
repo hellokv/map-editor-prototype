@@ -1002,7 +1002,7 @@
     // In the cursor tool, a ghost dot marks where a segment would be grabbed
     // for bending: the spot on it nearest the pointer.
     function bendGhost() {
-      if (drag?.bend) return segmentPoint(drag.bend, drag.t);
+      if (drag?.bend) return drag.bending ? segmentPoint(drag.bend, drag.t) : drag.grab;
       if (!pointer || drag || spaceHeld || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y)) return null;
       const hit = segmentHit(pointer.x, pointer.y);
@@ -1140,9 +1140,13 @@
       } else if (handle) {
         const item = { path: handle.path, segment: handle.segment };
         if (!toggling) selected = item;
-        const t = bendT(handle.t);
-        const m = segmentPoint(handle.segment, t);
-        drag = { bend: handle.segment, t, dx: m.x - p.x, dy: m.y - p.y, startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
+        // A new bend replaces any old one: the bend comes only from how far
+        // the pointer moves, measured from the straight line between the ends.
+        const grab = segmentPoint(handle.segment, bendT(handle.t));
+        const [a, b] = handle.segment;
+        const t = bendT(closestOnSegment([a, b], grab).t);
+        const base = lerp(a, b, t);
+        drag = { bend: handle.segment, t, grab, dx: base.x - p.x, dy: base.y - p.y, startX: e.clientX, startY: e.clientY, before: snapshot(), toggle: toggling && item };
         draw();
       } else if (tool === 'select' && !pathTools.hidden) {
         drag = { marquee: true, x0: s.x, y0: s.y, startX: e.clientX, startY: e.clientY, base: toggling ? selectionItems() : [] };

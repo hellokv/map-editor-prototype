@@ -128,6 +128,12 @@
         <input id="intersection" type="checkbox">
         Intersection
       </label>
+      <button id="create-path" class="field" type="button" hidden>Create path</button>
+      <label id="path-visible-field" class="field" hidden>
+        <input id="path-visible" type="checkbox">
+        Visible
+      </label>
+      <button id="destroy-path" class="field" type="button" hidden>Destroy path</button>
       <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
       <label id="fill-area-field" class="field" hidden>
         <input id="fill-area" type="checkbox">
@@ -196,8 +202,39 @@
 
     const selectionItems = () => selected?.items ?? (selected?.point || selected?.segment ? [selected] : []);
 
+    // A user-made path: segments grouped so that they select and move as one.
+    // Internally "path" already names a connected set of dots, so these are
+    // groups in the code. { segments: Set, visible }
+    const groups = [];
+    const groupOf = (segment) => groups.find((group) => group.segments.has(segment));
+    const pathOf = (segment) => paths.find((path) => path.segments.includes(segment));
+    const groupItems = (group) => [...group.segments].map((segment) => ({ path: pathOf(segment), segment }));
+
+    // Drops segments that no longer exist from groups, and groups left empty.
+    function pruneGroups() {
+      for (const group of groups) {
+        for (const segment of group.segments) {
+          if (!pathOf(segment)) group.segments.delete(segment);
+        }
+      }
+      groups.splice(0, groups.length, ...groups.filter((group) => group.segments.size));
+    }
+
+    // Any grouped segment brings its whole group along. A selection that is
+    // exactly one group is tagged with it.
     function setSelectionItems(items) {
-      selected = items.length === 0 ? null : items.length === 1 ? items[0] : { items };
+      const expanded = [...items];
+      for (const item of items) {
+        const group = item.segment && groupOf(item.segment);
+        if (!group) continue;
+        for (const member of groupItems(group)) {
+          if (!expanded.some((other) => sameItem(other, member))) expanded.push(member);
+        }
+      }
+      const first = expanded[0]?.segment && groupOf(expanded[0].segment);
+      const whole = first && expanded.length === first.segments.size && expanded.every((item) => first.segments.has(item.segment));
+      if (whole) selected = { items: expanded, group: first };
+      else selected = expanded.length === 0 ? null : expanded.length === 1 ? expanded[0] : { items: expanded };
     }
 
     // Every point a move of the selection carries: selected dots and the ends
@@ -208,9 +245,11 @@
     const sameItem = (a, b) => (a.point ? a.point === b.point : a.segment === b.segment);
 
     function toggleInSelection(item) {
+      const group = item.segment && groupOf(item.segment);
+      const members = group ? groupItems(group) : [item];
       const items = selectionItems();
-      const kept = items.filter((other) => !sameItem(other, item));
-      setSelectionItems(kept.length === items.length ? [...items, item] : kept);
+      const kept = items.filter((other) => !members.some((member) => sameItem(other, member)));
+      setSelectionItems(kept.length === items.length ? [...items, ...members] : kept);
     }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
@@ -331,6 +370,11 @@
         ? [[a, point, lerp(a, c, t)], [point, b, lerp(c, b, t)]]
         : [[a, point], [point, b]];
       path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
+      const group = groupOf(segment);
+      if (group) {
+        group.segments.delete(segment);
+        for (const half of halves) group.segments.add(half);
+      }
       for (const fill of fills) {
         if (fill.has(a) && fill.has(b)) fill.add(point);
       }
@@ -474,6 +518,7 @@
 
     function deleteSelected() {
       for (const item of selectionItems()) deleteItem(item);
+      pruneGroups();
       selected = null;
     }
 
@@ -484,13 +529,19 @@
 
     function snapshot() {
       const copies = new Map();
+      const segmentCopies = new Map();
       const copy = (p) => {
         if (!copies.has(p)) copies.set(p, { ...p });
         return copies.get(p);
       };
       const copiedPaths = paths.map((path) => ({
         points: path.points.map(copy),
-        segments: path.segments.map(([a, b, c]) => (c ? [copy(a), copy(b), { ...c }] : [copy(a), copy(b)])),
+        segments: path.segments.map((segment) => {
+          const [a, b, c] = segment;
+          const copied = c ? [copy(a), copy(b), { ...c }] : [copy(a), copy(b)];
+          segmentCopies.set(segment, copied);
+          return copied;
+        }),
       }));
       const copyItem = ({ path, point, segment }) => ({
         pathIndex: paths.indexOf(path),
@@ -502,6 +553,7 @@
       return {
         paths: copiedPaths,
         fills: fills.map((fill) => new Set([...fill].filter((p) => copies.has(p)).map(copy))),
+        groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         selection: copiedSelection,
       };
     }
@@ -512,9 +564,10 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
+      groups.splice(0, groups.length, ...restoredGroups);
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -634,6 +687,13 @@
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
       if (pathTools.hidden) {
+        ctx.strokeStyle = pathColor.value;
+        ctx.lineWidth = 2 / view.scale;
+        ctx.beginPath();
+        for (const group of groups) {
+          if (group.visible) group.segments.forEach(traceSegment);
+        }
+        ctx.stroke();
         updatePanel();
         return;
       }
@@ -786,6 +846,34 @@
       updatePanel();
     }
 
+    const createPathButton = document.getElementById('create-path');
+    createPathButton.addEventListener('click', () => {
+      recordUndo();
+      const segments = selectionItems().filter((item) => item.segment);
+      for (const { segment } of segments) groupOf(segment)?.segments.delete(segment);
+      pruneGroups();
+      groups.push({ segments: new Set(segments.map((item) => item.segment)), visible: false });
+      setSelectionItems(segments);
+      draw();
+    });
+
+    const destroyPathButton = document.getElementById('destroy-path');
+    destroyPathButton.addEventListener('click', () => {
+      recordUndo();
+      groups.splice(groups.indexOf(selected.group), 1);
+      setSelectionItems(selectionItems());
+      draw();
+    });
+
+    const pathVisibleField = document.getElementById('path-visible-field');
+    const pathVisibleToggle = document.getElementById('path-visible');
+    pathVisibleToggle.addEventListener('change', () => {
+      recordUndo();
+      selected.group.visible = pathVisibleToggle.checked;
+      pathVisibleToggle.blur();
+      draw();
+    });
+
     const deleteBendButton = document.getElementById('delete-bend');
     deleteBendButton.addEventListener('click', () => {
       recordUndo();
@@ -817,6 +905,11 @@
 
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
+      const selectedSegments = selectionItems().filter((item) => item.segment);
+      createPathButton.hidden = !!selected?.group || selectedSegments.length < 2;
+      destroyPathButton.hidden = !selected?.group;
+      pathVisibleField.hidden = !selected?.group;
+      pathVisibleToggle.checked = !!selected?.group?.visible;
       const points = selectedPointsList();
       intersectionField.hidden = points.length === 0;
       intersectionToggle.checked = points.length > 0 && points.every((point) => point.intersection);
@@ -1009,7 +1102,7 @@
       if (!pointer || drag || spaceHeld || tool !== 'select' || pathTools.hidden) return null;
       if (pointAt(pointer.x, pointer.y)) return null;
       const hit = segmentHit(pointer.x, pointer.y);
-      if (!hit || grabbedSelectionItem(null, hit)) return null;
+      if (!hit || grabbedSelectionItem(null, hit) || groupOf(hit.segment)) return null;
       return segmentPoint(hit.segment, bendT(hit.t));
     }
 
@@ -1160,6 +1253,11 @@
         // The snapshot only becomes the undo step once the point actually moves.
         drag = { point: hit.point, path: hit.path, dx: hit.point.x - p.x, dy: hit.point.y - p.y, before: snapshot(), toggle: toggling && hit };
         draw();
+      } else if (handle && !toggling && groupOf(handle.segment)) {
+        const item = { path: handle.path, segment: handle.segment };
+        setSelectionItems([item]);
+        drag = { group: true, item, last: p, startX: e.clientX, startY: e.clientY, before: snapshot() };
+        draw();
       } else if (handle) {
         const item = { path: handle.path, segment: handle.segment };
         if (!toggling) selected = item;
@@ -1187,7 +1285,7 @@
         if (drag.before) {
           recordUndo(drag.before);
           drag.before = null;
-          if (drag.toggle) selected = drag.toggle;
+          if (drag.toggle) setSelectionItems([drag.toggle]);
           drag.toggle = null;
         }
         drag.point.x = clampToBackground(target.x);
@@ -1197,7 +1295,7 @@
         if (drag.bending || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
           if (!drag.bending) {
             recordUndo(drag.before);
-            if (drag.toggle) selected = drag.toggle;
+            if (drag.toggle) setSelectionItems([drag.toggle]);
             drag.toggle = null;
           }
           drag.bending = true;
@@ -1242,7 +1340,7 @@
       drag = null;
       if (group && !moving) {
         // Clicking one member of a multi-selection without moving selects just it.
-        selected = item;
+        setSelectionItems([item]);
       } else if (toggle) {
         toggleInSelection(toggle);
       } else if (marquee && wasClick && base.length) {

@@ -1563,8 +1563,9 @@
       for (const items of document.querySelectorAll('.style-menu [role="menu"]')) items.hidden = true;
     }
     // A style's ⋮ menu. Its actions open the style's form, which can't show
-    // while labels are selected, so they let go of any selected labels first.
-    function styleMenu(style) {
+    // while labels are selected, so they let go of any selected labels first;
+    // a clone made from there is given to those labels.
+    function styleMenu(style, { deletable = false } = {}) {
       const menu = document.createElement('span');
       menu.className = 'style-menu';
       const toggle = document.createElement('button');
@@ -1577,6 +1578,16 @@
       const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
       const clone = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Clone' });
       items.append(edit, clone);
+      if (deletable) {
+        const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
+        remove.addEventListener('click', () => {
+          recordUndo();
+          labelStyles.splice(labelStyles.indexOf(style), 1);
+          renderLabelStyles();
+          draw();
+        });
+        items.append(remove);
+      }
       menu.append(toggle, items);
       // Inside a picker option's label, a click would otherwise also pick the style.
       menu.addEventListener('click', (e) => e.preventDefault());
@@ -1594,6 +1605,7 @@
         recordUndo();
         const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
         labelStyles.push(copy);
+        for (const label of selectedLabels) label.styleId = copy.id;
         selectedLabels = [];
         draw();
         renderLabelStyles();
@@ -1609,7 +1621,6 @@
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
         row.className = 'row';
-        const menu = styleMenu(style);
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',
           name: 'current-label-style',
@@ -1620,18 +1631,7 @@
           currentStyleId = style.id;
           pick.blur();
         });
-        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }));
-        if (i > 0) {
-          const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
-          remove.addEventListener('click', () => {
-            recordUndo();
-            labelStyles.splice(labelStyles.indexOf(style), 1);
-            renderLabelStyles();
-            draw();
-          });
-          row.append(remove);
-        }
-        row.append(menu);
+        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }), styleMenu(style, { deletable: i > 0 }));
         return row;
       }));
     }

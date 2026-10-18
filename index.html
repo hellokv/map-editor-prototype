@@ -2467,13 +2467,38 @@
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     // A blank override field shows its default as the placeholder; stepping
-    // it with the arrows or spinner starts from that default, not from zero.
+    // it with the spinner starts from that default, not from zero.
     for (const input of document.querySelectorAll('#panel input[type="number"]')) {
       const fillDefault = () => { if (input.value === '' && input.placeholder !== '') input.value = input.placeholder; };
       // Only presses on the spinner, at the right edge, so clicking in to type stays blank.
       input.addEventListener('pointerdown', (e) => { if (e.clientX > input.getBoundingClientRect().right - 20) fillDefault(); });
-      input.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') fillDefault(); });
     }
+    // Arrow keys step any number field by its step, or ten steps with Shift,
+    // from its placeholder default when blank. The browser's own stepping
+    // fires change, which commits the edit and hands focus back to the map,
+    // so that change waits until the field is left.
+    const steppedFields = new WeakSet();
+    document.addEventListener('keydown', (e) => {
+      const input = e.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== 'number' || input.id === 'zoom-input') return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const step = Number(input.step) || 1;
+      const base = input.value === '' ? Number(input.placeholder) || 0 : Number(input.value) || 0;
+      let next = base + (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1);
+      if (input.min !== '') next = Math.max(Number(input.min), next);
+      if (input.max !== '') next = Math.min(Number(input.max), next);
+      const decimals = (String(step).split('.')[1] ?? '').length;
+      input.value = Number(next.toFixed(decimals));
+      steppedFields.add(input);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, true);
+    document.addEventListener('focusout', (e) => {
+      if (!steppedFields.has(e.target)) return;
+      steppedFields.delete(e.target);
+      e.target.dispatchEvent(new Event('change', { bubbles: true }));
+    }, true);
     const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
     const labelIconOutsideToggle = document.getElementById('label-icon-outside');
     labelIconOutsideToggle.addEventListener('change', () => {

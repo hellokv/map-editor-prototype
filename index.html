@@ -326,12 +326,12 @@
               <button type="button" data-pointer="s" aria-label="Bottom"><span class="material-symbols-rounded">south</span></button>
               <button type="button" data-pointer="se" aria-label="Bottom right"><span class="material-symbols-rounded">south_east</span></button>
             </div>
+          </div>
           <div class="row">
             Pins
             <button id="add-pin" type="button" aria-label="Add location" aria-pressed="false">
               <span class="material-symbols-rounded">add_location</span>
             </button>
-          </div>
           </div>
         </div>
         <div id="label-style-picker" class="group">
@@ -422,6 +422,12 @@
             </label>
           </div>
         </form>
+      </div>
+      <div class="group">
+        <label class="row">
+          Pin scaling
+          <span class="slider"><input id="pin-scaling" type="range" min="0" max="100" value="50"><output for="pin-scaling"></output></span>
+        </label>
       </div>
     </div>
     <div id="path-panel">
@@ -672,6 +678,8 @@
     const segmentDistanceInput = labelledSlider('segment-distance');
     const nudgeInput = labelledSlider('nudge-amount');
     const bendFocusInput = labelledSlider('bend-focus', '%');
+    const pinScalingInput = labelledSlider('pin-scaling', '%');
+    pinScalingInput.addEventListener('input', () => draw());
     const SHIFT_NUDGE_FACTOR = 10;
     const NUDGE_DIRECTIONS = {
       ArrowLeft: [-1, 0],
@@ -2126,13 +2134,15 @@
       placeLabelInput();
     }
 
-    // Pins keep the same on-screen size at any zoom, with the tip on the spot.
-    // The shape is Material's filled location_on, on its 24-unit grid with the
+    // Pins grow with zoom by view.scale raised to the pin scaling: at 0% they
+    // keep one on-screen size, at 100% they scale with the map. The shape is Material's filled location_on, on its 24-unit grid with the
     // tip at (12, 22); the icon font only carries the outline version.
     const PIN_SIZE = 32;
     const PIN_SHAPE = new Path2D('M12 12q.825 0 1.413-.588T14 10q0-.825-.587-1.412T12 8q-.825 0-1.412.588T10 10q0 .825.588 1.413T12 12Zm0 10q-4.025-3.425-6.012-6.362T4 10.2q0-3.75 2.413-5.975T12 2q3.175 0 5.588 2.225T20 10.2q0 2.5-1.988 5.438T12 22Z');
+    // One unit of the pin's 24-unit grid, in background pixels.
+    const pinUnit = () => (PIN_SIZE / 24) * view.scale ** (pinScalingInput.value / 100 - 1);
     function pinBox(pin) {
-      const unit = PIN_SIZE / 24 / view.scale;
+      const unit = pinUnit();
       return { x: pin.x - 8 * unit, y: pin.y - 20 * unit, w: 16 * unit, h: 20 * unit };
     }
     function pinAt(p) {
@@ -2148,7 +2158,7 @@
     function drawPins() {
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
-      const unit = PIN_SIZE / 24 / view.scale;
+      const unit = pinUnit();
       for (const label of labels) {
         const style = styleOf(label);
         ctx.fillStyle = style.background ?? style.color;

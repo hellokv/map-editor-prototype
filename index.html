@@ -1117,8 +1117,10 @@
       view.scale = (previewZoom() / 100) * frame.k;
       const size = BACKGROUND * view.scale;
       const offset = (input) => Math.min(100, Math.max(-100, Number(input.value) || 0)) / 100;
-      view.x = frame.x + frame.w / 2 - size / 2 - offset(previewOffsetXInput) * Math.max(0, (size - frame.w) / 2);
-      view.y = frame.y + frame.h / 2 - size / 2 - offset(previewOffsetYInput) * Math.max(0, (size - frame.h) / 2);
+      // At 100% the map's right (or bottom) edge sits on the screen's,
+      // whether the map is bigger or smaller than the screen.
+      view.x = frame.x + frame.w / 2 - size / 2 - (offset(previewOffsetXInput) * (size - frame.w)) / 2;
+      view.y = frame.y + frame.h / 2 - size / 2 - (offset(previewOffsetYInput) * (size - frame.h)) / 2;
     }
     // The device drawn as a phone around its screen.
     function drawDeviceFrame() {

@@ -1059,10 +1059,13 @@
       background: document.getElementById('background-panel'),
       labels: document.getElementById('labels-panel'),
     };
-    // Viewport sizes in CSS pixels, so a device's frame is its real size on screen.
+    // Screen sizes in CSS pixels, with the bands the system and browser take
+    // at the top and bottom: on the iPhone the status bar, then Safari's
+    // bottom toolbar and the home indicator; on the Pixel the status bar and
+    // Chrome's address bar, then the gesture bar.
     const DEVICES = [
-      { name: 'iPhone 17 Pro', w: 402, h: 874 },
-      { name: 'Pixel 10', w: 412, h: 923 },
+      { name: 'iPhone 17 Pro', w: 402, h: 874, top: 62, bottom: 86 },
+      { name: 'Pixel 10', w: 412, h: 923, top: 108, bottom: 24 },
     ];
     let previewDevice = DEVICES[0];
     document.getElementById('device-list').replaceChildren(...DEVICES.map((device) => {
@@ -1128,11 +1131,20 @@
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const radius = frame.w * 0.13;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(frame.x, frame.y, frame.w, previewDevice.top * frame.k);
+      ctx.fillRect(frame.x, frame.y + frame.h - previewDevice.bottom * frame.k, frame.w, previewDevice.bottom * frame.k);
+      ctx.restore();
       ctx.strokeStyle = '#000';
       ctx.lineWidth = PHONE_BORDER;
       ctx.beginPath();
       const b = PHONE_BORDER / 2;
-      ctx.roundRect(frame.x - b, frame.y - b, frame.w + 2 * b, frame.h + 2 * b, frame.w * 0.13 + b);
+      ctx.roundRect(frame.x - b, frame.y - b, frame.w + 2 * b, frame.h + 2 * b, radius + b);
       ctx.stroke();
       ctx.restore();
     }

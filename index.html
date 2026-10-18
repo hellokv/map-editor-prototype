@@ -2447,7 +2447,8 @@
     const SHAPE_MIN_SIZE = 1;
     // Resize handles, as fractions across and down the selection's box.
     const SHAPE_HANDLES = { nw: [0, 0], n: [0.5, 0], ne: [1, 0], e: [1, 0.5], se: [1, 1], s: [0.5, 1], sw: [0, 1], w: [0, 0.5] };
-    const HANDLE_CURSORS = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+    // Resize cursors by the direction a handle points, in 45° steps from east.
+    const RESIZE_CURSORS = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
     const HANDLE_SIZE = 8;
     const shapeProperties = document.getElementById('shape-properties');
     // New shapes take the last fill color shown here.
@@ -2583,7 +2584,13 @@
     function shapeHandleCursor() {
       if (drag?.rotating) return rotateCursor;
       const handle = handleAt(pointer);
-      return rotatesFrom(handle) ? rotateCursor : HANDLE_CURSORS[handle] ?? '';
+      if (!handle) return '';
+      if (rotatesFrom(handle)) return rotateCursor;
+      // The handle's direction out from the frame's centre, turned with the frame.
+      const [fx, fy] = SHAPE_HANDLES[handle];
+      const angle = Math.atan2(fy - 0.5, fx - 0.5) + selectionFrame().angle;
+      const step = ((Math.round(angle / (Math.PI / 4)) % 4) + 4) % 4;
+      return RESIZE_CURSORS[step];
     }
     // With Cmd (Ctrl elsewhere) held, a corner handle turns the selection.
     const rotatesFrom = (handle) => commandHeld && ['nw', 'ne', 'se', 'sw'].includes(handle);

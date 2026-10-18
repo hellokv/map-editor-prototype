@@ -194,6 +194,29 @@
     .slider input[type="range"] + input[type="number"] {
       width: 60px;
     }
+    .percent-field {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .percent-field::after {
+      content: '%';
+      position: absolute;
+      right: 6px;
+      color: #666;
+      pointer-events: none;
+    }
+    #panel .percent-field input {
+      width: 60px;
+      padding-right: 18px;
+      appearance: textfield;
+    }
+    /* Arrow keys still step the value; the spinner would cover the %. */
+    .percent-field input::-webkit-inner-spin-button,
+    .percent-field input::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
+    }
     .slider:has(input[type="number"]) input[type="range"] {
       width: 80px;
     }
@@ -462,7 +485,7 @@
           </label>
           <label id="label-icon-offset-field" class="row">
             Icon offset
-            <span class="slider"><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"><input id="label-icon-offset" type="number" min="-200" max="200" step="1">%</span>
+            <span class="slider"><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span></span>
           </label>
           <label id="label-icon-size-field" class="row">
             Icon size
@@ -2042,7 +2065,7 @@
       input.addEventListener('pointerdown', (e) => { if (e.clientX > input.getBoundingClientRect().right - 20) fillDefault(); });
       input.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') fillDefault(); });
     }
-    const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Math.min(200, Math.max(-200, Number(input.value) || 0)), soleLabel);
+    const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
     const labelIconOutsideToggle = document.getElementById('label-icon-outside');
     labelIconOutsideToggle.addEventListener('change', () => {
       const label = soleLabel();
@@ -2055,10 +2078,11 @@
     });
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
-    // Each of these number fields has a slider before it; moving either one
-    // moves the other, and the field does the saving.
+    // Each of these number fields shares a .slider with a slider; moving
+    // either one moves the other, and the field does the saving. The field
+    // can go past the slider's range.
     const iconSliders = [labelIconOffsetInput, labelIconSizeInput, labelIconGapInput].map((field) => {
-      const slider = field.previousElementSibling;
+      const slider = field.closest('.slider').querySelector('input[type="range"]');
       slider.addEventListener('input', () => {
         field.value = slider.value;
         field.dispatchEvent(new Event('input'));
@@ -2271,7 +2295,7 @@
         labelIconOutsideToggle.disabled = textHidden;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
-          field.previousElementSibling.disabled = textHidden;
+          field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;
         }
         document.getElementById('label-icon-field').hidden = !iconOn;
         show(labelIconInput, selectedLabel.icon ?? '');
@@ -2294,7 +2318,7 @@
         show(labelIconGapInput, textHidden ? 0 : selectedLabel.iconGap ?? '');
         // A blank field's slider sits at the default shown in the field.
         for (const slider of iconSliders) {
-          const field = slider.nextElementSibling;
+          const field = slider.closest('.slider').querySelector('input[type="number"]');
           if (document.activeElement !== slider) slider.value = field.value === '' ? field.placeholder : field.value;
         }
       }

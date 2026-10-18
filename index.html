@@ -451,6 +451,13 @@
               <button type="button" data-icon-side="bottom" aria-label="Icon below text"><span class="material-symbols-rounded">align_vertical_bottom</span></button>
             </div>
           </div>
+          <label id="label-icon-outside-field" class="row">
+            <span><input id="label-icon-outside" type="checkbox"> Outside label</span>
+          </label>
+          <label id="label-icon-offset-field" class="row">
+            Icon offset
+            <span class="slider"><input id="label-icon-offset" type="range" min="-1" max="1" step="0.05" value="0"><output for="label-icon-offset"></output></span>
+          </label>
           <label id="label-icon-size-field" class="row">
             Icon size
             <input id="label-icon-size" type="number" min="4" max="200" step="1">
@@ -1957,13 +1964,13 @@
 
     // A canvas showing text drawn in a style.
     const PREVIEW_TEXT_SIZE = 20;
-    // extra carries a label's icon, iconSize, iconSide and iconGap, if any.
+    // extra carries a label's icon settings, if any.
     function stylePreview(style, text, room, extra = {}) {
       const { icon, iconSize } = extra;
       const dpr = window.devicePixelRatio || 1;
       const preview = document.createElement('canvas');
       const label = { x: 0, y: 0, ...extra, text, styleId: style.id };
-      const box = labelBox(label);
+      const box = labelBounds(label);
       // Room for the outline and shadow around the box, and for an icon drawn
       // bigger than the room the label gives it.
       const overflow = icon && iconSize ? Math.max(0, (iconSize - style.iconSize) / 2) : 0;
@@ -1979,7 +1986,7 @@
       preview.height = Math.ceil(h * scale * dpr);
       const c = preview.getContext('2d');
       c.scale(scale * dpr, scale * dpr);
-      c.translate(w / 2, h / 2);
+      c.translate(margin - box.x, margin - box.y);
       c.textAlign = 'center';
       c.textBaseline = 'alphabetic';
       c.lineJoin = 'round';
@@ -1991,7 +1998,10 @@
       paintLabel(c, label, style);
       return preview;
     }
-    function renderStylePicker({ text, icon, iconSize, iconSide, iconGap }) {
+    const ICON_SETTINGS = ['icon', 'iconSize', 'iconSide', 'iconGap', 'iconOutside', 'iconOffset'];
+    const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
+    function renderStylePicker(source) {
+      const { text } = source;
       const room = labelStylePicker.clientWidth - 30;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
@@ -2002,7 +2012,7 @@
           pick.blur();
           draw();
         });
-        option.append(pick, stylePreview(style, text, room, { icon, iconSize, iconSide, iconGap }), styleMenu(style));
+        option.append(pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -2018,6 +2028,19 @@
       input.addEventListener('pointerdown', (e) => { if (e.clientX > input.getBoundingClientRect().right - 20) fillDefault(); });
       input.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') fillDefault(); });
     }
+    const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value), soleLabel);
+    const labelIconOffsetOutput = document.querySelector('output[for="label-icon-offset"]');
+    labelIconOffsetInput.addEventListener('input', () => { labelIconOffsetOutput.value = Number(labelIconOffsetInput.value).toFixed(2); });
+    const labelIconOutsideToggle = document.getElementById('label-icon-outside');
+    labelIconOutsideToggle.addEventListener('change', () => {
+      const label = soleLabel();
+      if (!label) return;
+      recordUndo();
+      if (labelIconOutsideToggle.checked) label.iconOutside = true;
+      else delete label.iconOutside;
+      labelIconOutsideToggle.blur();
+      draw();
+    });
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
@@ -2187,8 +2210,8 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
-        const { text, icon, iconSize, iconSide, iconGap } = selectedLabels[0];
-        const key = JSON.stringify([text, icon, iconSize, iconSide, iconGap, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        const source = selectedLabels[0];
+        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
           renderStylePicker(selectedLabels[0]);
@@ -2225,6 +2248,11 @@
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn;
+        document.getElementById('label-icon-outside-field').hidden = !iconOn;
+        document.getElementById('label-icon-offset-field').hidden = !iconOn;
+        labelIconOutsideToggle.checked = !!selectedLabel.iconOutside;
+        show(labelIconOffsetInput, selectedLabel.iconOffset ?? 0);
+        labelIconOffsetOutput.value = Number(labelIconOffsetInput.value).toFixed(2);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
         show(labelIconGapInput, selectedLabel.iconGap ?? '');
       }
@@ -2441,11 +2469,22 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
-    // How a label's content lies, centred on its spot: its lines, each
-    // centred on textX, as [{ text, y, width }]; its icon centred on
-    // (iconX, iconY), on the iconSide of the text (left when absent), the
-    // icon gap apart; and the content's width and height. Hidden text is kept
-    // on the label for accessibility but takes no room.
+    const unionRect = (a, b) => {
+      const x = Math.min(a.x, b.x);
+      const y = Math.min(a.y, b.y);
+      return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+    };
+    // How a label lies: its lines, each centred on textX, as
+    // [{ text, y, width }]; its icon centred on (iconX, iconY); its box (the
+    // background, padding included) centred on its spot; and bounds, the box
+    // plus any icon outside it.
+    //
+    // The icon sits on the label's iconSide of the text (left when absent),
+    // the icon gap from the text, or from the box when iconOutside. Its
+    // iconOffset, from -1 to 1, slides it along that side: from bottom to top
+    // aligned for left and right, from left to right aligned for top and
+    // bottom. Hidden text is kept on the label for accessibility but takes
+    // no room.
     function labelLayout(label) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
@@ -2454,47 +2493,53 @@
       ctx.font = fontOf(style);
       const widths = texts.map((text) => ctx.measureText(text).width);
       ctx.restore();
-      const textWidth = Math.max(0, ...widths);
-      const textHeight = texts.length ? style.size + (texts.length - 1) * step : 0;
-      const icon = label.icon ? style.iconSize : 0;
-      const gap = icon && textWidth ? label.iconGap ?? style.iconGap : 0;
+      const tw = Math.max(0, ...widths);
+      const th = texts.length ? style.size + (texts.length - 1) * step : 0;
+      const s = label.icon ? style.iconSize : 0;
+      const outside = s && label.iconOutside;
+      const gap = s && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
       const side = label.iconSide ?? 'left';
       const across = side === 'left' || side === 'right';
-      const width = across ? icon + gap + textWidth : Math.max(icon, textWidth);
-      const height = across ? Math.max(textHeight, icon) : icon + gap + textHeight;
-      const left = label.x - width / 2;
-      const top = label.y - height / 2;
-      let { x: textX, y: textY } = label;
-      let { x: iconX, y: iconY } = label;
-      if (side === 'left') {
-        iconX = left + icon / 2;
-        textX = left + icon + gap + textWidth / 2;
-      } else if (side === 'right') {
-        textX = left + textWidth / 2;
-        iconX = left + width - icon / 2;
-      } else if (side === 'top') {
-        iconY = top + icon / 2;
-        textY = top + icon + gap + textHeight / 2;
+      const offset = label.iconOffset ?? 0;
+      const pad = (r) => ({ x: r.x - style.paddingX, y: r.y - style.paddingY, w: r.w + 2 * style.paddingX, h: r.h + 2 * style.paddingY });
+      // Laid out around the text's centre at (0, 0), then moved onto the spot.
+      const text = { x: -tw / 2, y: -th / 2, w: tw, h: th };
+      // Where the icon goes beside a rect: past its side, then slid along it.
+      const beside = (r) => {
+        if (across) {
+          const x = side === 'left' ? r.x - gap - s / 2 : r.x + r.w + gap + s / 2;
+          return { x, y: r.y + r.h / 2 - (offset * (r.h - s)) / 2 };
+        }
+        const y = side === 'top' ? r.y - gap - s / 2 : r.y + r.h + gap + s / 2;
+        return { x: r.x + r.w / 2 + (offset * (r.w - s)) / 2, y };
+      };
+      let box;
+      let icon = null;
+      if (outside) {
+        box = pad(text);
+        icon = beside(box);
       } else {
-        textY = top + textHeight / 2;
-        iconY = top + height - icon / 2;
+        if (s) icon = beside(text);
+        box = pad(icon ? unionRect(text, { x: icon.x - s / 2, y: icon.y - s / 2, w: s, h: s }) : text);
       }
-      const lines = texts.map((text, i) => ({ text, y: textY + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
-      return { lines, textX, iconX, iconY, width, height };
+      const dx = label.x - (box.x + box.w / 2);
+      const dy = label.y - (box.y + box.h / 2);
+      box = { ...box, x: box.x + dx, y: box.y + dy };
+      const iconX = icon ? icon.x + dx : label.x;
+      const iconY = icon ? icon.y + dy : label.y;
+      const bounds = outside ? unionRect(box, { x: iconX - s / 2, y: iconY - s / 2, w: s, h: s }) : box;
+      const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
+      return { lines, textX: dx, iconX, iconY, box, bounds };
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
-    function labelBox(label) {
-      const style = styleOf(label);
-      const layout = labelLayout(label);
-      const width = layout.width + 2 * style.paddingX;
-      const height = layout.height + 2 * style.paddingY;
-      return { x: label.x - width / 2, y: label.y - height / 2, w: width, h: height };
-    }
+    const labelBox = (label) => labelLayout(label).box;
+    // The box plus an icon outside it: what can be clicked and selected.
+    const labelBounds = (label) => labelLayout(label).bounds;
 
     function labelAt(p) {
       for (let i = labels.length - 1; i >= 0; i--) {
-        const box = labelBox(labels[i]);
+        const box = labelBounds(labels[i]);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return labels[i];
       }
       return null;
@@ -2598,7 +2643,7 @@
       ctx.lineJoin = 'round';
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
-      const typing = editingLabel && { x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, icon: editingLabel.label?.icon };
+      const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false };
       const shown = labels.filter((label) => label !== editingLabel?.label);
       for (const label of typing ? [...shown, typing] : shown) {
         const style = styleOf(label);
@@ -2629,7 +2674,7 @@
       const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
       if (typing && !editingLabel.label) boxed.push(typing);
       for (const label of boxed) {
-        const box = labelBox(label);
+        const box = labelBounds(label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
       ctx.restore();
@@ -3726,7 +3771,7 @@
     // Labels lying wholly inside the box (in screen pixels).
     function labelsInBox(box) {
       return labels.filter((label) => {
-        const b = labelBox(label);
+        const b = labelBounds(label);
         const x = b.x * view.scale + view.x;
         const y = b.y * view.scale + view.y;
         return x >= box.x && y >= box.y && x + b.w * view.scale <= box.x + box.w && y + b.h * view.scale <= box.y + box.h;

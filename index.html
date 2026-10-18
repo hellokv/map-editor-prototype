@@ -175,6 +175,20 @@
             Y
             <input id="label-y" type="number" min="0" max="1500" step="1">
           </label>
+          <label class="field">
+            Pointer
+            <select id="label-pointer">
+              <option value="">None</option>
+              <option value="nw">Top left</option>
+              <option value="n">Top</option>
+              <option value="ne">Top right</option>
+              <option value="e">Right</option>
+              <option value="se">Bottom right</option>
+              <option value="s">Bottom</option>
+              <option value="sw">Bottom left</option>
+              <option value="w">Left</option>
+            </select>
+          </label>
         </div>
         <label class="field">
           Style
@@ -1427,6 +1441,13 @@
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
+    const labelPointerSelect = document.getElementById('label-pointer');
+    labelPointerSelect.addEventListener('change', () => {
+      recordUndo();
+      soleLabel().pointer = labelPointerSelect.value || null;
+      labelPointerSelect.blur();
+      draw();
+    });
     const fillVisibleField = document.getElementById('fill-visible-field');
     const fillColorField = document.getElementById('fill-color-field');
     const fillVisibleToggle = document.getElementById('fill-visible');
@@ -1557,6 +1578,7 @@
         show(labelTextInput, selectedLabel.text);
         show(labelXInput, Math.round(selectedLabel.x));
         show(labelYInput, Math.round(selectedLabel.y));
+        labelPointerSelect.value = selectedLabel.pointer ?? '';
       }
     }
 
@@ -1717,6 +1739,32 @@
       return null;
     }
 
+    // Unit steps for each pointer direction, with y growing downward.
+    const POINTER_DIRECTIONS = {
+      n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0], nw: [-1, -1],
+    };
+
+    // A short line out from the label's box in its pointer direction: from a
+    // corner for diagonals, from the middle of a side otherwise. It takes the
+    // box's outline color, else its background, else the text color.
+    function drawPointer(label, style) {
+      const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
+      const box = labelBox(label);
+      const startX = label.x + (dx * box.w) / 2;
+      const startY = label.y + (dy * box.h) / 2;
+      const length = style.size * 0.75;
+      const unit = Math.hypot(dx, dy);
+      ctx.save();
+      ctx.strokeStyle = style.background ? style.outline ?? style.background : style.color;
+      ctx.lineWidth = style.size * 0.1;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX + (dx / unit) * length, startY + (dy / unit) * length);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function drawLabels() {
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
@@ -1735,6 +1783,7 @@
         ctx.shadowColor = style.shadow ?? 'transparent';
         ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
+        if (label.pointer) drawPointer(label, style);
         if (style.background) {
           // With a background, the outline and shadow belong to the box, not the text.
           const box = labelBox(label);

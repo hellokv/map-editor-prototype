@@ -1102,9 +1102,10 @@
       const h = previewDevice.h * k;
       return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
     }
-    // In preview, the fields set the view: the default zoom as the device
-    // would see it, and offsets from -100% to 100% that slide the map until
-    // its edge meets the screen's edge.
+    // In preview, the fields set the view: the default zoom relative to the
+    // map filling the screen's width, so each device shows the same part of
+    // the map at its own resolution; and offsets from -100% to 100% that
+    // slide the map until its edge meets the screen's edge.
     const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y'].map((id) => document.getElementById(id));
     const [previewZoomInput, previewOffsetXInput, previewOffsetYInput] = previewInputs;
     for (const field of previewInputs) {
@@ -1120,10 +1121,10 @@
       });
       field.addEventListener('change', () => field.blur());
     }
-    const previewZoom = () => Math.min(MAX_SCALE * 100, Math.max(MIN_SCALE * 100, Number(previewZoomInput.value) || 100));
+    const previewZoom = () => Math.min(600, Math.max(10, Number(previewZoomInput.value) || 100));
     function applyPreviewView() {
       const frame = previewFrame();
-      view.scale = (previewZoom() / 100) * frame.k;
+      view.scale = ((previewZoom() / 100) * frame.w) / BACKGROUND;
       const size = BACKGROUND * view.scale;
       const offset = (input) => Math.min(100, Math.max(-100, Number(input.value) || 0)) / 100;
       // At 100% the map's right (or bottom) edge sits on the screen's,
@@ -1845,8 +1846,8 @@
 
     const zoomInput = document.getElementById('zoom-input');
     const autoLayers = document.getElementById('auto-layers');
-    // In preview, the zoom is the one the device would see.
-    const zoomPercent = () => (inPreview() ? previewZoom() : Math.round(view.scale * 100));
+    // In preview, the zoom as the device draws it, per its own pixels.
+    const zoomPercent = () => Math.round((inPreview() ? view.scale / previewFrame().k : view.scale) * 100);
     const inPreview = () => !document.getElementById('preview-panel').hidden;
     // Zooms about the middle of the canvas.
     function zoomTo(scale) {

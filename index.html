@@ -1820,7 +1820,7 @@
         recordUndo();
         const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
         labelStyles.push(copy);
-        for (const label of selectedLabels) label.styleId = copy.id;
+        for (const label of selectedLabels) setLabelStyle(label, copy);
         setAsideLabels();
         renderLabelStyles();
         openStyleForm(copy, true);
@@ -1936,7 +1936,7 @@
       recordUndo();
       const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
       labelStyles.push(style);
-      for (const label of selectedLabels) label.styleId = style.id;
+      for (const label of selectedLabels) setLabelStyle(label, style);
       setAsideLabels();
       renderLabelStyles();
       openStyleForm(style, true);
@@ -1998,7 +1998,15 @@
       paintLabel(c, label, style);
       return preview;
     }
-    const ICON_SETTINGS = ['icon', 'iconSize', 'iconSide', 'iconGap', 'iconOutside', 'iconOffset'];
+    // A label's own values for settings its style also has.
+    const STYLE_OVERRIDES = ['iconSize', 'iconGap'];
+    // A new style brings its own values, so the label's overrides go.
+    function setLabelStyle(label, style) {
+      label.styleId = style.id;
+      for (const key of STYLE_OVERRIDES) delete label[key];
+    }
+    // Previews show the style's own values, not the label's overrides.
+    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside', 'iconOffset'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     function renderStylePicker(source) {
       const { text } = source;
@@ -2008,7 +2016,7 @@
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
         pick.addEventListener('change', () => {
           recordUndo();
-          for (const label of selectedLabels) label.styleId = style.id;
+          for (const label of selectedLabels) setLabelStyle(label, style);
           pick.blur();
           draw();
         });

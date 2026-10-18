@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,image,label,more_vert,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,circle,delete,east,image,label,more_vert,new_label,north,north_east,north_west,route,shapes,south,south_east,south_west,square,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -67,7 +67,8 @@
       font: 13px sans-serif;
       white-space: nowrap;
     }
-    #mode-menu {
+    #mode-menu,
+    #shape-menu {
       position: absolute;
       top: 8px;
       left: 8px;
@@ -77,14 +78,19 @@
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-    #mode-menu button {
+    #shape-menu {
+      flex-direction: row;
+    }
+    #mode-menu button,
+    #shape-menu button {
       display: flex;
       padding: 4px;
       border: none;
       background: none;
       cursor: pointer;
     }
-    #mode-menu button[aria-pressed="true"] {
+    #mode-menu button[aria-pressed="true"],
+    #shape-menu button[aria-pressed="true"] {
       background: #ddd;
     }
     #mode-menu hr {
@@ -322,6 +328,15 @@
           <span class="material-symbols-rounded">new_label</span>
         </button>
       </div>
+      <div id="background-tools" hidden>
+        <hr>
+        <button type="button" data-background-tool="select" aria-label="Select" aria-pressed="true">
+          <span class="material-symbols-rounded">arrow_selector_tool</span>
+        </button>
+        <button type="button" data-background-tool="shapes" aria-label="Shapes" aria-pressed="false">
+          <span class="material-symbols-rounded">shapes</span>
+        </button>
+      </div>
       <div id="path-tools">
         <hr>
         <button type="button" data-tool="select" aria-label="Select" aria-pressed="true">
@@ -331,6 +346,14 @@
           <span class="material-symbols-rounded">add_circle</span>
         </button>
       </div>
+    </div>
+    <div id="shape-menu" hidden>
+      <button type="button" data-shape="circle" aria-label="Circle" aria-pressed="true">
+        <span class="material-symbols-rounded">circle</span>
+      </button>
+      <button type="button" data-shape="square" aria-label="Square" aria-pressed="false">
+        <span class="material-symbols-rounded">square</span>
+      </button>
     </div>
   </div>
   <div id="panel">
@@ -538,6 +561,30 @@
           <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
+      <div id="shape-properties" class="group" hidden>
+        <label class="row">
+          Fill color
+          <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <div id="shape-single-fields">
+          <label class="row">
+            X
+            <input id="shape-x" type="number" step="1">
+          </label>
+          <label class="row">
+            Y
+            <input id="shape-y" type="number" step="1">
+          </label>
+          <label class="row">
+            Width
+            <input id="shape-w" type="number" min="1" step="1">
+          </label>
+          <label class="row">
+            Height
+            <input id="shape-h" type="number" min="1" step="1">
+          </label>
+        </div>
+      </div>
     </div>
   </div>
   <script src="google-fonts.js"></script>
@@ -591,6 +638,44 @@
     for (const button of labelToolButtons) {
       button.addEventListener('click', () => setLabelTool(button.dataset.labelTool));
     }
+    const backgroundTools = document.getElementById('background-tools');
+    const backgroundToolButtons = document.querySelectorAll('[data-background-tool]');
+    const shapeMenu = document.getElementById('shape-menu');
+    const shapeButtons = document.querySelectorAll('[data-shape]');
+    // { kind: 'circle' | 'square', x, y, w, h, color } in background pixels,
+    // with x, y the top left of the shape's box. A circle fills its box, so
+    // it's an ellipse unless the box is square.
+    const shapes = [];
+    let selectedShapes = [];
+    let backgroundTool = 'select';
+    let shapeKind = 'circle';
+    const soleShape = () => (selectedShapes.length === 1 ? selectedShapes[0] : null);
+
+    // The shape options sit just right of the Shapes tool button.
+    function setBackgroundTool(name) {
+      backgroundTool = name;
+      for (const button of backgroundToolButtons) {
+        button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
+      }
+      shapeMenu.hidden = name !== 'shapes';
+      if (!shapeMenu.hidden) {
+        const modeMenu = document.getElementById('mode-menu');
+        const button = backgroundTools.querySelector('[data-background-tool="shapes"]');
+        shapeMenu.style.left = `${modeMenu.offsetLeft + modeMenu.offsetWidth + 6}px`;
+        shapeMenu.style.top = `${modeMenu.offsetTop + button.offsetTop}px`;
+      }
+      updateCursor();
+    }
+    for (const button of backgroundToolButtons) {
+      button.addEventListener('click', () => setBackgroundTool(button.dataset.backgroundTool));
+    }
+    for (const button of shapeButtons) {
+      button.addEventListener('click', () => {
+        shapeKind = button.dataset.shape;
+        for (const other of shapeButtons) other.setAttribute('aria-pressed', other === button);
+      });
+    }
+
     const modePanels = {
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
@@ -619,7 +704,12 @@
       const enteringLabels = mode === 'labels' && labelTools.hidden;
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
+      backgroundTools.hidden = mode !== 'background';
       if (enteringLabels) setLabelTool('add');
+      if (mode !== 'background') {
+        setBackgroundTool('select');
+        selectedShapes = [];
+      }
       if (mode !== 'labels') {
         setLabelTool('select');
         finishLabel(false);
@@ -1126,6 +1216,7 @@
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
+        shapes: shapes.map((shape) => ({ ...shape })),
         selection: copiedSelection,
       };
     }
@@ -1136,7 +1227,7 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, shapes: restoredShapes, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
@@ -1146,6 +1237,8 @@
       closeStyleForm();
       selectedLabels = [];
       selectedPins = [];
+      shapes.splice(0, shapes.length, ...restoredShapes);
+      selectedShapes = [];
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -1271,6 +1364,7 @@
         const h = backgroundImage.naturalHeight * s;
         ctx.drawImage(backgroundImage, (BACKGROUND - w) / 2, (BACKGROUND - h) / 2, w, h);
       }
+      drawShapes();
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
@@ -1287,6 +1381,7 @@
         }
         drawLabels();
         if (!labelTools.hidden) drawPins();
+        if (!backgroundTools.hidden) drawShapeSelection();
         drawMarquee();
         updatePanel();
         return;
@@ -1913,6 +2008,17 @@
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
       if (fill) showColor(fillColorInput, fill.color);
+      shapeProperties.hidden = !selectedShapes.length;
+      if (selectedShapes.length) {
+        if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, selectedShapes[0].color);
+        const shape = soleShape();
+        document.getElementById('shape-single-fields').hidden = !shape;
+        if (shape) {
+          for (const [input, key] of [[shapeXInput, 'x'], [shapeYInput, 'y'], [shapeWInput, 'w'], [shapeHInput, 'h']]) {
+            if (document.activeElement !== input) input.value = Math.round(shape[key]);
+          }
+        }
+      }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
       labelStylesSection.hidden = anyLabels;
@@ -2277,6 +2383,272 @@
       ctx.restore();
     }
 
+    const SHAPE_CLICK_SIZE = 100;
+    const SHAPE_MIN_SIZE = 1;
+    // Resize handles, as fractions across and down the selection's box.
+    const SHAPE_HANDLES = { nw: [0, 0], n: [0.5, 0], ne: [1, 0], e: [1, 0.5], se: [1, 1], s: [0.5, 1], sw: [0, 1], w: [0, 0.5] };
+    const HANDLE_CURSORS = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+    const HANDLE_SIZE = 8;
+    const shapeProperties = document.getElementById('shape-properties');
+    // New shapes take the last fill color shown here.
+    const shapeColorInput = document.getElementById('shape-color');
+    let shapeColorBefore = null;
+    shapeColorInput.addEventListener('input', () => {
+      if (!selectedShapes.length) return;
+      shapeColorBefore ??= snapshot();
+      for (const shape of selectedShapes) shape.color = colorOf(shapeColorInput);
+      draw();
+    });
+    shapeColorInput.addEventListener('change', () => {
+      if (shapeColorBefore) recordUndo(shapeColorBefore);
+      shapeColorBefore = null;
+      shapeColorInput.blur();
+    });
+    const shapeXInput = liveField('shape-x', 'x', (input) => Number(input.value) || 0, soleShape);
+    const shapeYInput = liveField('shape-y', 'y', (input) => Number(input.value) || 0, soleShape);
+    const shapeWInput = liveField('shape-w', 'w', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
+    const shapeHInput = liveField('shape-h', 'h', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
+
+    function traceShape(shape) {
+      ctx.beginPath();
+      if (shape.kind === 'circle') ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
+      else ctx.rect(shape.x, shape.y, shape.w, shape.h);
+    }
+    function drawShapes() {
+      const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
+      for (const shape of [...shapes, ...drawing]) {
+        ctx.fillStyle = shape.color;
+        traceShape(shape);
+        ctx.fill();
+      }
+    }
+    function shapesBox(list) {
+      const x = Math.min(...list.map((shape) => shape.x));
+      const y = Math.min(...list.map((shape) => shape.y));
+      const w = Math.max(...list.map((shape) => shape.x + shape.w)) - x;
+      const h = Math.max(...list.map((shape) => shape.y + shape.h)) - y;
+      return { x, y, w, h };
+    }
+    function drawShapeSelection() {
+      if (!selectedShapes.length) return;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2 / view.scale;
+      for (const shape of selectedShapes) {
+        traceShape(shape);
+        ctx.stroke();
+      }
+      const box = shapesBox(selectedShapes);
+      ctx.lineWidth = 1 / view.scale;
+      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      const size = HANDLE_SIZE / view.scale;
+      ctx.fillStyle = '#fff';
+      for (const [fx, fy] of Object.values(SHAPE_HANDLES)) {
+        ctx.fillRect(box.x + fx * box.w - size / 2, box.y + fy * box.h - size / 2, size, size);
+      }
+      ctx.restore();
+    }
+    // The resize handle under a screen point, if any.
+    function handleAt(s) {
+      if (!s || !selectedShapes.length) return null;
+      const box = shapesBox(selectedShapes);
+      for (const [name, [fx, fy]] of Object.entries(SHAPE_HANDLES)) {
+        const hx = (box.x + fx * box.w) * view.scale + view.x;
+        const hy = (box.y + fy * box.h) * view.scale + view.y;
+        if (Math.abs(s.x - hx) <= HANDLE_SIZE && Math.abs(s.y - hy) <= HANDLE_SIZE) return name;
+      }
+      return null;
+    }
+    function shapeAt(p) {
+      for (let i = shapes.length - 1; i >= 0; i--) {
+        const shape = shapes[i];
+        const dx = (p.x - shape.x - shape.w / 2) / (shape.w / 2);
+        const dy = (p.y - shape.y - shape.h / 2) / (shape.h / 2);
+        const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1 : Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
+        if (inside) return shape;
+      }
+      return null;
+    }
+    // Shapes lying wholly inside the box (in screen pixels).
+    function shapesInBox(box) {
+      return shapes.filter((shape) => {
+        const x = shape.x * view.scale + view.x;
+        const y = shape.y * view.scale + view.y;
+        return x >= box.x && y >= box.y && x + shape.w * view.scale <= box.x + box.w && y + shape.h * view.scale <= box.y + box.h;
+      });
+    }
+    // The box after dragging one of its handles to p. Keeping the ratio
+    // anchors the opposite corner or side, and keeps a side's centre in place.
+    function resizedBox(box, handle, p, keepRatio) {
+      const [fx, fy] = SHAPE_HANDLES[handle];
+      let left = box.x;
+      let right = box.x + box.w;
+      let top = box.y;
+      let bottom = box.y + box.h;
+      if (fx === 0) left = Math.min(p.x, right - SHAPE_MIN_SIZE);
+      if (fx === 1) right = Math.max(p.x, left + SHAPE_MIN_SIZE);
+      if (fy === 0) top = Math.min(p.y, bottom - SHAPE_MIN_SIZE);
+      if (fy === 1) bottom = Math.max(p.y, top + SHAPE_MIN_SIZE);
+      let w = right - left;
+      let h = bottom - top;
+      if (keepRatio) {
+        const s = fx === 0.5 ? h / box.h : fy === 0.5 ? w / box.w : Math.max(w / box.w, h / box.h);
+        w = box.w * s;
+        h = box.h * s;
+        left = fx === 0 ? right - w : fx === 1 ? left : box.x + (box.w - w) / 2;
+        top = fy === 0 ? bottom - h : fy === 1 ? top : box.y + (box.h - h) / 2;
+      }
+      return { x: left, y: top, w, h };
+    }
+    // The box dragged out from anchor to p; square keeps its sides equal.
+    function draggedBox(anchor, p, square) {
+      let w = p.x - anchor.x;
+      let h = p.y - anchor.y;
+      if (square) {
+        const side = Math.max(Math.abs(w), Math.abs(h));
+        w = Math.sign(w || 1) * side;
+        h = Math.sign(h || 1) * side;
+      }
+      return { x: Math.min(anchor.x, anchor.x + w), y: Math.min(anchor.y, anchor.y + h), w: Math.abs(w), h: Math.abs(h) };
+    }
+
+    // Shape drags carry shapes: true. Moves and resizes only become an undo
+    // step once something changes.
+    function shapePointerDown(e, s) {
+      const p = toBackground(s.x, s.y);
+      const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
+      if (backgroundTool === 'shapes') {
+        drag = { ...base, anchor: p, drawing: { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput) } };
+        return;
+      }
+      const handle = handleAt(s);
+      if (handle) {
+        const originals = selectedShapes.map((shape) => ({ shape, x: shape.x, y: shape.y, w: shape.w, h: shape.h }));
+        drag = { ...base, handle, box: shapesBox(selectedShapes), originals };
+        return;
+      }
+      const pressed = shapeAt(p);
+      if (pressed && shiftHeld) {
+        selectedShapes = selectedShapes.includes(pressed)
+          ? selectedShapes.filter((shape) => shape !== pressed)
+          : [...selectedShapes, pressed];
+      } else if (pressed) {
+        const member = selectedShapes.includes(pressed);
+        if (!member) selectedShapes = [pressed];
+        // A click on one of several without moving narrows to it.
+        drag = { ...base, moving: [...selectedShapes], last: p, narrowTo: member ? pressed : null };
+      } else {
+        drag = { ...base, marquee: true, x0: s.x, y0: s.y, base: shiftHeld ? [...selectedShapes] : [] };
+      }
+    }
+    function shapePointerMove(e) {
+      const p = toBackground(pointer.x, pointer.y);
+      const moved = drag.active || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP;
+      if (!moved) return;
+      if (drag.drawing) {
+        Object.assign(drag.drawing, draggedBox(drag.anchor, p, e.shiftKey));
+      } else if (drag.handle) {
+        if (!drag.active) recordUndo(drag.before);
+        const { box: from } = drag;
+        const to = resizedBox(from, drag.handle, p, e.shiftKey);
+        const sx = from.w ? to.w / from.w : 1;
+        const sy = from.h ? to.h / from.h : 1;
+        for (const { shape, x, y, w, h } of drag.originals) {
+          shape.x = to.x + (x - from.x) * sx;
+          shape.y = to.y + (y - from.y) * sy;
+          shape.w = Math.max(SHAPE_MIN_SIZE, w * sx);
+          shape.h = Math.max(SHAPE_MIN_SIZE, h * sy);
+        }
+      } else if (drag.moving) {
+        if (!drag.active) recordUndo(drag.before);
+        drag.narrowTo = null;
+        for (const shape of drag.moving) {
+          shape.x += p.x - drag.last.x;
+          shape.y += p.y - drag.last.y;
+        }
+        drag.last = p;
+      } else if (drag.marquee) {
+        selectedShapes = [...new Set([...drag.base, ...shapesInBox(marqueeBox())])];
+      }
+      drag.active = true;
+    }
+    function shapePointerUp() {
+      const { drawing, active, narrowTo, marquee, base, before } = drag;
+      drag = null;
+      if (drawing) {
+        // A click without a drag makes a shape of a standard size, centred there.
+        if (!active) {
+          drawing.x -= SHAPE_CLICK_SIZE / 2;
+          drawing.y -= SHAPE_CLICK_SIZE / 2;
+          drawing.w = drawing.h = SHAPE_CLICK_SIZE;
+        }
+        drawing.w = Math.max(SHAPE_MIN_SIZE, drawing.w);
+        drawing.h = Math.max(SHAPE_MIN_SIZE, drawing.h);
+        recordUndo(before);
+        shapes.push(drawing);
+        selectedShapes = [drawing];
+        setBackgroundTool('select');
+      } else if (narrowTo) {
+        selectedShapes = [narrowTo];
+      } else if (marquee && !active && !base.length) {
+        selectedShapes = [];
+      }
+    }
+
+    let copiedShapes = [];
+    let shapePasteCount = 0;
+    document.addEventListener('keydown', (e) => {
+      if (backgroundTools.hidden || e.target.closest('input, textarea, select')) return;
+      const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+      const command = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+      const nudge = NUDGE_DIRECTIONS[e.key];
+      if (plain && e.key === '1') {
+        setBackgroundTool('select');
+      } else if (plain && e.key === '2') {
+        setBackgroundTool('shapes');
+      } else if (command && e.key.toLowerCase() === 'c' && selectedShapes.length) {
+        e.preventDefault();
+        copiedShapes = selectedShapes.map((shape) => ({ ...shape }));
+        shapePasteCount = 0;
+      } else if (command && e.key.toLowerCase() === 'v' && copiedShapes.length) {
+        e.preventDefault();
+        recordUndo();
+        shapePasteCount++;
+        const pasted = copiedShapes.map((shape) => ({
+          ...shape,
+          x: shape.x + PASTE_OFFSET * shapePasteCount,
+          y: shape.y + PASTE_OFFSET * shapePasteCount,
+        }));
+        shapes.push(...pasted);
+        selectedShapes = pasted;
+        setBackgroundTool('select');
+      } else if (nudge && selectedShapes.length) {
+        e.preventDefault();
+        const step = Number(nudgeInput.value) * (e.shiftKey ? SHIFT_NUDGE_FACTOR : 1);
+        recordUndo();
+        for (const shape of selectedShapes) {
+          shape.x += nudge[0] * step;
+          shape.y += nudge[1] * step;
+        }
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapes.length) {
+        e.preventDefault();
+        recordUndo();
+        for (const shape of selectedShapes) shapes.splice(shapes.indexOf(shape), 1);
+        selectedShapes = [];
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
+        if (!selectedShapes.length) setBackgroundTool('select');
+        selectedShapes = [];
+      } else {
+        return;
+      }
+      draw();
+      updateCursor();
+    });
+
     // Copies leave their pins behind. Each paste lands a step further along,
     // so repeated pastes don't stack on one spot.
     const PASTE_OFFSET = 20;
@@ -2555,6 +2927,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : HANDLE_CURSORS[handleAt(pointer)] ?? '';
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 
@@ -2713,6 +3086,12 @@
         updateCursor();
         return;
       }
+      if (!backgroundTools.hidden) {
+        shapePointerDown(e, s);
+        draw();
+        updateCursor();
+        return;
+      }
       if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
         const pressedPin = pinAt(p);
@@ -2796,6 +3175,12 @@
     canvas.addEventListener('pointermove', (e) => {
       pointer = canvasPoint(e);
       shiftHeld = e.shiftKey;
+      if (drag?.shapes) {
+        shapePointerMove(e);
+        draw();
+        updateCursor();
+        return;
+      }
       if (drag?.point) {
         const p = toBackground(pointer.x, pointer.y);
         let target = { x: p.x + drag.dx, y: p.y + drag.dy };
@@ -2888,6 +3273,12 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.shapes) {
+        shapePointerUp();
+        draw();
+        updateCursor();
+        return;
+      }
       const { toggle, marquee, active, base, group, moving, item } = drag;
       if (drag.narrowTo) selectedLabels = [drag.narrowTo];
       if (drag.narrowToPin) {

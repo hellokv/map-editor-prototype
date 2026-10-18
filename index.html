@@ -31,9 +31,29 @@
     }
     #label-input {
       position: absolute;
-      transform: translate(-50%, -50%);
-      font-family: sans-serif;
-      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .font-picker {
+      position: relative;
+      display: inline-block;
+    }
+    #font-options {
+      position: absolute;
+      z-index: 1;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #ccc;
+    }
+    #font-options div {
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+    #font-options div[aria-selected="true"] {
+      background: #ddd;
     }
     #crossing-dialog {
       position: absolute;
@@ -171,7 +191,10 @@
           </label>
           <label class="field">
             Font
-            <input id="style-font" type="text" list="google-fonts-list" required>
+            <span class="font-picker">
+              <input id="style-font" type="text" autocomplete="off" required>
+              <div id="font-options" hidden></div>
+            </span>
           </label>
           <label class="field">
             Font weight
@@ -228,7 +251,6 @@
           </div>
         </form>
       </div>
-      <datalist id="google-fonts-list"></datalist>
     </div>
     <div id="path-panel">
       <label class="field">
@@ -1224,9 +1246,57 @@
     let styleBefore = null; // { values, snapshot } from when editing began
     const googleFonts = new Set(GOOGLE_FONTS);
 
-    document.getElementById('google-fonts-list').append(
-      ...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })),
-    );
+    // Searchable font list: typing filters Google Fonts by any part of the
+    // name; arrows move, Enter or a click picks.
+    const fontInput = styleInputs.font;
+    const fontOptions = document.getElementById('font-options');
+    let fontMatches = [];
+    let activeFont = -1;
+
+    function showFontOptions() {
+      const query = fontInput.value.trim().toLowerCase();
+      // A complete font name shows the whole list rather than just itself.
+      const filter = googleFonts.has(fontInput.value.trim()) ? '' : query;
+      fontMatches = GOOGLE_FONTS.filter((font) => font.toLowerCase().includes(filter));
+      activeFont = fontMatches.indexOf(fontInput.value.trim());
+      fontOptions.replaceChildren(...fontMatches.map((font, i) => {
+        const option = Object.assign(document.createElement('div'), { textContent: font });
+        option.setAttribute('aria-selected', i === activeFont);
+        // mousedown, not click, so the input keeps focus.
+        option.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          pickFont(font);
+        });
+        return option;
+      }));
+      fontOptions.hidden = fontMatches.length === 0;
+      fontOptions.children[activeFont]?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function pickFont(font) {
+      fontInput.value = font;
+      fontInput.dispatchEvent(new Event('input', { bubbles: true }));
+      fontOptions.hidden = true;
+    }
+
+    fontInput.addEventListener('focus', showFontOptions);
+    fontInput.addEventListener('input', () => { if (document.activeElement === fontInput) showFontOptions(); });
+    fontInput.addEventListener('blur', () => { fontOptions.hidden = true; });
+    fontInput.addEventListener('keydown', (e) => {
+      if (fontOptions.hidden && e.key !== 'ArrowDown') return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (fontOptions.hidden) showFontOptions();
+        activeFont = Math.max(0, Math.min(fontMatches.length - 1, activeFont + (e.key === 'ArrowDown' ? 1 : -1)));
+        [...fontOptions.children].forEach((option, i) => option.setAttribute('aria-selected', i === activeFont));
+        fontOptions.children[activeFont]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && fontMatches[activeFont]) {
+        e.preventDefault();
+        pickFont(fontMatches[activeFont]);
+      } else if (e.key === 'Escape') {
+        fontOptions.hidden = true;
+      }
+    });
 
     // Rebuilds the style list and the label style picker from labelStyles.
     function renderLabelStyles() {
@@ -1552,18 +1622,19 @@
       draw();
     }
 
+    // The text box is invisible and only gathers typing; it sits on the
+    // label's spot so the browser's input method popups appear there.
     function placeLabelInput() {
       if (!editingLabel) return;
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
-      const style = currentStyle();
-      labelInput.style.font = fontOf({ ...style, size: style.size * view.scale });
     }
 
     labelInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') finishLabel(true);
       if (e.key === 'Escape') finishLabel(false);
     });
+    labelInput.addEventListener('input', () => draw());
     labelInput.addEventListener('blur', () => finishLabel(true));
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -1591,7 +1662,9 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
-      for (const label of labels) {
+      // The label being typed is drawn like a real one in the style it will get.
+      const typing = editingLabel && { ...editingLabel, text: labelInput.value, styleId: currentStyle().id };
+      for (const label of typing ? [...labels, typing] : labels) {
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
@@ -1623,6 +1696,13 @@
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
+      if (typing) {
+        const style = currentStyle();
+        ctx.font = fontOf(style);
+        const caretX = typing.x + ctx.measureText(typing.text).width / 2 + 2 / view.scale;
+        ctx.fillStyle = style.color;
+        ctx.fillRect(caretX, typing.y - style.size / 2, 2 / view.scale, style.size);
+      }
       // Same white-with-shadow look as other selections, a few pixels clear of the text.
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
       ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);

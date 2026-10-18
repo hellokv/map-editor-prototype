@@ -506,6 +506,19 @@
       background: #fff;
       border-radius: 6px;
     }
+    #label-style-picker label.dark {
+      background: #4a4a4a;
+      color: #eee;
+    }
+    #label-style-picker label.dark .style-option-name {
+      color: #ccc;
+    }
+    #panel #label-style-picker label.dark .style-menu > button {
+      color: #eee;
+    }
+    #panel #label-style-picker label.dark .style-menu > button:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
     .style-option-body {
       display: flex;
       flex-direction: column;
@@ -2281,9 +2294,20 @@
     // Previews show the style's own values, not the label's overrides or offset.
     const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
+    // Whether a #rrggbb(aa) color is light, by its relative luminance.
+    function isLight(color) {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const c = parseInt(color.slice(i, i + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
+    }
+    // Each option sits on white, or on dark grey when the style's most
+    // prominent color (its outline, else background, else text) is light.
     function renderStylePicker(source) {
       const { text } = source;
-      const room = labelStylePicker.clientWidth - 70;
+      // The picker has no width yet the first time, while it's empty.
+      const room = (labelStylePicker.clientWidth || 284) - 70;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
@@ -2293,6 +2317,7 @@
           pick.blur();
           draw();
         });
+        if (isLight(style.outline ?? style.background ?? style.color)) option.classList.add('dark');
         const body = document.createElement('span');
         body.className = 'style-option-body';
         body.append(Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), stylePreview(style, text, room, iconSettingsOf(source)));

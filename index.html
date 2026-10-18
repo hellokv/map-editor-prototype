@@ -121,7 +121,7 @@
       max-width: 100%;
     }
     #image-delete,
-    #label-style-picker button {
+    #label-style-picker label button {
       flex: none;
       display: flex;
       padding: 0;
@@ -1555,14 +1555,19 @@
       draw();
     }
 
-    document.getElementById('new-label-style').addEventListener('click', () => {
+    // Selected labels take the new style, and are let go so its form can show.
+    function newLabelStyle() {
       recordUndo();
       const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
       labelStyles.push(style);
+      for (const label of selectedLabels) label.styleId = style.id;
+      selectedLabels = [];
+      draw();
       renderLabelStyles();
       openStyleForm(style, true);
       styleInputs.name.select();
-    });
+    }
+    document.getElementById('new-label-style').addEventListener('click', newLabelStyle);
     document.getElementById('style-back').addEventListener('click', closeStyleForm);
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -1619,6 +1624,9 @@
         option.append(pick, preview, edit);
         return option;
       }));
+      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'field', textContent: 'New label style' });
+      create.addEventListener('click', newLabelStyle);
+      labelStylePicker.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);

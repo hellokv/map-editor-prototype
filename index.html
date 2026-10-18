@@ -132,6 +132,82 @@
     * + .field {
       margin-top: 8px;
     }
+    .color-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .color-field input[type="color"] {
+      width: 28px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: none;
+    }
+    .opacity {
+      width: 52px;
+      margin-left: 2px;
+    }
+    #label-style-form {
+      font: 13px system-ui, sans-serif;
+    }
+    #style-back {
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      cursor: pointer;
+    }
+    #style-back:hover {
+      background: #eee;
+    }
+    .style-group {
+      padding: 6px 0;
+      border-bottom: 1px solid #ddd;
+    }
+    .style-group:last-child {
+      border-bottom: none;
+    }
+    .style-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 28px;
+    }
+    .style-row > span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .style-row input[type="checkbox"] {
+      margin: 0;
+    }
+    .style-row input[type="text"],
+    .style-row input[type="number"]:not(.opacity),
+    .style-row select {
+      box-sizing: border-box;
+      width: 140px;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font: inherit;
+    }
+    .style-row input[type="number"]:not(.opacity) {
+      width: 64px;
+    }
+    .style-row .opacity {
+      box-sizing: border-box;
+      padding: 3px 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font: inherit;
+    }
+    .style-row .font-picker input {
+      width: 140px;
+    }
     #label-style-picker {
       padding: 8px 0;
       border-top: 1px solid #ddd;
@@ -228,74 +304,80 @@
           <button id="style-back" type="button" aria-label="Back to label styles">
             <span class="material-symbols-rounded">arrow_back</span>
           </button>
-          <label class="field">
-            Name
-            <input id="style-name" type="text" required>
-          </label>
-          <label class="field">
-            Font
-            <span class="font-picker">
-              <input id="style-font" type="text" autocomplete="off" required>
-              <div id="font-options" hidden></div>
-            </span>
-          </label>
-          <label class="field">
-            Font weight
-            <select id="style-weight">
-              <option value="100">Thin</option>
-              <option value="200">Extra light</option>
-              <option value="300">Light</option>
-              <option value="400">Regular</option>
-              <option value="500">Medium</option>
-              <option value="600">Semi bold</option>
-              <option value="700">Bold</option>
-              <option value="800">Extra bold</option>
-              <option value="900">Black</option>
-            </select>
-          </label>
-          <label class="field">
-            Font size
-            <input id="style-size" type="number" min="4" max="200" step="1" required>
-          </label>
-          <label class="field">
-            Line height
-            <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
-          </label>
-          <label class="field">
-            <input id="style-caps" type="checkbox">
-            All caps
-          </label>
-          <label class="field">
-            Color
-            <input id="style-color" type="color">
-          </label>
-          <label class="field">
-            <input id="style-outline-on" type="checkbox">
-            Outline color
-            <input id="style-outline" type="color">
-          </label>
-          <label class="field">
-            <input id="style-shadow-on" type="checkbox">
-            Shadow color
-            <input id="style-shadow" type="color">
-          </label>
-          <label class="field">
-            Padding top and bottom
-            <input id="style-padding-y" type="number" min="0" max="200" step="1">
-          </label>
-          <label class="field">
-            Padding sides
-            <input id="style-padding-x" type="number" min="0" max="200" step="1">
-          </label>
-          <label class="field">
-            <input id="style-background-on" type="checkbox">
-            Background color
-            <input id="style-background" type="color">
-          </label>
-          <label class="field">
-            Border radius
-            <input id="style-radius" type="number" min="0" max="200" step="1">
-          </label>
+          <div class="style-group">
+            <label class="style-row">
+              Name
+              <input id="style-name" type="text" required>
+            </label>
+            <label class="style-row">
+              Font
+              <span class="font-picker">
+                <input id="style-font" type="text" autocomplete="off" required>
+                <div id="font-options" hidden></div>
+              </span>
+            </label>
+            <label class="style-row">
+              Font weight
+              <select id="style-weight">
+                <option value="100">Thin</option>
+                <option value="200">Extra light</option>
+                <option value="300">Light</option>
+                <option value="400">Regular</option>
+                <option value="500">Medium</option>
+                <option value="600">Semi bold</option>
+                <option value="700">Bold</option>
+                <option value="800">Extra bold</option>
+                <option value="900">Black</option>
+              </select>
+            </label>
+            <label class="style-row">
+              Font size
+              <input id="style-size" type="number" min="4" max="200" step="1" required>
+            </label>
+            <label class="style-row">
+              Line height
+              <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
+            </label>
+            <label class="style-row">
+              <span><input id="style-caps" type="checkbox"> All caps</span>
+            </label>
+          </div>
+          <div class="style-group">
+            <label class="style-row">
+              Color
+              <span class="color-field"><input id="style-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="style-row">
+              <span><input id="style-outline-on" type="checkbox"> Outline color</span>
+              <span class="color-field"><input id="style-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="style-row">
+              Outline weight
+              <input id="style-outline-width" type="number" min="0" max="50" step="0.5">
+            </label>
+            <label class="style-row">
+              <span><input id="style-shadow-on" type="checkbox"> Shadow color</span>
+              <span class="color-field"><input id="style-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+          </div>
+          <div class="style-group">
+            <label class="style-row">
+              Padding top and bottom
+              <input id="style-padding-y" type="number" min="0" max="200" step="1">
+            </label>
+            <label class="style-row">
+              Padding sides
+              <input id="style-padding-x" type="number" min="0" max="200" step="1">
+            </label>
+            <label class="style-row">
+              <span><input id="style-background-on" type="checkbox"> Background color</span>
+              <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="style-row">
+              Border radius
+              <input id="style-radius" type="number" min="0" max="200" step="1">
+            </label>
+          </div>
         </form>
       </div>
     </div>
@@ -322,7 +404,7 @@
       </label>
       <label class="field">
         Path color
-        <input id="path-color" type="color" value="#ffbf17">
+        <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
       </label>
       <label id="intersection-field" class="field" hidden>
         <input id="intersection" type="checkbox">
@@ -341,7 +423,7 @@
         </label>
         <label class="field">
           Width color
-          <input id="path-width-color" type="color">
+          <span class="color-field"><input id="path-width-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
       <button id="destroy-path" class="field" type="button" hidden>Destroy path</button>
@@ -356,7 +438,7 @@
       </label>
       <label id="fill-color-field" class="field" hidden>
         Fill color
-        <input id="fill-color" type="color">
+        <span class="color-field"><input id="fill-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
       </label>
     </div>
     <div id="background-panel" hidden>
@@ -369,12 +451,34 @@
       </div>
       <label class="field">
         Background color
-        <input id="canvas-color" type="color" value="#7b8365">
+        <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
       </label>
     </div>
   </div>
   <script src="google-fonts.js"></script>
   <script>
+    // Each color input is followed by an opacity percentage, and the two
+    // together make one #rrggbbaa color.
+    function colorOf(input) {
+      const percent = input.nextElementSibling.valueAsNumber;
+      const alpha = Math.round(Math.min(100, Math.max(0, Number.isNaN(percent) ? 100 : percent)) * 2.55);
+      return alpha === 255 ? input.value : input.value + alpha.toString(16).padStart(2, '0');
+    }
+    function showColor(input, color) {
+      input.value = color.slice(0, 7);
+      const opacity = input.nextElementSibling;
+      if (document.activeElement !== opacity) {
+        opacity.value = color.length > 7 ? Math.round(parseInt(color.slice(7), 16) / 2.55) : 100;
+      }
+    }
+    for (const opacity of document.querySelectorAll('.opacity')) {
+      const color = opacity.previousElementSibling;
+      opacity.addEventListener('input', () => color.dispatchEvent(new Event('input')));
+      opacity.addEventListener('change', () => {
+        color.dispatchEvent(new Event('change'));
+        opacity.blur();
+      });
+    }
     const modeButtons = document.querySelectorAll('#mode-menu [data-mode]');
     const labelTools = document.getElementById('label-tools');
     const labelToolButtons = document.querySelectorAll('[data-label-tool]');
@@ -1049,7 +1153,8 @@
     function draw() {
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = canvasColor.value;
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.fillStyle = colorOf(canvasColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
       ctx.translate(view.x, view.y);
@@ -1086,7 +1191,7 @@
       const items = selectionItems();
       const selectedPoints = new Set(items.map((item) => item.point).filter(Boolean));
       const selectedSegments = new Set(items.map((item) => item.segment).filter(Boolean));
-      const color = pathColor.value;
+      const color = colorOf(pathColor);
       const shadow = () => {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 4 * dpr;
@@ -1276,9 +1381,9 @@
     labelledSlider('path-width');
     const pathWidthInput = liveField('path-width', 'width', (input) => Number(input.value));
     const pathWidthOutput = document.querySelector('output[for="path-width"]');
-    const pathWidthColor = liveField('path-width-color', 'widthColor', (input) => input.value);
+    const pathWidthColor = liveField('path-width-color', 'widthColor', colorOf);
     const selectedFill = () => selected?.area && fillOf(selected.area);
-    const fillColorInput = liveField('fill-color', 'color', (input) => input.value, selectedFill);
+    const fillColorInput = liveField('fill-color', 'color', colorOf, selectedFill);
     const labelProperties = document.getElementById('label-properties');
     const labelStylesSection = document.getElementById('label-styles');
     const labelStyleList = document.getElementById('label-style-list');
@@ -1287,7 +1392,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'caps', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -1387,12 +1492,13 @@
         size: Math.max(4, Number(styleInputs.size.value) || 24),
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
         caps: styleInputs.caps.checked,
-        color: styleInputs.color.value,
-        outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
-        shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
+        color: colorOf(styleInputs.color),
+        outline: styleInputs['outline-on'].checked ? colorOf(styleInputs.outline) : null,
+        outlineWidth: Math.max(0, Number(styleInputs['outline-width'].value) || 0),
+        shadow: styleInputs['shadow-on'].checked ? colorOf(styleInputs.shadow) : null,
         paddingY: Math.max(0, Number(styleInputs['padding-y'].value) || 0),
         paddingX: Math.max(0, Number(styleInputs['padding-x'].value) || 0),
-        background: styleInputs['background-on'].checked ? styleInputs.background.value : null,
+        background: styleInputs['background-on'].checked ? colorOf(styleInputs.background) : null,
         radius: Math.max(0, Number(styleInputs.radius.value) || 0),
       };
     }
@@ -1410,15 +1516,16 @@
       styleInputs.size.value = values.size;
       styleInputs['line-height'].value = values.lineHeight;
       styleInputs.caps.checked = values.caps;
-      styleInputs.color.value = values.color;
+      showColor(styleInputs.color, values.color);
       styleInputs['outline-on'].checked = !!values.outline;
-      styleInputs.outline.value = values.outline ?? '#ffffff';
+      showColor(styleInputs.outline, values.outline ?? '#ffffff');
+      styleInputs['outline-width'].value = values.outlineWidth;
       styleInputs['shadow-on'].checked = !!values.shadow;
-      styleInputs.shadow.value = values.shadow ?? '#000000';
+      showColor(styleInputs.shadow, values.shadow ?? '#000000');
       styleInputs['padding-y'].value = values.paddingY;
       styleInputs['padding-x'].value = values.paddingX;
       styleInputs['background-on'].checked = !!values.background;
-      styleInputs.background.value = values.background ?? '#ffffff';
+      showColor(styleInputs.background, values.background ?? '#ffffff');
       styleInputs.radius.value = values.radius;
       styleBrowser.hidden = true;
       styleForm.hidden = false;
@@ -1625,7 +1732,7 @@
       if (selected?.group) {
         pathWidthInput.value = selected.group.width;
         pathWidthOutput.value = `${selected.group.width}px`;
-        pathWidthColor.value = selected.group.widthColor;
+        showColor(pathWidthColor, selected.group.widthColor);
       }
       const points = selectedPointsList();
       intersectionField.hidden = points.length === 0;
@@ -1638,7 +1745,7 @@
       fillVisibleField.hidden = !fill;
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
-      if (fill) fillColorInput.value = fill.color;
+      if (fill) showColor(fillColorInput, fill.color);
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
       labelStylesSection.hidden = anyLabels;
@@ -1686,13 +1793,14 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, weight, size, lineHeight, caps, color, outline, shadow,
-    // paddingY, paddingX, background, radius }; lineHeight is how far apart a
-    // label's lines stack, as a multiple of size, and caps shows the text in
-    // capitals without changing what was typed. outline, shadow and
+    // { id, name, font, weight, size, lineHeight, caps, color, outline,
+    // outlineWidth, shadow, paddingY, paddingX, background, radius }; lineHeight
+    // is how far apart a label's lines stack, as a multiple of size, and caps
+    // shows the text in capitals without changing what was typed. outlineWidth
+    // is how thick the outline looks. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, caps: false, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
     let nextStyleId = 2;
     // The style new labels are created in, picked in the style list.
@@ -1880,14 +1988,15 @@
         c.shadowColor = 'transparent';
         if (style.outline) {
           c.strokeStyle = style.outline;
-          c.lineWidth = style.size * 0.08;
+          c.lineWidth = style.outlineWidth;
           c.stroke();
         }
       }
       const lines = labelLines(label);
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
-        c.lineWidth = style.size * 0.15;
+        // Half of a stroke falls inside the glyphs, under the fill.
+        c.lineWidth = style.outlineWidth * 2;
         for (const line of lines) c.strokeText(line.text, label.x, line.y + baseline);
         c.shadowColor = 'transparent';
       }

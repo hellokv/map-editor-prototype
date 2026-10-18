@@ -154,7 +154,48 @@
           Y
           <input id="label-y" type="number" min="0" max="1500" step="1">
         </label>
+        <label class="field">
+          Style
+          <select id="label-style"></select>
+        </label>
       </div>
+      <div id="label-styles">
+        <div id="label-style-list"></div>
+        <button id="new-label-style" class="field" type="button">New label style</button>
+        <form id="label-style-form" hidden>
+          <label class="field">
+            Name
+            <input id="style-name" type="text" required>
+          </label>
+          <label class="field">
+            Font
+            <input id="style-font" type="text" list="google-fonts-list" required>
+          </label>
+          <label class="field">
+            Font size
+            <input id="style-size" type="number" min="4" max="200" step="1" required>
+          </label>
+          <label class="field">
+            Color
+            <input id="style-color" type="color">
+          </label>
+          <label class="field">
+            <input id="style-outline-on" type="checkbox">
+            Outline color
+            <input id="style-outline" type="color">
+          </label>
+          <label class="field">
+            <input id="style-shadow-on" type="checkbox">
+            Shadow color
+            <input id="style-shadow" type="color">
+          </label>
+          <div class="field">
+            <button type="submit">Save</button>
+            <button id="style-cancel" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+      <datalist id="google-fonts-list"></datalist>
     </div>
     <div id="path-panel">
       <label class="field">
@@ -230,6 +271,7 @@
       </label>
     </div>
   </div>
+  <script src="google-fonts.js"></script>
   <script>
     const modeButtons = document.querySelectorAll('#mode-menu [data-mode]');
     const labelTools = document.getElementById('label-tools');
@@ -772,6 +814,7 @@
         fills: fills.map((fill) => Object.assign(new Set([...fill].filter((p) => copies.has(p)).map(copy)), { visible: fill.visible, color: fill.color })),
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         labels: labels.map((label) => ({ ...label })),
+        labelStyles: labelStyles.map((style) => ({ ...style })),
         selection: copiedSelection,
       };
     }
@@ -782,11 +825,14 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
       labels.splice(0, labels.length, ...restoredLabels);
+      labelStyles.splice(0, labelStyles.length, ...restoredStyles);
+      renderLabelStyles();
+      closeStyleForm();
       selectedLabel = null;
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
@@ -1138,6 +1184,89 @@
     const selectedFill = () => selected?.area && fillOf(selected.area);
     const fillColorInput = liveField('fill-color', 'color', (input) => input.value, selectedFill);
     const labelProperties = document.getElementById('label-properties');
+    const labelStylesSection = document.getElementById('label-styles');
+    const labelStyleList = document.getElementById('label-style-list');
+    const labelStyleSelect = document.getElementById('label-style');
+    const styleForm = document.getElementById('label-style-form');
+    const styleInputs = Object.fromEntries(
+      ['name', 'font', 'size', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow'].map((key) => [key, document.getElementById(`style-${key}`)]),
+    );
+    let editingStyle = null; // the style being edited, or null for a new one
+
+    document.getElementById('google-fonts-list').append(
+      ...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })),
+    );
+
+    // Rebuilds the style list and the label style picker from labelStyles.
+    function renderLabelStyles() {
+      labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
+        const row = document.createElement('div');
+        row.className = 'field';
+        const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
+        edit.addEventListener('click', () => openStyleForm(style));
+        row.append(`${style.name} `, edit);
+        if (i > 0) {
+          const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
+          remove.addEventListener('click', () => {
+            recordUndo();
+            labelStyles.splice(labelStyles.indexOf(style), 1);
+            renderLabelStyles();
+            draw();
+          });
+          row.append(' ', remove);
+        }
+        return row;
+      }));
+      labelStyleSelect.replaceChildren(...labelStyles.map((style) =>
+        Object.assign(document.createElement('option'), { value: style.id, textContent: style.name })));
+    }
+
+    function openStyleForm(style) {
+      editingStyle = style;
+      const values = style ?? { name: '', font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null };
+      styleInputs.name.value = values.name;
+      styleInputs.font.value = values.font;
+      styleInputs.size.value = values.size;
+      styleInputs.color.value = values.color;
+      styleInputs['outline-on'].checked = !!values.outline;
+      styleInputs.outline.value = values.outline ?? '#ffffff';
+      styleInputs['shadow-on'].checked = !!values.shadow;
+      styleInputs.shadow.value = values.shadow ?? '#000000';
+      styleForm.hidden = false;
+      styleInputs.name.focus();
+    }
+
+    function closeStyleForm() {
+      editingStyle = null;
+      styleForm.hidden = true;
+    }
+
+    document.getElementById('new-label-style').addEventListener('click', () => openStyleForm(null));
+    document.getElementById('style-cancel').addEventListener('click', closeStyleForm);
+    styleForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      recordUndo();
+      const values = {
+        name: styleInputs.name.value.trim(),
+        font: styleInputs.font.value.trim(),
+        size: Math.max(4, Number(styleInputs.size.value) || 24),
+        color: styleInputs.color.value,
+        outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
+        shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
+      };
+      if (editingStyle) Object.assign(editingStyle, values);
+      else labelStyles.push({ id: nextStyleId++, ...values });
+      closeStyleForm();
+      renderLabelStyles();
+      draw();
+    });
+
+    labelStyleSelect.addEventListener('change', () => {
+      recordUndo();
+      selectedLabel.styleId = Number(labelStyleSelect.value);
+      labelStyleSelect.blur();
+      draw();
+    });
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, () => selectedLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
@@ -1256,7 +1385,9 @@
       fillColorField.hidden = !fill?.visible;
       if (fill) fillColorInput.value = fill.color;
       labelProperties.hidden = !selectedLabel;
+      labelStylesSection.hidden = !!selectedLabel;
       if (selectedLabel) {
+        labelStyleSelect.value = styleOf(selectedLabel).id;
         // Leave a field alone while it's being typed in.
         const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
         show(labelTextInput, selectedLabel.text);
@@ -1276,10 +1407,30 @@
       ctx.restore();
     }
 
-    // Text labels on the map, at background-pixel positions. Their text size is
-    // in background pixels too, so labels scale with the map.
-    const labels = []; // { x, y, text }
-    const LABEL_SIZE = 24;
+    // Text labels on the map, at background-pixel positions. Every display
+    // property comes from the label's style; sizes are in background pixels
+    // too, so labels scale with the map.
+    const labels = []; // { x, y, text, styleId }
+    // { id, name, font, size, color, outline, shadow }; outline and shadow are
+    // null when off. The first style is the default and can't be deleted.
+    const labelStyles = [{ id: 1, name: 'Default', font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null }];
+    let nextStyleId = 2;
+    const styleOf = (label) => labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0];
+    const fontOf = (style) => `${style.size}px "${style.font}", sans-serif`;
+
+    // Fetches a Google font the first time a style uses it, and redraws once
+    // it can be drawn.
+    const requestedFonts = new Set();
+    function loadFont(font) {
+      if (requestedFonts.has(font)) return;
+      requestedFonts.add(font);
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}&display=swap`;
+      document.head.append(link);
+      link.addEventListener('load', () => document.fonts.load(`16px "${font}"`).then(() => draw()));
+    }
+
     const labelInput = document.getElementById('label-input');
     let editingLabel = null; // the spot a label is being typed for
 
@@ -1297,7 +1448,7 @@
       const text = labelInput.value.trim();
       if (keep && text) {
         recordUndo();
-        labels.push({ x: editingLabel.x, y: editingLabel.y, text });
+        labels.push({ x: editingLabel.x, y: editingLabel.y, text, styleId: labelStyles[0].id });
       }
       editingLabel = null;
       labelInput.hidden = true;
@@ -1308,7 +1459,8 @@
       if (!editingLabel) return;
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
-      labelInput.style.fontSize = `${LABEL_SIZE * view.scale}px`;
+      const style = labelStyles[0];
+      labelInput.style.font = fontOf({ ...style, size: style.size * view.scale });
     }
 
     labelInput.addEventListener('keydown', (e) => {
@@ -1319,11 +1471,12 @@
 
     // A label's box in background pixels, centred on its spot.
     function labelBox(label) {
+      const style = styleOf(label);
       ctx.save();
-      ctx.font = `${LABEL_SIZE}px sans-serif`;
+      ctx.font = fontOf(style);
       const width = ctx.measureText(label.text).width;
       ctx.restore();
-      return { x: label.x - width / 2, y: label.y - LABEL_SIZE / 2, w: width, h: LABEL_SIZE };
+      return { x: label.x - width / 2, y: label.y - style.size / 2, w: width, h: style.size };
     }
 
     function labelAt(p) {
@@ -1335,12 +1488,30 @@
     }
 
     function drawLabels() {
+      const dpr = window.devicePixelRatio || 1;
       ctx.save();
-      ctx.fillStyle = '#000';
-      ctx.font = `${LABEL_SIZE}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (const label of labels) ctx.fillText(label.text, label.x, label.y);
+      ctx.lineJoin = 'round';
+      for (const label of labels) {
+        const style = styleOf(label);
+        loadFont(style.font);
+        ctx.font = fontOf(style);
+        // Canvas shadows are in device pixels, so scale them with the map.
+        ctx.shadowColor = style.shadow ?? 'transparent';
+        ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
+        ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
+        if (style.outline) {
+          ctx.strokeStyle = style.outline;
+          ctx.lineWidth = style.size * 0.15;
+          ctx.strokeText(label.text, label.x, label.y);
+          ctx.shadowColor = 'transparent';
+        }
+        ctx.fillStyle = style.color;
+        ctx.fillText(label.text, label.x, label.y);
+      }
+      ctx.shadowColor = 'transparent';
+      ctx.shadowOffsetY = 0;
       if (selectedLabel) {
         // Same white-with-shadow look as other selections, a few pixels clear of the text.
         const box = labelBox(selectedLabel);
@@ -1919,6 +2090,7 @@
       draw();
     });
 
+    renderLabelStyles();
     new ResizeObserver(resize).observe(canvas);
   </script>
 </body>

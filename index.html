@@ -808,6 +808,20 @@
         Device
         <div id="device-list"></div>
       </div>
+      <div class="group">
+        <label class="row">
+          Default zoom
+          <span class="slider"><input type="range" min="10" max="600" step="1" value="100" aria-label="Default zoom"><span class="percent-field"><input id="preview-zoom" type="number" step="1" value="100"></span></span>
+        </label>
+        <label class="row">
+          Horizontal offset
+          <span class="slider"><input type="range" min="-100" max="100" step="1" value="0" aria-label="Horizontal offset"><span class="percent-field"><input id="preview-offset-x" type="number" step="1" value="0"></span></span>
+        </label>
+        <label class="row">
+          Vertical offset
+          <span class="slider"><input type="range" min="-100" max="100" step="1" value="0" aria-label="Vertical offset"><span class="percent-field"><input id="preview-offset-y" type="number" step="1" value="0"></span></span>
+        </label>
+      </div>
     </div>
     <div id="path-panel">
       <div class="group">
@@ -1050,11 +1064,11 @@
       { name: 'iPhone 17 Pro', w: 402, h: 874 },
       { name: 'Pixel 10', w: 412, h: 923 },
     ];
-    let previewDevice = null;
+    let previewDevice = DEVICES[0];
     document.getElementById('device-list').replaceChildren(...DEVICES.map((device) => {
       const row = document.createElement('label');
       row.className = 'row';
-      const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'device' });
+      const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'device', checked: device === previewDevice });
       pick.addEventListener('change', () => {
         previewDevice = device;
         pick.blur();
@@ -1065,18 +1079,59 @@
       row.append(name, Object.assign(document.createElement('span'), { className: 'device-size', textContent: `${device.w} × ${device.h}` }));
       return row;
     }));
-    // The device's screen, centred over the canvas at its real size.
+    // Devices share one scale, the largest that fits every device inside
+    // the canvas with room around it, so they stay true to each other's size.
+    const PREVIEW_INSET = 40;
+    const PHONE_BORDER = 12;
+    function previewFrame() {
+      const room = PREVIEW_INSET + PHONE_BORDER;
+      const k = Math.min(
+        (canvas.clientWidth - 2 * room) / Math.max(...DEVICES.map((device) => device.w)),
+        (canvas.clientHeight - 2 * room) / Math.max(...DEVICES.map((device) => device.h)),
+      );
+      const w = previewDevice.w * k;
+      const h = previewDevice.h * k;
+      return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
+    }
+    // In preview, the fields set the view: the default zoom as the device
+    // would see it, and offsets from -100% to 100% that slide the map until
+    // its edge meets the screen's edge.
+    const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y'].map((id) => document.getElementById(id));
+    const [previewZoomInput, previewOffsetXInput, previewOffsetYInput] = previewInputs;
+    for (const field of previewInputs) {
+      const slider = field.closest('.slider').querySelector('input[type="range"]');
+      slider.addEventListener('input', () => {
+        field.value = slider.value;
+        draw();
+      });
+      slider.addEventListener('change', () => slider.blur());
+      field.addEventListener('input', () => {
+        slider.value = field.value;
+        draw();
+      });
+      field.addEventListener('change', () => field.blur());
+    }
+    const previewZoom = () => Math.min(MAX_SCALE * 100, Math.max(MIN_SCALE * 100, Number(previewZoomInput.value) || 100));
+    function applyPreviewView() {
+      const frame = previewFrame();
+      view.scale = (previewZoom() / 100) * frame.k;
+      const size = BACKGROUND * view.scale;
+      const offset = (input) => Math.min(100, Math.max(-100, Number(input.value) || 0)) / 100;
+      view.x = frame.x + frame.w / 2 - size / 2 - offset(previewOffsetXInput) * Math.max(0, (size - frame.w) / 2);
+      view.y = frame.y + frame.h / 2 - size / 2 - offset(previewOffsetYInput) * Math.max(0, (size - frame.h) / 2);
+    }
+    // The device drawn as a phone around its screen.
     function drawDeviceFrame() {
-      if (!previewDevice) return;
+      const frame = previewFrame();
       const dpr = window.devicePixelRatio || 1;
-      const { w, h } = previewDevice;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-      ctx.shadowBlur = 4 * dpr;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(Math.round((canvas.clientWidth - w) / 2), Math.round((canvas.clientHeight - h) / 2), w, h);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = PHONE_BORDER;
+      ctx.beginPath();
+      const b = PHONE_BORDER / 2;
+      ctx.roundRect(frame.x - b, frame.y - b, frame.w + 2 * b, frame.h + 2 * b, frame.w * 0.13 + b);
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1116,7 +1171,17 @@
       draw();
     }
 
+    // Preview takes over the view and the layer, and gives both back after.
+    let beforePreview = null;
     function setMode(mode) {
+      if (mode === 'preview' && !inPreview()) {
+        beforePreview = { view: { ...view }, layer: layerSelect.value };
+        layerSelect.value = 'Automatic';
+      } else if (mode !== 'preview' && inPreview()) {
+        Object.assign(view, beforePreview.view);
+        layerSelect.value = beforePreview.layer;
+      }
+      document.getElementById('view-menu').hidden = mode === 'preview';
       for (const button of modeButtons) {
         button.setAttribute('aria-pressed', button.dataset.mode === mode);
       }
@@ -1760,7 +1825,9 @@
 
     const zoomInput = document.getElementById('zoom-input');
     const autoLayers = document.getElementById('auto-layers');
-    const zoomPercent = () => Math.round(view.scale * 100);
+    // In preview, the zoom is the one the device would see.
+    const zoomPercent = () => (inPreview() ? previewZoom() : Math.round(view.scale * 100));
+    const inPreview = () => !document.getElementById('preview-panel').hidden;
     // Zooms about the middle of the canvas.
     function zoomTo(scale) {
       const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
@@ -1815,6 +1882,7 @@
     }
 
     function draw() {
+      if (inPreview()) applyPreviewView();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       // Under Automatic, names the layers the current zoom shows.
       autoLayers.hidden = layerSelect.value !== 'Automatic';
@@ -4059,6 +4127,8 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // Preview's zoom comes only from its field.
+      if (inPreview()) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -4424,7 +4494,8 @@
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+      // Preview's view comes only from its fields.
+      if (e.button !== 0 || inPreview()) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       if (spaceHeld) {

@@ -501,8 +501,8 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 6px;
-      padding: 6px 8px;
+      margin-top: 4px;
+      padding: 3px 6px;
       background: #fff;
       border-radius: 6px;
     }
@@ -522,7 +522,7 @@
     .style-option-body {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 0;
       min-width: 0;
     }
     .style-option-name {
@@ -2249,7 +2249,7 @@
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
     // A canvas showing text drawn in a style.
-    const PREVIEW_TEXT_SIZE = 20;
+    const PREVIEW_TEXT_SIZE = 15;
     // extra carries a label's icon settings, if any.
     function stylePreview(style, text, room, extra = {}) {
       const { icon, iconSize } = extra;
@@ -2260,7 +2260,7 @@
       // Room for the outline and shadow around the box, and for an icon drawn
       // bigger than the room the label gives it.
       const overflow = icon && iconSize ? Math.max(0, (iconSize - style.iconSize) / 2) : 0;
-      const margin = style.size * 0.5 + overflow;
+      const margin = style.size * 0.25 + overflow;
       const w = box.w + 2 * margin;
       const h = box.h + 2 * margin;
       // Every style is shown at one text size, whatever its real size, and

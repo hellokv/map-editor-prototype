@@ -329,6 +329,9 @@
       display: inline-flex;
       align-items: center;
     }
+    .percent-field.px::after {
+      content: 'px';
+    }
     .percent-field::after {
       content: '%';
       position: absolute;
@@ -821,6 +824,10 @@
           Vertical offset
           <span class="slider"><input type="range" min="-100" max="100" step="1" value="0" aria-label="Vertical offset"><span class="percent-field"><input id="preview-offset-y" type="number" step="1" value="0"></span></span>
         </label>
+        <label class="row">
+          Blur
+          <span class="slider"><input type="range" min="0" max="40" step="1" value="20" aria-label="Blur"><span class="percent-field px"><input id="preview-blur" type="number" min="0" step="1" value="20"></span></span>
+        </label>
       </div>
     </div>
     <div id="path-panel">
@@ -1059,19 +1066,23 @@
       background: document.getElementById('background-panel'),
       labels: document.getElementById('labels-panel'),
     };
+    // Camera cutouts, centred across the top of the screen: a pill (Dynamic
+    // Island), a notch hanging from the top edge, or a round punch hole.
+    const ISLAND = { w: 125, h: 37, top: 11 };
+    const PUNCH_HOLE = { w: 24, h: 24, top: 12 };
     // Screen sizes in CSS pixels, with the bands the system and browser take
     // at the top and bottom: on the iPhone the status bar, then Safari's
     // bottom toolbar and the home indicator; on the Pixel the status bar and
     // Chrome's address bar, then the gesture bar.
     const DEVICES = [
-      { name: 'iPhone 17 Pro', w: 402, h: 874, top: 62, bottom: 86 },
-      { name: 'iPhone 17 Pro Max', w: 440, h: 956, top: 62, bottom: 86 },
-      { name: 'iPhone Air', w: 420, h: 912, top: 62, bottom: 86 },
-      { name: 'iPhone 16e', w: 390, h: 844, top: 47, bottom: 83 },
-      { name: 'Pixel 10', w: 412, h: 923, top: 108, bottom: 24 },
-      { name: 'Pixel 10 Pro', w: 410, h: 914, top: 108, bottom: 24 },
-      { name: 'Pixel 10 Pro XL', w: 414, h: 921, top: 108, bottom: 24 },
-      { name: 'Pixel 9a', w: 412, h: 915, top: 108, bottom: 24 },
+      { name: 'iPhone 17 Pro', w: 402, h: 874, top: 62, bottom: 86, cutout: ISLAND },
+      { name: 'iPhone 17 Pro Max', w: 440, h: 956, top: 62, bottom: 86, cutout: ISLAND },
+      { name: 'iPhone Air', w: 420, h: 912, top: 62, bottom: 86, cutout: ISLAND },
+      { name: 'iPhone 16e', w: 390, h: 844, top: 47, bottom: 83, cutout: { notch: true, w: 162, h: 32 } },
+      { name: 'Pixel 10', w: 412, h: 923, top: 108, bottom: 24, cutout: PUNCH_HOLE },
+      { name: 'Pixel 10 Pro', w: 410, h: 914, top: 108, bottom: 24, cutout: PUNCH_HOLE },
+      { name: 'Pixel 10 Pro XL', w: 414, h: 921, top: 108, bottom: 24, cutout: PUNCH_HOLE },
+      { name: 'Pixel 9a', w: 412, h: 915, top: 108, bottom: 24, cutout: PUNCH_HOLE },
     ];
     let previewDevice = DEVICES[0];
     document.getElementById('device-list').replaceChildren(...DEVICES.map((device) => {
@@ -1092,7 +1103,6 @@
     // the canvas with room around it, so they stay true to each other's size.
     const PREVIEW_INSET = 40;
     const PHONE_BORDER = 12;
-    const PREVIEW_BLUR = 20;
     const blurCopy = document.createElement('canvas');
     function previewFrame() {
       const room = PREVIEW_INSET + PHONE_BORDER;
@@ -1108,8 +1118,8 @@
     // map filling the screen's width, so each device shows the same part of
     // the map at its own resolution; and offsets from -100% to 100% that
     // slide the map until its edge meets the screen's edge.
-    const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y'].map((id) => document.getElementById(id));
-    const [previewZoomInput, previewOffsetXInput, previewOffsetYInput] = previewInputs;
+    const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y', 'preview-blur'].map((id) => document.getElementById(id));
+    const [previewZoomInput, previewOffsetXInput, previewOffsetYInput, previewBlurInput] = previewInputs;
     for (const field of previewInputs) {
       const slider = field.closest('.slider').querySelector('input[type="range"]');
       slider.addEventListener('input', () => {
@@ -1151,7 +1161,7 @@
       ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
       ctx.clip('evenodd');
-      ctx.filter = `blur(${PREVIEW_BLUR * dpr}px)`;
+      ctx.filter = `blur(${Math.max(0, Number(previewBlurInput.value) || 0) * dpr}px)`;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(blurCopy, 0, 0);
       ctx.restore();
@@ -1167,6 +1177,14 @@
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
       ctx.fillRect(frame.x, frame.y, frame.w, previewDevice.top * frame.k);
       ctx.fillRect(frame.x, frame.y + frame.h - previewDevice.bottom * frame.k, frame.w, previewDevice.bottom * frame.k);
+      const cutout = previewDevice.cutout;
+      const cw = cutout.w * frame.k;
+      const ch = cutout.h * frame.k;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      if (cutout.notch) ctx.roundRect(frame.x + (frame.w - cw) / 2, frame.y - ch, cw, 2 * ch, ch / 2);
+      else ctx.roundRect(frame.x + (frame.w - cw) / 2, frame.y + cutout.top * frame.k, cw, ch, ch / 2);
+      ctx.fill();
       ctx.restore();
       ctx.strokeStyle = '#000';
       ctx.lineWidth = PHONE_BORDER;

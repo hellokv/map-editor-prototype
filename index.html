@@ -216,6 +216,10 @@
       color: #cdd2da;
       cursor: default;
     }
+    #auto-layers {
+      font: 12px system-ui, sans-serif;
+      color: #666;
+    }
     #view-menu select {
       padding: 2px 4px;
       border: 1px solid #ccc;
@@ -560,6 +564,7 @@
         <option>Ground</option>
         <option>Automatic</option>
       </select>
+      <span id="auto-layers" hidden></span>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
       <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
     </div>
@@ -1658,6 +1663,7 @@
     let size = null;
 
     const zoomInput = document.getElementById('zoom-input');
+    const autoLayers = document.getElementById('auto-layers');
     const zoomPercent = () => Math.round(view.scale * 100);
     // Zooms about the middle of the canvas.
     function zoomTo(scale) {
@@ -1714,6 +1720,12 @@
 
     function draw() {
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
+      // Under Automatic, names the layers the current zoom shows.
+      autoLayers.hidden = layerSelect.value !== 'Automatic';
+      if (!autoLayers.hidden) {
+        const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
+        autoLayers.textContent = names.join(', ') || 'None';
+      }
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);

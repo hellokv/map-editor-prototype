@@ -249,7 +249,16 @@
       display: flex;
       padding: 2px;
     }
+    #label-icon-side {
+      display: flex;
+      gap: 2px;
+    }
+    #label-icon-side button {
+      display: flex;
+      padding: 2px;
+    }
     #label-pointer button[aria-pressed="true"],
+    #label-icon-side button[aria-pressed="true"],
     #panel #add-pin[aria-pressed="true"] {
       background: #ddd;
     }
@@ -432,6 +441,13 @@
               <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
               <div id="icon-options" hidden></div>
             </span>
+          </div>
+          <div id="label-icon-side-field" class="row">
+            Icon position
+            <div id="label-icon-side">
+              <button type="button" data-icon-side="left" aria-label="Icon left of text"><span class="material-symbols-rounded">align_horizontal_left</span></button>
+              <button type="button" data-icon-side="right" aria-label="Icon right of text"><span class="material-symbols-rounded">align_horizontal_right</span></button>
+            </div>
           </div>
           <label id="label-icon-size-field" class="row">
             Icon size
@@ -1929,10 +1945,12 @@
 
     // A canvas showing text drawn in a style.
     const PREVIEW_TEXT_SIZE = 20;
-    function stylePreview(style, text, room, icon = null, iconSize = undefined) {
+    // extra carries a label's icon, iconSize and iconSide, if any.
+    function stylePreview(style, text, room, extra = {}) {
+      const { icon, iconSize } = extra;
       const dpr = window.devicePixelRatio || 1;
       const preview = document.createElement('canvas');
-      const label = { x: 0, y: 0, text, styleId: style.id, icon, iconSize };
+      const label = { x: 0, y: 0, ...extra, text, styleId: style.id };
       const box = labelBox(label);
       // Room for the outline and shadow around the box, and for an icon drawn
       // bigger than the room the label gives it.
@@ -1961,7 +1979,7 @@
       paintLabel(c, label, style);
       return preview;
     }
-    function renderStylePicker(text, icon, iconSize) {
+    function renderStylePicker({ text, icon, iconSize, iconSide }) {
       const room = labelStylePicker.clientWidth - 30;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
@@ -1972,7 +1990,7 @@
           pick.blur();
           draw();
         });
-        option.append(pick, stylePreview(style, text, room, icon, iconSize), styleMenu(style));
+        option.append(pick, stylePreview(style, text, room, { icon, iconSize, iconSide }), styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -1988,6 +2006,16 @@
       button.addEventListener('click', () => {
         recordUndo();
         soleLabel().pointer = button.dataset.pointer || null;
+        button.blur();
+        draw();
+      });
+    }
+    const iconSideButtons = document.querySelectorAll('[data-icon-side]');
+    for (const button of iconSideButtons) {
+      button.addEventListener('click', () => {
+        recordUndo();
+        if (button.dataset.iconSide === 'right') soleLabel().iconSide = 'right';
+        else delete soleLabel().iconSide;
         button.blur();
         draw();
       });
@@ -2138,11 +2166,11 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
-        const { text, icon, iconSize } = selectedLabels[0];
-        const key = JSON.stringify([text, icon, iconSize, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        const { text, icon, iconSize, iconSide } = selectedLabels[0];
+        const key = JSON.stringify([text, icon, iconSize, iconSide, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
-          renderStylePicker(text, icon, iconSize);
+          renderStylePicker(selectedLabels[0]);
         }
         // Mixed styles leave the picker blank.
         const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
@@ -2168,6 +2196,10 @@
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
+        document.getElementById('label-icon-side-field').hidden = !iconOn;
+        for (const button of iconSideButtons) {
+          button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
+        }
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
@@ -2385,7 +2417,8 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
-    // An icon sits left of the text, this fraction of its size apart.
+    // An icon sits beside the text, left unless iconSide is 'right', this
+    // fraction of its size apart.
     const ICON_GAP = 0.25;
     // How a label's content lies, centred on its spot: its lines, each
     // centred on textX with the block centred on y, as [{ text, y, width }];
@@ -2410,8 +2443,8 @@
       const left = label.x - width / 2;
       return {
         lines,
-        textX: left + icon + gap + textWidth / 2,
-        iconX: left + icon / 2,
+        textX: label.iconSide === 'right' ? left + textWidth / 2 : left + icon + gap + textWidth / 2,
+        iconX: label.iconSide === 'right' ? left + width - icon / 2 : left + icon / 2,
         width,
         height: Math.max(texts.length ? style.size + (texts.length - 1) * step : 0, icon),
       };

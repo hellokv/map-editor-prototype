@@ -233,6 +233,10 @@
             <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
           </label>
           <label class="field">
+            <input id="style-caps" type="checkbox">
+            All caps
+          </label>
+          <label class="field">
             Color
             <input id="style-color" type="color">
           </label>
@@ -1256,7 +1260,7 @@
     const labelStyleSelect = document.getElementById('label-style');
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'caps', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Edits to an existing style show on the map as they're made. Save keeps
     // them as one undo step; Cancel puts back the values from when editing began.
@@ -1357,6 +1361,7 @@
         weight: Number(styleInputs.weight.value),
         size: Math.max(4, Number(styleInputs.size.value) || 24),
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
+        caps: styleInputs.caps.checked,
         color: styleInputs.color.value,
         outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
         shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
@@ -1377,6 +1382,7 @@
       styleInputs.weight.value = values.weight;
       styleInputs.size.value = values.size;
       styleInputs['line-height'].value = values.lineHeight;
+      styleInputs.caps.checked = values.caps;
       styleInputs.color.value = values.color;
       styleInputs['outline-on'].checked = !!values.outline;
       styleInputs.outline.value = values.outline ?? '#ffffff';
@@ -1597,12 +1603,13 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, weight, size, lineHeight, color, outline, shadow,
+    // { id, name, font, weight, size, lineHeight, caps, color, outline, shadow,
     // paddingY, paddingX, background, radius }; lineHeight is how far apart a
-    // label's lines stack, as a multiple of size. outline, shadow and
+    // label's lines stack, as a multiple of size, and caps shows the text in
+    // capitals without changing what was typed. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, caps: false, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
     let nextStyleId = 2;
     // The style new labels are created in, picked in the style list.
@@ -1710,7 +1717,7 @@
     function labelLines(label) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
-      const lines = label.text.split('\n');
+      const lines = (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
       const measured = lines.map((text, i) => ({
@@ -1750,17 +1757,24 @@
     function drawPointer(label, style) {
       const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
       const box = labelBox(label);
-      const startX = label.x + (dx * box.w) / 2;
-      const startY = label.y + (dy * box.h) / 2;
+      const cornerX = label.x + (dx * box.w) / 2;
+      const cornerY = label.y + (dy * box.h) / 2;
       const length = style.size * 0.75;
       const unit = Math.hypot(dx, dy);
+      const endX = cornerX + (dx / unit) * length;
+      const endY = cornerY + (dy / unit) * length;
+      // A rounded corner is cut away from the box's true corner, so start the
+      // line back inside the box, where the box drawn over it hides the join.
+      const inset = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+      const startX = cornerX - dx * inset;
+      const startY = cornerY - dy * inset;
       ctx.save();
       ctx.strokeStyle = style.background ? style.outline ?? style.background : style.color;
       ctx.lineWidth = style.size * 0.1;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(startX, startY);
-      ctx.lineTo(startX + (dx / unit) * length, startY + (dy / unit) * length);
+      ctx.lineTo(endX, endY);
       ctx.stroke();
       ctx.restore();
     }

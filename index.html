@@ -2149,9 +2149,9 @@
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
       const unit = PIN_SIZE / 24 / view.scale;
-      ctx.lineJoin = 'round';
-      ctx.fillStyle = colorOf(pathColor);
       for (const label of labels) {
+        const style = styleOf(label);
+        ctx.fillStyle = style.background ?? style.color;
         ctx.globalAlpha = selectedLabels.includes(label) ? 1 : 0.35;
         for (const pin of label.pins) {
           ctx.save();
@@ -2598,8 +2598,14 @@
               : [...selectedPins, pressedPin];
             if (!selectedLabels.includes(owner)) selectedLabels = [...selectedLabels, owner];
           } else {
-            selectedPins = [pressedPin];
-            selectedLabels = [owner];
+            const member = selectedPins.includes(pressedPin);
+            if (!member) {
+              selectedPins = [pressedPin];
+              selectedLabels = [owner];
+            }
+            // As with labels, the undo step waits for a move, and a click on
+            // one of several selected pins narrows to it.
+            drag = { pins: [...selectedPins], last: p, before: snapshot(), narrowToPin: member ? pressedPin : null };
           }
           draw();
           return;
@@ -2694,6 +2700,18 @@
           const p = toBackground(pointer.x, pointer.y);
           bendSegment(drag.bend, drag.t, p);
         }
+      } else if (drag?.pins) {
+        if (drag.before) {
+          recordUndo(drag.before);
+          drag.before = null;
+          drag.narrowToPin = null;
+        }
+        const p = toBackground(pointer.x, pointer.y);
+        for (const pin of drag.pins) {
+          pin.x = clampToBackground(pin.x + p.x - drag.last.x);
+          pin.y = clampToBackground(pin.y + p.y - drag.last.y);
+        }
+        drag.last = p;
       } else if (drag?.labels) {
         if (drag.before) {
           recordUndo(drag.before);
@@ -2745,8 +2763,12 @@
       if (!drag) return;
       const { toggle, marquee, active, base, group, moving, item } = drag;
       if (drag.narrowTo) selectedLabels = [drag.narrowTo];
+      if (drag.narrowToPin) {
+        selectedPins = [drag.narrowToPin];
+        selectedLabels = [pinOwner(drag.narrowToPin)];
+      }
       if (drag.point && drag.snapTo) mergePoints(drag.path, drag.point, drag.snapTo);
-      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !active && !group
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !drag.pins && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
       if (group && !moving) {

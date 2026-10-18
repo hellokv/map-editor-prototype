@@ -433,6 +433,10 @@
               <div id="icon-options" hidden></div>
             </span>
           </div>
+          <label id="label-icon-size-field" class="row">
+            Icon size
+            <input id="label-icon-size" type="number" min="4" max="200" step="1">
+          </label>
         </div>
         <div id="label-style-picker" class="group">
           Style
@@ -1924,13 +1928,15 @@
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
     // A canvas showing text drawn in a style, scaled down to fit room if needed.
-    function stylePreview(style, text, room, icon = null) {
+    function stylePreview(style, text, room, icon = null, iconSize = undefined) {
       const dpr = window.devicePixelRatio || 1;
       const preview = document.createElement('canvas');
-      const label = { x: 0, y: 0, text, styleId: style.id, icon };
+      const label = { x: 0, y: 0, text, styleId: style.id, icon, iconSize };
       const box = labelBox(label);
-      // Room for the outline and shadow around the box.
-      const margin = style.size * 0.5;
+      // Room for the outline and shadow around the box, and for an icon drawn
+      // bigger than the room the label gives it.
+      const overflow = icon && iconSize ? Math.max(0, (iconSize - style.iconSize) / 2) : 0;
+      const margin = style.size * 0.5 + overflow;
       const w = box.w + 2 * margin;
       const h = box.h + 2 * margin;
       const scale = Math.min(1, room / w);
@@ -1952,7 +1958,7 @@
       paintLabel(c, label, style);
       return preview;
     }
-    function renderStylePicker(text, icon) {
+    function renderStylePicker(text, icon, iconSize) {
       const room = labelStylePicker.clientWidth - 30;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
@@ -1963,7 +1969,7 @@
           pick.blur();
           draw();
         });
-        option.append(pick, stylePreview(style, text, room, icon), styleMenu(style));
+        option.append(pick, stylePreview(style, text, room, icon, iconSize), styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -1971,6 +1977,7 @@
       labelStylePicker.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
+    const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const pointerButtons = document.querySelectorAll('[data-pointer]');
@@ -2128,11 +2135,11 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
-        const { text, icon } = selectedLabels[0];
-        const key = JSON.stringify([text, icon, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        const { text, icon, iconSize } = selectedLabels[0];
+        const key = JSON.stringify([text, icon, iconSize, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
-          renderStylePicker(text, icon);
+          renderStylePicker(text, icon, iconSize);
         }
         // Mixed styles leave the picker blank.
         const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
@@ -2157,6 +2164,10 @@
         document.getElementById('label-icon-field').hidden = !iconOn;
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
+        document.getElementById('label-icon-size-field').hidden = !iconOn;
+        // Blank means the style's icon size, shown as the placeholder.
+        labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
+        show(labelIconSizeInput, selectedLabel.iconSize ?? '');
       }
     }
 
@@ -2491,7 +2502,9 @@
     }
     // Draws a label's icon centred on (x, label.y), once its glyph has loaded.
     function paintIcon(c, label, style, x, method) {
-      const font = `300 ${style.iconSize}px "Material Symbols Rounded"`;
+      // A label's own icon size changes only how big the icon looks; its room
+      // in the label stays the style's icon size.
+      const font = `300 ${label.iconSize ?? style.iconSize}px "Material Symbols Rounded"`;
       if (!document.fonts.check(font, label.icon)) {
         document.fonts.load(font, label.icon).then(() => {
           loadedFontCount++;

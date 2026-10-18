@@ -89,6 +89,21 @@
       font: 13px sans-serif;
       white-space: nowrap;
     }
+    #tooltip {
+      position: fixed;
+      z-index: 20;
+      padding: 3px 8px;
+      background: #333;
+      color: #fff;
+      border-radius: 4px;
+      font: 12px system-ui, sans-serif;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .device-size {
+      color: #666;
+      font-variant-numeric: tabular-nums;
+    }
     #view-menu {
       position: absolute;
       right: 8px;
@@ -526,13 +541,16 @@
       <button id="crossing-no" type="button">No</button>
     </div>
     <div id="mode-menu">
-      <button type="button" data-mode="labels" aria-label="Labels mode" aria-pressed="false">
+      <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
+        <span class="material-symbols-rounded">responsive_layout</span>
+      </button>
+      <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
         <span class="material-symbols-rounded">label</span>
       </button>
-      <button type="button" data-mode="path" aria-label="Path editing mode" aria-pressed="true">
+      <button type="button" data-mode="path" aria-label="Paths" aria-pressed="true">
         <span class="material-symbols-rounded">route</span>
       </button>
-      <button type="button" data-mode="background" aria-label="Background mode" aria-pressed="false">
+      <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
       </button>
       <div id="label-tools" hidden>
@@ -566,6 +584,7 @@
         </button>
       </div>
     </div>
+    <div id="tooltip" hidden></div>
     <div id="view-menu">
       <button id="layers-button" type="button" aria-label="Layer zoom levels"><span class="material-symbols-rounded">layers</span></button>
       <select id="layer-select" aria-label="Layer">
@@ -782,6 +801,12 @@
             </label>
           </div>
         </form>
+      </div>
+    </div>
+    <div id="preview-panel" hidden>
+      <div class="group">
+        Device
+        <div id="device-list"></div>
       </div>
     </div>
     <div id="path-panel">
@@ -1015,10 +1040,69 @@
     }
 
     const modePanels = {
+      preview: document.getElementById('preview-panel'),
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
       labels: document.getElementById('labels-panel'),
     };
+    // Viewport sizes in CSS pixels, so a device's frame is its real size on screen.
+    const DEVICES = [
+      { name: 'iPhone 17 Pro', w: 402, h: 874 },
+      { name: 'Pixel 10', w: 412, h: 923 },
+    ];
+    let previewDevice = null;
+    document.getElementById('device-list').replaceChildren(...DEVICES.map((device) => {
+      const row = document.createElement('label');
+      row.className = 'row';
+      const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'device' });
+      pick.addEventListener('change', () => {
+        previewDevice = device;
+        pick.blur();
+        draw();
+      });
+      const name = document.createElement('span');
+      name.append(pick, ` ${device.name}`);
+      row.append(name, Object.assign(document.createElement('span'), { className: 'device-size', textContent: `${device.w} × ${device.h}` }));
+      return row;
+    }));
+    // The device's screen, centred over the canvas at its real size.
+    function drawDeviceFrame() {
+      if (!previewDevice) return;
+      const dpr = window.devicePixelRatio || 1;
+      const { w, h } = previewDevice;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 4 * dpr;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.round((canvas.clientWidth - w) / 2), Math.round((canvas.clientHeight - h) / 2), w, h);
+      ctx.restore();
+    }
+
+    // Each button in the left menus shows its name after a short hover.
+    const TOOLTIP_DELAY = 500;
+    const tooltip = document.getElementById('tooltip');
+    let tooltipTimer = null;
+    const hideTooltip = () => {
+      clearTimeout(tooltipTimer);
+      tooltip.hidden = true;
+    };
+    for (const button of document.querySelectorAll('#mode-menu button, #shape-menu button')) {
+      button.addEventListener('mouseenter', () => {
+        hideTooltip();
+        tooltipTimer = setTimeout(() => {
+          const rect = button.getBoundingClientRect();
+          tooltip.textContent = button.getAttribute('aria-label');
+          tooltip.hidden = false;
+          tooltip.style.left = `${rect.right + 6}px`;
+          tooltip.style.top = `${rect.top + rect.height / 2 - tooltip.offsetHeight / 2}px`;
+        }, TOOLTIP_DELAY);
+      });
+      button.addEventListener('mouseleave', hideTooltip);
+      button.addEventListener('pointerdown', hideTooltip);
+    }
+
     const pathTools = document.getElementById('path-tools');
     const toolButtons = document.querySelectorAll('#path-tools [data-tool]');
     let tool = 'add';
@@ -1775,6 +1859,7 @@
           drawSketch();
           drawShapeSelection();
         }
+        if (!modePanels.preview.hidden) drawDeviceFrame();
         drawMarquee();
         updatePanel();
         return;

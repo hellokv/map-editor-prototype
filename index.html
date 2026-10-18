@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,change_history,circle,delete,east,image,label,more_vert,new_label,north,north_east,north_west,pentagon,polyline,route,shapes,south,south_east,south_west,square,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,change_history,circle,delete,east,image,label,more_vert,new_label,north,north_east,north_west,pentagon,polyline,rotate_right,route,shapes,south,south_east,south_west,square,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -662,7 +662,8 @@
     const shapeMenu = document.getElementById('shape-menu');
     const shapeButtons = document.querySelectorAll('[data-shape]');
     // { kind: 'circle' | 'square' | 'triangle' | 'polygon', x, y, w, h, color }
-    // in background pixels, with x, y the top left of the shape's box, and
+    // in background pixels, with x, y the top left of the shape's box before
+    // it's turned by rotation (radians, about its centre, absent when 0), and
     // sides on a polygon. Every shape is stretched to fill its box, so a
     // circle is an ellipse unless the box is square.
     const shapes = [];
@@ -2480,7 +2481,20 @@
     }
 
 
+    const rotate = (v, angle) => ({ x: v.x * Math.cos(angle) - v.y * Math.sin(angle), y: v.x * Math.sin(angle) + v.y * Math.cos(angle) });
+    const shapeCentre = (shape) => ({ x: shape.x + shape.w / 2, y: shape.y + shape.h / 2 });
+    // A background point in the shape's own unrotated frame.
+    function unrotated(shape, p) {
+      const c = shapeCentre(shape);
+      const v = rotate({ x: p.x - c.x, y: p.y - c.y }, -(shape.rotation ?? 0));
+      return { x: c.x + v.x, y: c.y + v.y };
+    }
     function traceShape(shape) {
+      const c = shapeCentre(shape);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(shape.rotation ?? 0);
+      ctx.translate(-c.x, -c.y);
       ctx.beginPath();
       if (shape.kind === 'circle') ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
       else if (shape.kind === 'square') ctx.rect(shape.x, shape.y, shape.w, shape.h);
@@ -2488,6 +2502,7 @@
         shapeCorners(shape).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
         ctx.closePath();
       }
+      ctx.restore();
     }
     function drawShapes() {
       const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
@@ -2497,12 +2512,31 @@
         ctx.fill();
       }
     }
+    // The corners of a shape's box, turned with it.
+    function boxCorners(shape) {
+      const c = shapeCentre(shape);
+      return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+        const v = rotate({ x: (sx * shape.w) / 2, y: (sy * shape.h) / 2 }, shape.rotation ?? 0);
+        return { x: c.x + v.x, y: c.y + v.y };
+      });
+    }
     function shapesBox(list) {
-      const x = Math.min(...list.map((shape) => shape.x));
-      const y = Math.min(...list.map((shape) => shape.y));
-      const w = Math.max(...list.map((shape) => shape.x + shape.w)) - x;
-      const h = Math.max(...list.map((shape) => shape.y + shape.h)) - y;
-      return { x, y, w, h };
+      const corners = list.flatMap(boxCorners);
+      const x = Math.min(...corners.map((p) => p.x));
+      const y = Math.min(...corners.map((p) => p.y));
+      return { x, y, w: Math.max(...corners.map((p) => p.x)) - x, h: Math.max(...corners.map((p) => p.y)) - y };
+    }
+    // The frame the handles sit on: one shape's own turned box, or the upright
+    // box around several. { x, y } is its centre.
+    function selectionFrame() {
+      const shape = soleShape();
+      if (shape) return { ...shapeCentre(shape), w: shape.w, h: shape.h, angle: shape.rotation ?? 0 };
+      const box = shapesBox(selectedShapes);
+      return { x: box.x + box.w / 2, y: box.y + box.h / 2, w: box.w, h: box.h, angle: 0 };
+    }
+    function framePoint(frame, fx, fy) {
+      const v = rotate({ x: (fx - 0.5) * frame.w, y: (fy - 0.5) * frame.h }, frame.angle);
+      return { x: frame.x + v.x, y: frame.y + v.y };
     }
     function drawShapeSelection() {
       if (!selectedShapes.length) return;
@@ -2515,46 +2549,77 @@
         traceShape(shape);
         ctx.stroke();
       }
-      const box = shapesBox(selectedShapes);
+      const frame = selectionFrame();
+      ctx.translate(frame.x, frame.y);
+      ctx.rotate(frame.angle);
       ctx.lineWidth = 1 / view.scale;
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.strokeRect(-frame.w / 2, -frame.h / 2, frame.w, frame.h);
       const size = HANDLE_SIZE / view.scale;
       ctx.fillStyle = '#fff';
       for (const [fx, fy] of Object.values(SHAPE_HANDLES)) {
-        ctx.fillRect(box.x + fx * box.w - size / 2, box.y + fy * box.h - size / 2, size, size);
+        ctx.fillRect((fx - 0.5) * frame.w - size / 2, (fy - 0.5) * frame.h - size / 2, size, size);
       }
       ctx.restore();
     }
     // The resize handle under a screen point, if any.
     function handleAt(s) {
       if (!s || !selectedShapes.length) return null;
-      const box = shapesBox(selectedShapes);
+      const frame = selectionFrame();
       for (const [name, [fx, fy]] of Object.entries(SHAPE_HANDLES)) {
-        const hx = (box.x + fx * box.w) * view.scale + view.x;
-        const hy = (box.y + fy * box.h) * view.scale + view.y;
-        if (Math.abs(s.x - hx) <= HANDLE_SIZE && Math.abs(s.y - hy) <= HANDLE_SIZE) return name;
+        const h = toScreen(framePoint(frame, fx, fy));
+        if (Math.hypot(s.x - h.x, s.y - h.y) <= HANDLE_SIZE) return name;
       }
       return null;
     }
+    function shapeHandleCursor() {
+      if (drag?.rotating) return rotateCursor;
+      const handle = handleAt(pointer);
+      return rotatesFrom(handle) ? rotateCursor : HANDLE_CURSORS[handle] ?? '';
+    }
+    // With Cmd (Ctrl elsewhere) held, a corner handle turns the selection.
+    const rotatesFrom = (handle) => commandHeld && ['nw', 'ne', 'se', 'sw'].includes(handle);
+    let commandHeld = false;
+    const trackCommand = (e) => {
+      const held = e.metaKey || e.ctrlKey;
+      if (held === commandHeld) return;
+      commandHeld = held;
+      updateCursor();
+    };
+    document.addEventListener('keydown', trackCommand);
+    document.addEventListener('keyup', trackCommand);
+    window.addEventListener('blur', () => { commandHeld = false; });
+    let rotateCursor = 'grab';
+    document.fonts.load('300 24px "Material Symbols Rounded"', 'rotate_right').then(() => {
+      const icon = document.createElement('canvas');
+      icon.width = icon.height = 24;
+      const c = icon.getContext('2d');
+      c.font = '300 24px "Material Symbols Rounded"';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.strokeStyle = '#fff';
+      c.lineWidth = 3;
+      c.strokeText('rotate_right', 12, 12);
+      c.fillText('rotate_right', 12, 12);
+      rotateCursor = `url(${icon.toDataURL()}) 12 12, grab`;
+      updateCursor();
+    });
     function shapeAt(p) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
-        const dx = (p.x - shape.x - shape.w / 2) / (shape.w / 2);
-        const dy = (p.y - shape.y - shape.h / 2) / (shape.h / 2);
+        const q = unrotated(shape, p);
+        const dx = (q.x - shape.x - shape.w / 2) / (shape.w / 2);
+        const dy = (q.y - shape.y - shape.h / 2) / (shape.h / 2);
         const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
           : shape.kind === 'square' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
-          : insidePolygon(shapeCorners(shape), p);
+          : insidePolygon(shapeCorners(shape), q);
         if (inside) return shape;
       }
       return null;
     }
     // Shapes lying wholly inside the box (in screen pixels).
     function shapesInBox(box) {
-      return shapes.filter((shape) => {
-        const x = shape.x * view.scale + view.x;
-        const y = shape.y * view.scale + view.y;
-        return x >= box.x && y >= box.y && x + shape.w * view.scale <= box.x + box.w && y + shape.h * view.scale <= box.y + box.h;
-      });
+      return shapes.filter((shape) => boxCorners(shape).map(toScreen).every((q) =>
+        q.x >= box.x && q.y >= box.y && q.x <= box.x + box.w && q.y <= box.y + box.h));
     }
     // The box after dragging one of its handles to p. Keeping the ratio
     // anchors the opposite corner or side, and keeps a side's centre in place.
@@ -2608,8 +2673,13 @@
       }
       const handle = handleAt(s);
       if (handle) {
-        const originals = selectedShapes.map((shape) => ({ shape, x: shape.x, y: shape.y, w: shape.w, h: shape.h }));
-        drag = { ...base, handle, box: shapesBox(selectedShapes), originals };
+        const frame = selectionFrame();
+        const originals = selectedShapes.map((shape) => ({ shape, ...shapeCentre(shape), w: shape.w, h: shape.h, rotation: shape.rotation ?? 0 }));
+        if (rotatesFrom(handle)) {
+          drag = { ...base, rotating: true, frame, originals, startAngle: Math.atan2(p.y - frame.y, p.x - frame.x) };
+        } else {
+          drag = { ...base, handle, frame, originals };
+        }
         return;
       }
       const sketchPoint = sketchPointAt(s);
@@ -2649,17 +2719,33 @@
       if (!moved) return;
       if (drag.drawing) {
         Object.assign(drag.drawing, draggedBox(drag.anchor, p, e.shiftKey));
+      } else if (drag.rotating) {
+        if (!drag.active) recordUndo(drag.before);
+        const { frame } = drag;
+        let turn = Math.atan2(p.y - frame.y, p.x - frame.x) - drag.startAngle;
+        if (e.shiftKey) turn = Math.round(turn / (Math.PI / 12)) * (Math.PI / 12);
+        for (const { shape, x, y, w, h, rotation } of drag.originals) {
+          const v = rotate({ x: x - frame.x, y: y - frame.y }, turn);
+          shape.x = frame.x + v.x - w / 2;
+          shape.y = frame.y + v.y - h / 2;
+          shape.rotation = rotation + turn;
+        }
       } else if (drag.handle) {
         if (!drag.active) recordUndo(drag.before);
-        const { box: from } = drag;
-        const to = resizedBox(from, drag.handle, p, e.shiftKey);
+        // Resizing happens in the frame's own turned axes.
+        const { frame } = drag;
+        const local = (q) => rotate({ x: q.x - frame.x, y: q.y - frame.y }, -frame.angle);
+        const from = { x: -frame.w / 2, y: -frame.h / 2, w: frame.w, h: frame.h };
+        const to = resizedBox(from, drag.handle, local(p), e.shiftKey);
         const sx = from.w ? to.w / from.w : 1;
         const sy = from.h ? to.h / from.h : 1;
         for (const { shape, x, y, w, h } of drag.originals) {
-          shape.x = to.x + (x - from.x) * sx;
-          shape.y = to.y + (y - from.y) * sy;
+          const o = local({ x, y });
+          const v = rotate({ x: to.x + (o.x - from.x) * sx, y: to.y + (o.y - from.y) * sy }, frame.angle);
           shape.w = Math.max(SHAPE_MIN_SIZE, w * sx);
           shape.h = Math.max(SHAPE_MIN_SIZE, h * sy);
+          shape.x = frame.x + v.x - shape.w / 2;
+          shape.y = frame.y + v.y - shape.h / 2;
         }
       } else if (drag.sketchPoints) {
         if (!drag.active) recordUndo(drag.before);
@@ -3259,7 +3345,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor : HANDLE_CURSORS[handleAt(pointer)] ?? '';
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor : shapeHandleCursor();
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 

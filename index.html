@@ -2286,7 +2286,8 @@
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn;
         document.getElementById('label-icon-outside-field').hidden = !iconOn;
-        document.getElementById('label-icon-offset-field').hidden = !iconOn;
+        // The offset only applies to an icon outside the label.
+        document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;
         labelIconOutsideToggle.checked = !!selectedLabel.iconOutside && !textHidden;
         show(labelIconOffsetInput, textHidden ? 0 : selectedLabel.iconOffset ?? 0);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
@@ -2527,8 +2528,8 @@
     // plus any icon outside it.
     //
     // The icon sits on the label's iconSide of the text (left when absent),
-    // the icon gap from the text, or from the box when iconOutside. Its
-    // iconOffset, from -1 to 1, slides it along that side by up to
+    // the icon gap from the text, or from the box when iconOutside. Outside,
+    // its iconOffset, from -1 to 1, slides it along that side by up to
     // ICON_OFFSET_REACH times the icon's drawn size: down to up for left and
     // right, left to right for top and bottom. Hidden text is kept on the label for accessibility but takes
     // no room.
@@ -2548,7 +2549,7 @@
       const gap = s && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
       const side = label.iconSide ?? 'left';
       const across = side === 'left' || side === 'right';
-      const offset = hidden ? 0 : label.iconOffset ?? 0;
+      const offset = outside ? label.iconOffset ?? 0 : 0;
       const reach = ICON_OFFSET_REACH * (label.iconSize ?? style.iconSize);
       const pad = (r) => ({ x: r.x - style.paddingX, y: r.y - style.paddingY, w: r.w + 2 * style.paddingX, h: r.h + 2 * style.paddingY });
       // Laid out around the text's centre at (0, 0), then moved onto the spot.

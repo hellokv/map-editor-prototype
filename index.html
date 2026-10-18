@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,more_vert,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -247,7 +247,42 @@
     #label-style-list .row {
       justify-content: flex-start;
     }
-    #label-style-list .row > span {
+    .style-menu {
+      position: relative;
+    }
+    #panel .style-menu > button {
+      display: flex;
+      padding: 2px;
+      border: none;
+      background: none;
+    }
+    #panel .style-menu > button:hover {
+      background: #e4e4e4;
+    }
+    .style-menu [role="menu"] {
+      position: absolute;
+      z-index: 1;
+      right: 0;
+      top: 100%;
+      display: flex;
+      flex-direction: column;
+      min-width: 100px;
+      padding: 4px 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    #panel .style-menu [role="menu"] button {
+      padding: 4px 12px;
+      border: none;
+      border-radius: 0;
+      text-align: left;
+    }
+    #panel .style-menu [role="menu"] button:hover {
+      background: #eee;
+    }
+    #label-style-list .row > span:not(.style-menu) {
       flex: 1;
     }
     #label-style-picker label {
@@ -1523,12 +1558,43 @@
     });
 
     // Rebuilds the style list and the label style picker from labelStyles.
+    function closeStyleMenus() {
+      for (const items of labelStyleList.querySelectorAll('[role="menu"]')) items.hidden = true;
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (!e.target.closest('.style-menu')) closeStyleMenus();
+    });
     function renderLabelStyles() {
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
         row.className = 'row';
+        const menu = document.createElement('span');
+        menu.className = 'style-menu';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.setAttribute('aria-label', 'More');
+        toggle.innerHTML = '<span class="material-symbols-rounded">more_vert</span>';
+        const items = document.createElement('div');
+        items.setAttribute('role', 'menu');
+        items.hidden = true;
         const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
         edit.addEventListener('click', () => openStyleForm(style));
+        const clone = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Clone' });
+        clone.addEventListener('click', () => {
+          recordUndo();
+          const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
+          labelStyles.push(copy);
+          renderLabelStyles();
+          openStyleForm(copy, true);
+          styleInputs.name.select();
+        });
+        items.append(edit, clone);
+        toggle.addEventListener('click', () => {
+          const opening = items.hidden;
+          closeStyleMenus();
+          items.hidden = !opening;
+        });
+        menu.append(toggle, items);
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',
           name: 'current-label-style',
@@ -1539,7 +1605,7 @@
           currentStyleId = style.id;
           pick.blur();
         });
-        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }), edit);
+        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }));
         if (i > 0) {
           const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
           remove.addEventListener('click', () => {
@@ -1550,6 +1616,7 @@
           });
           row.append(remove);
         }
+        row.append(menu);
         return row;
       }));
     }

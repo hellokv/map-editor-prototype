@@ -501,7 +501,20 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 8px;
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: #fff;
+      border-radius: 6px;
+    }
+    .style-option-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .style-option-name {
+      font-size: 11px;
+      color: #666;
     }
   </style>
 </head>
@@ -611,14 +624,6 @@
             <input id="label-y" type="number" min="0" max="1500" step="1">
           </label>
           <div class="row">
-            Layers
-            <div id="label-layers">
-              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
-              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
-              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
-            </div>
-          </div>
-          <div class="row">
             Pointer
             <div id="label-pointer">
               <button type="button" data-pointer="nw" aria-label="Top left"><span class="material-symbols-rounded">north_west</span></button>
@@ -672,6 +677,16 @@
             Icon gap
             <span class="slider"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"><input id="label-icon-gap" type="number" min="0" max="200" step="1"></span>
           </label>
+        </div>
+        <div class="group">
+          <div class="row">
+            Layers
+            <div id="label-layers">
+              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
+              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
+              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
+            </div>
+          </div>
         </div>
         <div id="label-style-picker" class="group">
           Style
@@ -2268,7 +2283,7 @@
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     function renderStylePicker(source) {
       const { text } = source;
-      const room = labelStylePicker.clientWidth - 30;
+      const room = labelStylePicker.clientWidth - 70;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
@@ -2278,7 +2293,10 @@
           pick.blur();
           draw();
         });
-        option.append(pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style));
+        const body = document.createElement('span');
+        body.className = 'style-option-body';
+        body.append(Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), stylePreview(style, text, room, iconSettingsOf(source)));
+        option.append(pick, body, styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -2335,21 +2353,24 @@
       });
     }
     // A label's layers: true for each of sky, canopy and ground it's on. It
-    // stays on at least one.
+    // stays on at least one. A layer button shows pressed when every selected
+    // label is on that layer; pressing it then takes them all off it, except
+    // labels it's the last layer of, and otherwise puts them all on it.
     const layerButtons = document.querySelectorAll('[data-layer]');
     for (const button of layerButtons) {
       button.addEventListener('click', () => {
-        const label = soleLabel();
-        const layers = { ...label.layers };
-        if (layers[button.dataset.layer] && Object.keys(layers).length === 1) {
-          button.blur();
-          return;
-        }
-        recordUndo();
-        if (layers[button.dataset.layer]) delete layers[button.dataset.layer];
-        else layers[button.dataset.layer] = true;
-        label.layers = layers;
+        const layer = button.dataset.layer;
+        const removing = selectedLabels.every((label) => label.layers?.[layer]);
+        const changing = selectedLabels.filter((label) => (removing ? Object.keys(label.layers).length > 1 : !label.layers?.[layer]));
         button.blur();
+        if (!changing.length) return;
+        recordUndo();
+        for (const label of changing) {
+          const layers = { ...label.layers };
+          if (removing) delete layers[layer];
+          else layers[layer] = true;
+          label.layers = layers;
+        }
         draw();
       });
     }
@@ -2516,6 +2537,9 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
+        for (const button of layerButtons) {
+          button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
+        }
         const source = selectedLabels[0];
         const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
         if (key !== stylePickerKey) {
@@ -2559,9 +2583,6 @@
         document.getElementById('label-icon-side-field').hidden = !iconOn;
         for (const button of iconSideButtons) {
           button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
-        }
-        for (const button of layerButtons) {
-          button.setAttribute('aria-pressed', !!selectedLabel.layers?.[button.dataset.layer]);
         }
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;

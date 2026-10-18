@@ -280,8 +280,8 @@
     #panel .style-menu [role="menu"] button:hover {
       background: #eee;
     }
-    #label-style-list .row > span:not(.style-menu) {
-      flex: 1;
+    #label-style-list .style-menu {
+      margin-left: auto;
     }
     #label-style-picker .style-menu {
       margin-left: auto;
@@ -1613,7 +1613,13 @@
     document.addEventListener('pointerdown', (e) => {
       if (!e.target.closest('.style-menu')) closeStyleMenus();
     });
+    // Previews are redrawn when a style, a loaded font or the list's width changes.
+    let styleListKey = '';
+    const currentStyleListKey = () => JSON.stringify([labelStyles, loadedFontCount, labelStyleList.clientWidth]);
     function renderLabelStyles() {
+      styleListKey = currentStyleListKey();
+      // Before the list is first laid out it has no width to fit previews to.
+      const room = (labelStyleList.clientWidth || 280) - 60;
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
         row.className = 'row';
@@ -1627,7 +1633,7 @@
           currentStyleId = style.id;
           pick.blur();
         });
-        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }), styleMenu(style, { deletable: i > 0 }));
+        row.append(pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0 }));
         return row;
       }));
     }
@@ -1734,8 +1740,36 @@
     // Enter in a field would otherwise submit the form and reload the page.
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
-    function renderStylePicker(text) {
+    // A canvas showing text drawn in a style, scaled down to fit room if needed.
+    function stylePreview(style, text, room) {
       const dpr = window.devicePixelRatio || 1;
+      const preview = document.createElement('canvas');
+      const label = { x: 0, y: 0, text, styleId: style.id };
+      const box = labelBox(label);
+      // Room for the outline and shadow around the box.
+      const margin = style.size * 0.5;
+      const w = box.w + 2 * margin;
+      const h = box.h + 2 * margin;
+      const scale = Math.min(1, room / w);
+      preview.style.width = `${w * scale}px`;
+      preview.style.height = `${h * scale}px`;
+      preview.width = Math.ceil(w * scale * dpr);
+      preview.height = Math.ceil(h * scale * dpr);
+      const c = preview.getContext('2d');
+      c.scale(scale * dpr, scale * dpr);
+      c.translate(w / 2, h / 2);
+      c.textAlign = 'center';
+      c.textBaseline = 'alphabetic';
+      c.lineJoin = 'round';
+      loadFont(style.font, style.weight);
+      c.font = fontOf(style);
+      c.shadowColor = style.shadow ?? 'transparent';
+      c.shadowBlur = style.size * 0.25 * scale * dpr;
+      c.shadowOffsetY = style.size * 0.08 * scale * dpr;
+      paintLabel(c, label, style);
+      return preview;
+    }
+    function renderStylePicker(text) {
       const room = labelStylePicker.clientWidth - 30;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
@@ -1746,31 +1780,7 @@
           pick.blur();
           draw();
         });
-        const preview = document.createElement('canvas');
-        const label = { x: 0, y: 0, text, styleId: style.id };
-        const box = labelBox(label);
-        // Room for the outline and shadow around the box.
-        const margin = style.size * 0.5;
-        const w = box.w + 2 * margin;
-        const h = box.h + 2 * margin;
-        const scale = Math.min(1, room / w);
-        preview.style.width = `${w * scale}px`;
-        preview.style.height = `${h * scale}px`;
-        preview.width = Math.ceil(w * scale * dpr);
-        preview.height = Math.ceil(h * scale * dpr);
-        const c = preview.getContext('2d');
-        c.scale(scale * dpr, scale * dpr);
-        c.translate(w / 2, h / 2);
-        c.textAlign = 'center';
-        c.textBaseline = 'alphabetic';
-        c.lineJoin = 'round';
-        loadFont(style.font, style.weight);
-        c.font = fontOf(style);
-        c.shadowColor = style.shadow ?? 'transparent';
-        c.shadowBlur = style.size * 0.25 * scale * dpr;
-        c.shadowOffsetY = style.size * 0.08 * scale * dpr;
-        paintLabel(c, label, style);
-        option.append(pick, preview, styleMenu(style));
+        option.append(pick, stylePreview(style, text, room), styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -1908,6 +1918,7 @@
       labelStylesSection.hidden = anyLabels;
       // Selecting a label swaps the style list and form for its properties.
       if (anyLabels && editingStyle) closeStyleForm();
+      if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
         const text = selectedLabels[0].text;
         const key = JSON.stringify([text, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);

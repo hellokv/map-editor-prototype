@@ -1973,12 +1973,16 @@
       const startY = cornerY - dy * inset;
       const endX = startX + (dx / unit) * (inset + length);
       const endY = startY + (dy / unit) * (inset + length);
+      const lineWidth = style.size * 0.1;
+      // The round cap and the line's sides would bulge past the box's edges
+      // where it leaves the box, so with a box the line reaches deeper inside.
+      const hidden = style.background ? lineWidth / 2 : 0;
       ctx.save();
       ctx.strokeStyle = style.background ? style.outline ?? style.background : style.color;
-      ctx.lineWidth = style.size * 0.1;
+      ctx.lineWidth = lineWidth;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(startX, startY);
+      ctx.moveTo(startX - dx * hidden, startY - dy * hidden);
       ctx.lineTo(endX, endY);
       ctx.stroke();
       ctx.restore();

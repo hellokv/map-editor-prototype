@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,location_on,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -2126,14 +2126,14 @@
       placeLabelInput();
     }
 
-    // Pins keep the same on-screen size at any zoom, with the glyph's tip on the spot.
+    // Pins keep the same on-screen size at any zoom, with the tip on the spot.
+    // The shape is Material's filled location_on, on its 24-unit grid with the
+    // tip at (12, 22); the icon font only carries the outline version.
     const PIN_SIZE = 32;
-    const pinFont = () => `300 ${PIN_SIZE / view.scale}px "Material Symbols Rounded"`;
-    document.fonts.load(pinFont(), 'location_on').then(() => draw());
+    const PIN_SHAPE = new Path2D('M12 12q.825 0 1.413-.588T14 10q0-.825-.587-1.412T12 8q-.825 0-1.412.588T10 10q0 .825.588 1.413T12 12Zm0 10q-4.025-3.425-6.012-6.362T4 10.2q0-3.75 2.413-5.975T12 2q3.175 0 5.588 2.225T20 10.2q0 2.5-1.988 5.438T12 22Z');
     function pinBox(pin) {
-      const w = (PIN_SIZE * 0.7) / view.scale;
-      const h = (PIN_SIZE * 0.85) / view.scale;
-      return { x: pin.x - w / 2, y: pin.y - h, w, h };
+      const unit = PIN_SIZE / 24 / view.scale;
+      return { x: pin.x - 8 * unit, y: pin.y - 20 * unit, w: 16 * unit, h: 20 * unit };
     }
     function pinAt(p) {
       for (const label of [...labels].reverse()) {
@@ -2148,20 +2148,18 @@
     function drawPins() {
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
-      ctx.font = pinFont();
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
+      const unit = PIN_SIZE / 24 / view.scale;
       ctx.lineJoin = 'round';
-      const drop = ctx.measureText('location_on').actualBoundingBoxDescent;
+      ctx.fillStyle = colorOf(pathColor);
       for (const label of labels) {
         ctx.globalAlpha = selectedLabels.includes(label) ? 1 : 0.35;
         for (const pin of label.pins) {
-          // A white halo keeps the pin visible over dark backgrounds.
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 3 / view.scale;
-          ctx.strokeText('location_on', pin.x, pin.y - drop);
-          ctx.fillStyle = '#000';
-          ctx.fillText('location_on', pin.x, pin.y - drop);
+          ctx.save();
+          ctx.translate(pin.x, pin.y);
+          ctx.scale(unit, unit);
+          ctx.translate(-12, -22);
+          ctx.fill(PIN_SHAPE, 'evenodd');
+          ctx.restore();
         }
       }
       ctx.globalAlpha = 1;

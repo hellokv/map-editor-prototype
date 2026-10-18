@@ -1624,6 +1624,7 @@
       if (!editingLabel) return;
       const text = labelInput.value.trim();
       const { label } = editingLabel;
+      let created = null;
       if (label && keep && text !== label.text) {
         // Clearing an existing label's text deletes it.
         recordUndo();
@@ -1632,11 +1633,13 @@
         selectedLabels = selectedLabels.filter((other) => labels.includes(other));
       } else if (!label && keep && text) {
         recordUndo();
-        labels.push({ x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id });
+        created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id };
+        labels.push(created);
       }
       editingLabel = null;
       labelInput.hidden = true;
       draw();
+      return created;
     }
 
     // The text box is invisible and only gathers typing; it sits on the
@@ -1651,7 +1654,13 @@
       lastTyped = performance.now();
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        finishLabel(true);
+        // Enter on a new label leaves it selected, ready to move or restyle.
+        const created = finishLabel(true);
+        if (created) {
+          selectedLabels = [created];
+          setLabelTool('select');
+          draw();
+        }
       }
       if (e.key === 'Escape') finishLabel(false);
     });

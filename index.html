@@ -89,6 +89,25 @@
       font: 13px sans-serif;
       white-space: nowrap;
     }
+    #view-menu {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #view-menu select {
+      padding: 2px 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font: 13px system-ui, sans-serif;
+    }
     #mode-menu,
     #shape-menu {
       position: absolute;
@@ -406,6 +425,15 @@
           <span class="material-symbols-rounded">add_circle</span>
         </button>
       </div>
+    </div>
+    <div id="view-menu">
+      <select id="layer-select" aria-label="Layer">
+        <option>Sky</option>
+        <option>Canopy</option>
+        <option>Ground</option>
+        <option>All</option>
+        <option>Automatic</option>
+      </select>
     </div>
     <div id="shape-menu" hidden>
       <button type="button" data-shape="circle" aria-label="Circle" aria-pressed="true">

@@ -1139,6 +1139,12 @@
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const radius = frame.w * 0.13;
+      // Everything outside the phone is dimmed.
+      ctx.beginPath();
+      ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fill('evenodd');
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);

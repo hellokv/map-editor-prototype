@@ -580,8 +580,10 @@
       for (const [name, panel] of Object.entries(modePanels)) {
         panel.hidden = name !== mode;
       }
+      const enteringLabels = mode === 'labels' && labelTools.hidden;
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
+      if (enteringLabels) setLabelTool('add');
       if (mode !== 'labels') {
         setLabelTool('select');
         finishLabel(false);

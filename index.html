@@ -677,6 +677,18 @@
           Fill color
           <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
+        <label id="shape-radius-field" class="row">
+          Border radius
+          <input id="shape-radius" type="number" min="0" step="1">
+        </label>
+        <label class="row">
+          <span><input id="shape-outline-on" type="checkbox"> Outline color</span>
+          <span class="color-field"><input id="shape-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <label class="row">
+          <span><input id="shape-shadow-on" type="checkbox"> Shadow color</span>
+          <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
         <div id="shape-single-fields">
           <label class="row">
             X
@@ -2239,7 +2251,14 @@
       }
       shapeProperties.hidden = !selectedShapes.length;
       if (selectedShapes.length) {
-        if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, selectedShapes[0].color);
+        const first = selectedShapes[0];
+        if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, first.color);
+        document.getElementById('shape-radius-field').hidden = selectedShapes.every((shape) => shape.kind === 'circle');
+        if (document.activeElement !== shapeRadiusInput) shapeRadiusInput.value = first.radius ?? 0;
+        for (const { key, toggle, input } of shapeColorToggles) {
+          toggle.checked = !!first[key];
+          if (first[key] && document.activeElement !== input) showColor(input, first[key]);
+        }
         const shape = soleShape();
         document.getElementById('shape-single-fields').hidden = !shape;
         if (shape) {
@@ -2827,6 +2846,44 @@
       shapeColorBefore = null;
       shapeColorInput.blur();
     });
+    // In background pixels.
+    const SHAPE_OUTLINE_WIDTH = 2;
+    const SHAPE_SHADOW_BLUR = 8;
+    const SHAPE_SHADOW_DROP = 3;
+    // Applies an input to every selected shape as it changes, as one undo step.
+    function bindShapeInput(input, apply) {
+      let before = null;
+      input.addEventListener('input', () => {
+        if (!selectedShapes.length) return;
+        before ??= snapshot();
+        for (const shape of selectedShapes) apply(shape);
+        draw();
+      });
+      input.addEventListener('change', () => {
+        if (before) recordUndo(before);
+        before = null;
+        input.blur();
+      });
+    }
+    const shapeRadiusInput = document.getElementById('shape-radius');
+    bindShapeInput(shapeRadiusInput, (shape) => { shape.radius = Math.max(0, Number(shapeRadiusInput.value) || 0); });
+    // An outline or shadow is a color while its box is ticked, absent otherwise.
+    const shapeColorToggles = ['outline', 'shadow'].map((key) => {
+      const toggle = document.getElementById(`shape-${key}-on`);
+      const input = document.getElementById(`shape-${key}`);
+      bindShapeInput(input, (shape) => { if (toggle.checked) shape[key] = colorOf(input); });
+      toggle.addEventListener('change', () => {
+        if (!selectedShapes.length) return;
+        recordUndo();
+        for (const shape of selectedShapes) {
+          if (toggle.checked) shape[key] = colorOf(input);
+          else delete shape[key];
+        }
+        toggle.blur();
+        draw();
+      });
+      return { key, toggle, input };
+    });
     const shapeXInput = liveField('shape-x', 'x', (input) => Number(input.value) || 0, soleShape);
     const shapeYInput = liveField('shape-y', 'y', (input) => Number(input.value) || 0, soleShape);
     const shapeWInput = liveField('shape-w', 'w', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
@@ -2868,21 +2925,48 @@
       ctx.rotate(shape.rotation ?? 0);
       ctx.translate(-c.x, -c.y);
       ctx.beginPath();
-      if (shape.kind === 'circle') ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
-      else if (shape.kind === 'square') ctx.rect(shape.x, shape.y, shape.w, shape.h);
-      else {
-        shapeCorners(shape).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      const radius = shape.radius ?? 0;
+      if (shape.kind === 'circle') {
+        ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
+      } else if (shape.kind === 'square') {
+        ctx.roundRect(shape.x, shape.y, shape.w, shape.h, Math.min(radius, shape.w / 2, shape.h / 2));
+      } else {
+        // Each corner is rounded with an arc that meets both its edges,
+        // starting from the middle of the last edge.
+        const corners = shapeCorners(shape);
+        const last = corners.at(-1);
+        ctx.moveTo((last.x + corners[0].x) / 2, (last.y + corners[0].y) / 2);
+        corners.forEach((p, i) => {
+          const next = corners[(i + 1) % corners.length];
+          const prev = corners.at(i - 1);
+          const room = Math.min(Math.hypot(next.x - p.x, next.y - p.y), Math.hypot(prev.x - p.x, prev.y - p.y)) / 2;
+          ctx.arcTo(p.x, p.y, next.x, next.y, Math.min(radius, room));
+        });
         ctx.closePath();
       }
       ctx.restore();
     }
     function drawShapes() {
       const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
+      const dpr = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.lineJoin = 'round';
       for (const shape of [...shapes, ...drawing]) {
+        // Canvas shadows are in device pixels, so they're scaled with the map.
+        ctx.shadowColor = shape.shadow ?? 'transparent';
+        ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * dpr;
+        ctx.shadowOffsetY = SHAPE_SHADOW_DROP * view.scale * dpr;
         ctx.fillStyle = shape.color;
         traceShape(shape);
         ctx.fill();
+        if (shape.outline) {
+          ctx.shadowColor = 'transparent';
+          ctx.strokeStyle = shape.outline;
+          ctx.lineWidth = SHAPE_OUTLINE_WIDTH;
+          ctx.stroke();
+        }
       }
+      ctx.restore();
     }
     // The corners of a shape's box, turned with it.
     function boxCorners(shape) {

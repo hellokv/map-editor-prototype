@@ -589,6 +589,10 @@
             Height
             <input id="shape-h" type="number" min="1" step="1">
           </label>
+          <label class="row">
+            Rotation
+            <input id="shape-rotation" type="number" step="1">
+          </label>
           <label id="shape-sides-field" class="row">
             Sides
             <input id="shape-sides" type="number" min="3" max="20" step="1">
@@ -2067,6 +2071,10 @@
           for (const [input, key] of [[shapeXInput, 'x'], [shapeYInput, 'y'], [shapeWInput, 'w'], [shapeHInput, 'h']]) {
             if (document.activeElement !== input) input.value = Math.round(shape[key]);
           }
+          if (document.activeElement !== shapeRotationInput) {
+            const degrees = Math.round(((shape.rotation ?? 0) * 180) / Math.PI);
+            shapeRotationInput.value = ((degrees % 360) + 360) % 360;
+          }
           document.getElementById('shape-sides-field').hidden = shape.kind !== 'polygon';
           if (shape.kind === 'polygon' && document.activeElement !== shapeSidesInput) shapeSidesInput.value = shape.sides;
         }
@@ -2460,6 +2468,7 @@
     const shapeYInput = liveField('shape-y', 'y', (input) => Number(input.value) || 0, soleShape);
     const shapeWInput = liveField('shape-w', 'w', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
     const shapeHInput = liveField('shape-h', 'h', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
+    const shapeRotationInput = liveField('shape-rotation', 'rotation', (input) => ((Number(input.value) || 0) * Math.PI) / 180, soleShape);
     const POLYGON_SIDES = 5;
     const shapeSidesInput = liveField('shape-sides', 'sides', (input) => Math.min(20, Math.max(3, Math.round(Number(input.value)) || POLYGON_SIDES)), soleShape);
 
@@ -2723,7 +2732,12 @@
         if (!drag.active) recordUndo(drag.before);
         const { frame } = drag;
         let turn = Math.atan2(p.y - frame.y, p.x - frame.x) - drag.startAngle;
-        if (e.shiftKey) turn = Math.round(turn / (Math.PI / 12)) * (Math.PI / 12);
+        if (e.shiftKey) {
+          // Snaps the first shape's angle itself to 45° steps, not the turn.
+          const step = Math.PI / 4;
+          const from = drag.originals[0].rotation;
+          turn = Math.round((from + turn) / step) * step - from;
+        }
         for (const { shape, x, y, w, h, rotation } of drag.originals) {
           const v = rotate({ x: x - frame.x, y: y - frame.y }, turn);
           shape.x = frame.x + v.x - w / 2;

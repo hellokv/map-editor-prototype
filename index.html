@@ -1239,7 +1239,17 @@
         row.className = 'field';
         const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
         edit.addEventListener('click', () => openStyleForm(style));
-        row.append(`${style.name} `, edit);
+        const pick = Object.assign(document.createElement('input'), {
+          type: 'radio',
+          name: 'current-label-style',
+          checked: style === currentStyle(),
+          title: 'Use for new labels',
+        });
+        pick.addEventListener('change', () => {
+          currentStyleId = style.id;
+          pick.blur();
+        });
+        row.append(pick, ` ${style.name} `, edit);
         if (i > 0) {
           const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
           remove.addEventListener('click', () => {
@@ -1494,6 +1504,9 @@
     const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
     let nextStyleId = 2;
+    // The style new labels are created in, picked in the style list.
+    let currentStyleId = 1;
+    const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];
     const styleOf = (label) => labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0];
     const fontOf = (style) => `${style.weight} ${style.size}px "${style.font}", sans-serif`;
 
@@ -1531,7 +1544,7 @@
       const text = labelInput.value.trim();
       if (keep && text) {
         recordUndo();
-        labels.push({ x: editingLabel.x, y: editingLabel.y, text, styleId: labelStyles[0].id });
+        labels.push({ x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id });
       }
       editingLabel = null;
       labelInput.hidden = true;
@@ -1542,7 +1555,7 @@
       if (!editingLabel) return;
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
-      const style = labelStyles[0];
+      const style = currentStyle();
       labelInput.style.font = fontOf({ ...style, size: style.size * view.scale });
     }
 

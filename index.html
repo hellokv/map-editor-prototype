@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,change_history,circle,delete,east,image,label,more_vert,new_label,north,north_east,north_west,pentagon,route,shapes,south,south_east,south_west,square,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,change_history,circle,delete,east,image,label,more_vert,new_label,north,north_east,north_west,pentagon,polyline,route,shapes,south,south_east,south_west,square,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -333,6 +333,9 @@
         <button type="button" data-background-tool="shapes" aria-label="Shapes" aria-pressed="false">
           <span class="material-symbols-rounded">shapes</span>
         </button>
+        <button type="button" data-background-tool="segments" aria-label="Segments" aria-pressed="false">
+          <span class="material-symbols-rounded">polyline</span>
+        </button>
       </div>
       <div id="path-tools">
         <hr>
@@ -592,6 +595,15 @@
           </label>
         </div>
       </div>
+      <div id="sketch-area-fields" class="group" hidden>
+        <label class="row">
+          <span><input id="sketch-fill" type="checkbox"> Fill</span>
+        </label>
+        <label id="sketch-fill-color-field" class="row">
+          Fill color
+          <span class="color-field"><input id="sketch-fill-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+      </div>
     </div>
   </div>
   <script src="google-fonts.js"></script>
@@ -655,6 +667,15 @@
     // circle is an ellipse unless the box is square.
     const shapes = [];
     let selectedShapes = [];
+    // What the Segments tool draws: one path of straight segments, kept apart
+    // from the paths in path mode. The loops it closes can be filled; each
+    // fill is a Set of its loop's points carrying a color.
+    const sketch = { points: [], segments: [] };
+    const sketchFills = [];
+    // The point the next segment starts from while drawing.
+    let sketchActive = null;
+    // { point } | { segment } | { area: Set of points }
+    let sketchSelected = null;
     let backgroundTool = 'select';
     let shapeKind = 'circle';
     const soleShape = () => (selectedShapes.length === 1 ? selectedShapes[0] : null);
@@ -662,6 +683,7 @@
     // The shape options sit just right of the Shapes tool button.
     function setBackgroundTool(name) {
       backgroundTool = name;
+      sketchActive = null;
       for (const button of backgroundToolButtons) {
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
@@ -670,7 +692,7 @@
         const modeMenu = document.getElementById('mode-menu');
         const button = backgroundTools.querySelector('[data-background-tool="shapes"]');
         shapeMenu.style.left = `${modeMenu.offsetLeft + modeMenu.offsetWidth + 6}px`;
-        shapeMenu.style.top = `${modeMenu.offsetTop + button.offsetTop}px`;
+        shapeMenu.style.top = `${modeMenu.offsetTop + button.offsetTop + (button.offsetHeight - shapeMenu.offsetHeight) / 2}px`;
       }
       updateCursor();
     }
@@ -717,6 +739,7 @@
       if (mode !== 'background') {
         setBackgroundTool('select');
         selectedShapes = [];
+        sketchSelected = null;
       }
       if (mode !== 'labels') {
         setLabelTool('select');
@@ -979,9 +1002,9 @@
       return points;
     }
 
-    function computeAreas() {
+    function computeAreas(list = paths) {
       const areas = [];
-      for (const path of paths) {
+      for (const path of list) {
         const out = new Map();
         const addEdge = (from, to, segment, toward) => {
           if (!out.has(from)) out.set(from, []);
@@ -1225,6 +1248,7 @@
         labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
         shapes: shapes.map((shape) => ({ ...shape })),
+        ...copySketch(),
         selection: copiedSelection,
       };
     }
@@ -1235,7 +1259,7 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, shapes: restoredShapes, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
@@ -1247,6 +1271,11 @@
       selectedPins = [];
       shapes.splice(0, shapes.length, ...restoredShapes);
       selectedShapes = [];
+      sketch.points.splice(0, sketch.points.length, ...restoredSketch.points);
+      sketch.segments.splice(0, sketch.segments.length, ...restoredSketch.segments);
+      sketchFills.splice(0, sketchFills.length, ...restoredSketchFills);
+      sketchActive = null;
+      sketchSelected = null;
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -1373,6 +1402,7 @@
         ctx.drawImage(backgroundImage, (BACKGROUND - w) / 2, (BACKGROUND - h) / 2, w, h);
       }
       drawShapes();
+      drawSketchFills();
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
@@ -1389,7 +1419,10 @@
         }
         drawLabels();
         if (!labelTools.hidden) drawPins();
-        if (!backgroundTools.hidden) drawShapeSelection();
+        if (!backgroundTools.hidden) {
+          drawSketch();
+          drawShapeSelection();
+        }
         drawMarquee();
         updatePanel();
         return;
@@ -2016,6 +2049,14 @@
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
       if (fill) showColor(fillColorInput, fill.color);
+      const sketchArea = sketchSelected?.area;
+      sketchAreaFields.hidden = !sketchArea;
+      if (sketchArea) {
+        const fill = sketchFillOf(sketchArea);
+        sketchFillToggle.checked = !!fill;
+        document.getElementById('sketch-fill-color-field').hidden = !fill;
+        if (fill && document.activeElement !== sketchFillColor) showColor(sketchFillColor, fill.color);
+      }
       shapeProperties.hidden = !selectedShapes.length;
       if (selectedShapes.length) {
         if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, selectedShapes[0].color);
@@ -2437,15 +2478,7 @@
       const spanY = Math.max(...unit.map((p) => p.y)) - minY;
       return unit.map((p) => ({ x: shape.x + ((p.x - minX) / spanX) * shape.w, y: shape.y + ((p.y - minY) / spanY) * shape.h }));
     }
-    function insidePolygon(p, corners) {
-      let inside = false;
-      for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
-        const a = corners[i];
-        const b = corners[j];
-        if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-      }
-      return inside;
-    }
+
 
     function traceShape(shape) {
       ctx.beginPath();
@@ -2510,7 +2543,7 @@
         const dy = (p.y - shape.y - shape.h / 2) / (shape.h / 2);
         const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
           : shape.kind === 'square' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
-          : insidePolygon(p, shapeCorners(shape));
+          : insidePolygon(shapeCorners(shape), p);
         if (inside) return shape;
       }
       return null;
@@ -2563,6 +2596,10 @@
     function shapePointerDown(e, s) {
       const p = toBackground(s.x, s.y);
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
+      if (backgroundTool === 'segments') {
+        drawSketchPoint(p, s);
+        return;
+      }
       if (backgroundTool === 'shapes') {
         const drawing = { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput) };
         if (shapeKind === 'polygon') drawing.sides = POLYGON_SIDES;
@@ -2575,7 +2612,24 @@
         drag = { ...base, handle, box: shapesBox(selectedShapes), originals };
         return;
       }
-      const pressed = shapeAt(p);
+      const sketchPoint = sketchPointAt(s);
+      const sketchSegment = sketchPoint ? null : sketchSegmentAt(s);
+      const pressed = sketchPoint || sketchSegment ? null : shapeAt(p);
+      const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]), s.x, s.y);
+      if (sketchPoint || sketchSegment || sketchArea) {
+        selectedShapes = [];
+        if (sketchPoint) {
+          sketchSelected = { point: sketchPoint };
+          drag = { ...base, sketchPoints: [sketchPoint], last: p };
+        } else if (sketchSegment) {
+          sketchSelected = { segment: sketchSegment };
+        } else {
+          sketchSelected = { area: sketchArea.points };
+          drag = { ...base, sketchPoints: [...sketchArea.points], last: p };
+        }
+        return;
+      }
+      sketchSelected = null;
       if (pressed && shiftHeld) {
         selectedShapes = selectedShapes.includes(pressed)
           ? selectedShapes.filter((shape) => shape !== pressed)
@@ -2607,6 +2661,13 @@
           shape.w = Math.max(SHAPE_MIN_SIZE, w * sx);
           shape.h = Math.max(SHAPE_MIN_SIZE, h * sy);
         }
+      } else if (drag.sketchPoints) {
+        if (!drag.active) recordUndo(drag.before);
+        for (const point of drag.sketchPoints) {
+          point.x += p.x - drag.last.x;
+          point.y += p.y - drag.last.y;
+        }
+        drag.last = p;
       } else if (drag.moving) {
         if (!drag.active) recordUndo(drag.before);
         drag.narrowTo = null;
@@ -2635,6 +2696,7 @@
         recordUndo(before);
         shapes.push(drawing);
         selectedShapes = [drawing];
+        sketchSelected = null;
         setBackgroundTool('select');
       } else if (narrowTo) {
         selectedShapes = [narrowTo];
@@ -2642,6 +2704,150 @@
         selectedShapes = [];
       }
     }
+
+    const SKETCH_POINT_RADIUS = 4;
+    const SKETCH_HIT_DISTANCE = 8;
+    const sketchFillOf = (points) => sketchFills.find((fill) => samePoints(fill, points));
+    function copySketch() {
+      const copies = new Map(sketch.points.map((point) => [point, { ...point }]));
+      return {
+        sketch: { points: [...copies.values()], segments: sketch.segments.map(([a, b]) => [copies.get(a), copies.get(b)]) },
+        sketchFills: sketchFills.map((fill) => Object.assign(new Set([...fill].map((point) => copies.get(point))), { color: fill.color })),
+      };
+    }
+    const toScreen = (p) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
+    function sketchPointAt(s) {
+      return sketch.points.findLast((point) => {
+        const q = toScreen(point);
+        return Math.hypot(q.x - s.x, q.y - s.y) <= SKETCH_HIT_DISTANCE;
+      }) ?? null;
+    }
+    function sketchSegmentAt(s) {
+      return sketch.segments.findLast(([a, b]) => {
+        const p = toScreen(a);
+        const q = toScreen(b);
+        const length2 = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+        const t = length2 ? Math.max(0, Math.min(1, ((s.x - p.x) * (q.x - p.x) + (s.y - p.y) * (q.y - p.y)) / length2)) : 0;
+        return Math.hypot(p.x + t * (q.x - p.x) - s.x, p.y + t * (q.y - p.y) - s.y) <= SKETCH_HIT_DISTANCE;
+      }) ?? null;
+    }
+    // Each click adds a point joined to the last; clicking an existing point
+    // joins to it, which ends the chain when one was being drawn.
+    function drawSketchPoint(p, s) {
+      const hit = sketchPointAt(s);
+      const point = hit ?? { x: p.x, y: p.y };
+      const joined = sketchActive && sketchActive !== point
+        && !sketch.segments.some(([a, b]) => (a === sketchActive && b === point) || (a === point && b === sketchActive));
+      if (!hit || joined) recordUndo();
+      if (!hit) sketch.points.push(point);
+      if (joined) sketch.segments.push([sketchActive, point]);
+      sketchActive = hit && sketchActive ? null : point;
+    }
+    function deleteSketchSelection() {
+      const { point, segment, area } = sketchSelected;
+      if (area) {
+        // On an area, Delete only ever removes its fill.
+        const fill = sketchFillOf(area);
+        if (!fill) return;
+        recordUndo();
+        sketchFills.splice(sketchFills.indexOf(fill), 1);
+        return;
+      }
+      recordUndo();
+      if (point) {
+        sketch.points.splice(sketch.points.indexOf(point), 1);
+        for (let i = sketch.segments.length - 1; i >= 0; i--) {
+          if (sketch.segments[i].includes(point)) sketch.segments.splice(i, 1);
+        }
+      } else {
+        sketch.segments.splice(sketch.segments.indexOf(segment), 1);
+      }
+      sketchSelected = null;
+    }
+    function drawSketchFills() {
+      for (const area of computeAreas([sketch])) {
+        const fill = sketchFillOf(area.points);
+        if (!fill) continue;
+        ctx.fillStyle = fill.color;
+        traceArea(area);
+        ctx.fill();
+      }
+    }
+    // The segments and points themselves only show in background mode.
+    function drawSketch() {
+      const px = 1 / view.scale;
+      const highlight = colorOf(pathColor);
+      ctx.save();
+      ctx.lineCap = 'round';
+      if (sketchSelected?.area) {
+        const area = computeAreas([sketch]).find((a) => samePoints(a.points, sketchSelected.area));
+        if (area) {
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+          ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 3 * px;
+          traceArea(area);
+          ctx.stroke();
+          ctx.shadowColor = 'transparent';
+        }
+      }
+      for (const segment of sketch.segments) {
+        const [a, b] = segment;
+        ctx.strokeStyle = segment === sketchSelected?.segment ? highlight : '#fff';
+        ctx.lineWidth = 2 * px;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      if (sketchActive && pointer && backgroundTool === 'segments') {
+        const p = toBackground(pointer.x, pointer.y);
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(sketchActive.x, sketchActive.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      for (const point of sketch.points) {
+        const marked = point === sketchActive || point === sketchSelected?.point;
+        ctx.fillStyle = marked ? highlight : '#fff';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.lineWidth = px;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, SKETCH_POINT_RADIUS * px, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    const sketchAreaFields = document.getElementById('sketch-area-fields');
+    const sketchFillToggle = document.getElementById('sketch-fill');
+    sketchFillToggle.addEventListener('change', () => {
+      const area = sketchSelected?.area;
+      if (!area) return;
+      recordUndo();
+      const fill = sketchFillOf(area);
+      if (fill) sketchFills.splice(sketchFills.indexOf(fill), 1);
+      else sketchFills.push(Object.assign(new Set(area), { color: colorOf(sketchFillColor) }));
+      sketchFillToggle.blur();
+      draw();
+    });
+    const sketchFillColor = document.getElementById('sketch-fill-color');
+    let sketchColorBefore = null;
+    sketchFillColor.addEventListener('input', () => {
+      const fill = sketchSelected?.area && sketchFillOf(sketchSelected.area);
+      if (!fill) return;
+      sketchColorBefore ??= snapshot();
+      fill.color = colorOf(sketchFillColor);
+      draw();
+    });
+    sketchFillColor.addEventListener('change', () => {
+      if (sketchColorBefore) recordUndo(sketchColorBefore);
+      sketchColorBefore = null;
+      sketchFillColor.blur();
+    });
 
     let copiedShapes = [];
     let shapePasteCount = 0;
@@ -2669,6 +2875,7 @@
         }));
         shapes.push(...pasted);
         selectedShapes = pasted;
+        sketchSelected = null;
         setBackgroundTool('select');
       } else if (nudge && selectedShapes.length) {
         e.preventDefault();
@@ -2678,16 +2885,24 @@
           shape.x += nudge[0] * step;
           shape.y += nudge[1] * step;
         }
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && sketchSelected) {
+        e.preventDefault();
+        deleteSketchSelection();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapes.length) {
         e.preventDefault();
         recordUndo();
         for (const shape of selectedShapes) shapes.splice(shapes.indexOf(shape), 1);
         selectedShapes = [];
+      } else if ((e.key === 'Escape' || e.key === 'Enter') && sketchActive) {
+        // Ends the chain of segments being drawn.
+        e.preventDefault();
+        sketchActive = null;
       } else if (e.key === 'Escape') {
         e.preventDefault();
         // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
-        if (!selectedShapes.length) setBackgroundTool('select');
+        if (!selectedShapes.length && !sketchSelected) setBackgroundTool('select');
         selectedShapes = [];
+        sketchSelected = null;
       } else {
         return;
       }
@@ -2973,7 +3188,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : HANDLE_CURSORS[handleAt(pointer)] ?? '';
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor : HANDLE_CURSORS[handleAt(pointer)] ?? '';
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 

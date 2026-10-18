@@ -2960,6 +2960,34 @@
       draw();
     });
 
+    // Labels fade in and out over LABEL_FADE_MS as they come into and go out
+    // of view. A label's fade starts settled, so new labels just appear.
+    const LABEL_FADE_MS = 200;
+    const labelFades = new WeakMap();
+    let fadeFrame = null;
+    function labelAlpha(label) {
+      const target = labelShown(label) ? 1 : 0;
+      const now = performance.now();
+      let fade = labelFades.get(label);
+      if (!fade) {
+        fade = { alpha: target, at: now };
+        labelFades.set(label, fade);
+      }
+      // A settled fade starts timing when its target changes, not at the
+      // last redraw.
+      if (fade.alpha === 0 || fade.alpha === 1) fade.at = Math.max(fade.at, now - 1000 / 60);
+      const step = (now - fade.at) / LABEL_FADE_MS;
+      fade.alpha = target > fade.alpha ? Math.min(target, fade.alpha + step) : Math.max(target, fade.alpha - step);
+      fade.at = now;
+      if (fade.alpha !== target && !fadeFrame) {
+        fadeFrame = requestAnimationFrame(() => {
+          fadeFrame = null;
+          draw();
+        });
+      }
+      return fade.alpha;
+    }
+
     function labelAt(p) {
       for (let i = labels.length - 1; i >= 0; i--) {
         if (!labelShown(labels[i])) continue;
@@ -3068,8 +3096,9 @@
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
       const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false };
-      const shown = labels.filter((label) => label !== editingLabel?.label && labelShown(label));
+      const shown = labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0);
       for (const label of typing ? [...shown, typing] : shown) {
+        ctx.globalAlpha = label === typing ? 1 : labelAlpha(label);
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
@@ -3080,6 +3109,7 @@
         if (label.pointer) drawPointer(label, style);
         paintLabel(ctx, label, style);
       }
+      ctx.globalAlpha = 1;
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
       if (typing && caretShown()) {
@@ -3132,10 +3162,10 @@
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
       const unit = pinUnit();
-      for (const label of labels.filter(labelShown)) {
+      for (const label of labels.filter((label) => labelAlpha(label) > 0)) {
         const style = styleOf(label);
         ctx.fillStyle = style.background ?? style.color;
-        ctx.globalAlpha = selectedLabels.includes(label) ? 1 : 0.35;
+        ctx.globalAlpha = (selectedLabels.includes(label) ? 1 : 0.35) * labelAlpha(label);
         for (const pin of label.pins) {
           ctx.save();
           ctx.translate(pin.x, pin.y);

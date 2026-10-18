@@ -297,6 +297,16 @@
       display: flex;
       padding: 2px;
     }
+    #label-layers {
+      display: flex;
+      gap: 2px;
+    }
+    #panel #label-layers button {
+      padding: 3px 8px;
+    }
+    #panel #label-layers button[aria-pressed="true"] {
+      background: #ddd;
+    }
     #label-icon-side {
       display: flex;
       gap: 2px;
@@ -469,6 +479,14 @@
             Y
             <input id="label-y" type="number" min="0" max="1500" step="1">
           </label>
+          <div class="row">
+            Layers
+            <div id="label-layers">
+              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
+              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
+              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
+            </div>
+          </div>
           <div class="row">
             Pointer
             <div id="label-pointer">
@@ -2147,6 +2165,20 @@
         draw();
       });
     }
+    // A label's layers: true for each of sky, canopy and ground it's on.
+    const layerButtons = document.querySelectorAll('[data-layer]');
+    for (const button of layerButtons) {
+      button.addEventListener('click', () => {
+        const label = soleLabel();
+        recordUndo();
+        const layers = { ...label.layers };
+        if (layers[button.dataset.layer]) delete layers[button.dataset.layer];
+        else layers[button.dataset.layer] = true;
+        label.layers = layers;
+        button.blur();
+        draw();
+      });
+    }
     const iconSideButtons = document.querySelectorAll('[data-icon-side]');
     for (const button of iconSideButtons) {
       button.addEventListener('click', () => {
@@ -2353,6 +2385,9 @@
         document.getElementById('label-icon-side-field').hidden = !iconOn;
         for (const button of iconSideButtons) {
           button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
+        }
+        for (const button of layerButtons) {
+          button.setAttribute('aria-pressed', !!selectedLabel.layers?.[button.dataset.layer]);
         }
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;

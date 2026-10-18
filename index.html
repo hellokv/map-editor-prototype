@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,delete,image,label,new_label,route">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,block,delete,east,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -53,6 +53,19 @@
       cursor: pointer;
     }
     #font-options div[aria-selected="true"] {
+      background: #ddd;
+    }
+    #label-pointer {
+      display: grid;
+      grid-template-columns: repeat(3, max-content);
+      gap: 2px;
+      margin-top: 4px;
+    }
+    #label-pointer button {
+      display: flex;
+      padding: 2px;
+    }
+    #label-pointer button[aria-pressed="true"] {
       background: #ddd;
     }
     #crossing-dialog {
@@ -175,20 +188,20 @@
             Y
             <input id="label-y" type="number" min="0" max="1500" step="1">
           </label>
-          <label class="field">
+          <div class="field">
             Pointer
-            <select id="label-pointer">
-              <option value="">None</option>
-              <option value="nw">Top left</option>
-              <option value="n">Top</option>
-              <option value="ne">Top right</option>
-              <option value="e">Right</option>
-              <option value="se">Bottom right</option>
-              <option value="s">Bottom</option>
-              <option value="sw">Bottom left</option>
-              <option value="w">Left</option>
-            </select>
-          </label>
+            <div id="label-pointer">
+              <button type="button" data-pointer="nw" aria-label="Top left"><span class="material-symbols-rounded">north_west</span></button>
+              <button type="button" data-pointer="n" aria-label="Top"><span class="material-symbols-rounded">north</span></button>
+              <button type="button" data-pointer="ne" aria-label="Top right"><span class="material-symbols-rounded">north_east</span></button>
+              <button type="button" data-pointer="w" aria-label="Left"><span class="material-symbols-rounded">west</span></button>
+              <button type="button" data-pointer="" aria-label="No pointer"><span class="material-symbols-rounded">block</span></button>
+              <button type="button" data-pointer="e" aria-label="Right"><span class="material-symbols-rounded">east</span></button>
+              <button type="button" data-pointer="sw" aria-label="Bottom left"><span class="material-symbols-rounded">south_west</span></button>
+              <button type="button" data-pointer="s" aria-label="Bottom"><span class="material-symbols-rounded">south</span></button>
+              <button type="button" data-pointer="se" aria-label="Bottom right"><span class="material-symbols-rounded">south_east</span></button>
+            </div>
+          </div>
         </div>
         <label class="field">
           Style
@@ -1447,13 +1460,15 @@
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
-    const labelPointerSelect = document.getElementById('label-pointer');
-    labelPointerSelect.addEventListener('change', () => {
-      recordUndo();
-      soleLabel().pointer = labelPointerSelect.value || null;
-      labelPointerSelect.blur();
-      draw();
-    });
+    const pointerButtons = document.querySelectorAll('[data-pointer]');
+    for (const button of pointerButtons) {
+      button.addEventListener('click', () => {
+        recordUndo();
+        soleLabel().pointer = button.dataset.pointer || null;
+        button.blur();
+        draw();
+      });
+    }
     const fillVisibleField = document.getElementById('fill-visible-field');
     const fillColorField = document.getElementById('fill-color-field');
     const fillVisibleToggle = document.getElementById('fill-visible');
@@ -1584,7 +1599,9 @@
         show(labelTextInput, selectedLabel.text);
         show(labelXInput, Math.round(selectedLabel.x));
         show(labelYInput, Math.round(selectedLabel.y));
-        labelPointerSelect.value = selectedLabel.pointer ?? '';
+        for (const button of pointerButtons) {
+          button.setAttribute('aria-pressed', button.dataset.pointer === (selectedLabel.pointer ?? ''));
+        }
       }
     }
 

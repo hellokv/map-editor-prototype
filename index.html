@@ -215,6 +215,10 @@
             <input id="style-size" type="number" min="4" max="200" step="1" required>
           </label>
           <label class="field">
+            Line height
+            <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
+          </label>
+          <label class="field">
             Color
             <input id="style-color" type="color">
           </label>
@@ -1238,7 +1242,7 @@
     const labelStyleSelect = document.getElementById('label-style');
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Edits to an existing style show on the map as they're made. Save keeps
     // them as one undo step; Cancel puts back the values from when editing began.
@@ -1338,6 +1342,7 @@
         font: styleInputs.font.value.trim(),
         weight: Number(styleInputs.weight.value),
         size: Math.max(4, Number(styleInputs.size.value) || 24),
+        lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
         color: styleInputs.color.value,
         outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
         shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
@@ -1357,6 +1362,7 @@
       styleInputs.font.value = values.font;
       styleInputs.weight.value = values.weight;
       styleInputs.size.value = values.size;
+      styleInputs['line-height'].value = values.lineHeight;
       styleInputs.color.value = values.color;
       styleInputs['outline-on'].checked = !!values.outline;
       styleInputs.outline.value = values.outline ?? '#ffffff';
@@ -1569,10 +1575,12 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, weight, size, color, outline, shadow, paddingY,
-    // paddingX, background, radius }; outline, shadow and background are null
-    // when off. The first style is the default and can't be deleted.
-    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    // { id, name, font, weight, size, lineHeight, color, outline, shadow,
+    // paddingY, paddingX, background, radius }; lineHeight is how far apart a
+    // label's lines stack, as a multiple of size. outline, shadow and
+    // background are null when off. The first style is the default and can't
+    // be deleted.
+    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, color: '#000000', outline: null, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
     let nextStyleId = 2;
     // The style new labels are created in, picked in the style list.
@@ -1666,14 +1674,11 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
-    // Lines of a label stack this far apart, as a multiple of the font size.
-    const LINE_HEIGHT = 1.2;
-
     // A label's lines, each centred on the label's x, with the block centred
     // on its y: [{ text, y, width }].
     function labelLines(label) {
       const style = styleOf(label);
-      const step = style.size * LINE_HEIGHT;
+      const step = style.size * style.lineHeight;
       const lines = label.text.split('\n');
       ctx.save();
       ctx.font = fontOf(style);
@@ -1691,7 +1696,7 @@
       const style = styleOf(label);
       const lines = labelLines(label);
       const width = Math.max(...lines.map((line) => line.width)) + 2 * style.paddingX;
-      const height = style.size + (lines.length - 1) * style.size * LINE_HEIGHT + 2 * style.paddingY;
+      const height = style.size + (lines.length - 1) * style.size * style.lineHeight + 2 * style.paddingY;
       return { x: label.x - width / 2, y: label.y - height / 2, w: width, h: height };
     }
 

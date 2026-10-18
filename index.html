@@ -2034,8 +2034,8 @@
       label.styleId = style.id;
       for (const key of STYLE_OVERRIDES) delete label[key];
     }
-    // Previews show the style's own values, not the label's overrides.
-    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside', 'iconOffset'];
+    // Previews show the style's own values, not the label's overrides or offset.
+    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     function renderStylePicker(source) {
       const { text } = source;

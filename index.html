@@ -1092,6 +1092,8 @@
     // the canvas with room around it, so they stay true to each other's size.
     const PREVIEW_INSET = 40;
     const PHONE_BORDER = 12;
+    const PREVIEW_BLUR = 20;
+    const blurCopy = document.createElement('canvas');
     function previewFrame() {
       const room = PREVIEW_INSET + PHONE_BORDER;
       const k = Math.min(
@@ -1139,7 +1141,20 @@
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const radius = frame.w * 0.13;
-      // Everything outside the phone is dimmed.
+      // Everything outside the phone is blurred, from a copy of the canvas
+      // drawn back through a blur filter, then dimmed.
+      blurCopy.width = canvas.width;
+      blurCopy.height = canvas.height;
+      blurCopy.getContext('2d').drawImage(canvas, 0, 0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
+      ctx.clip('evenodd');
+      ctx.filter = `blur(${PREVIEW_BLUR * dpr}px)`;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(blurCopy, 0, 0);
+      ctx.restore();
       ctx.beginPath();
       ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);

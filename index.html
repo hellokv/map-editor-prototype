@@ -29,6 +29,12 @@
       width: 100%;
       height: 100%;
     }
+    #label-input {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-family: sans-serif;
+      text-align: center;
+    }
     #crossing-dialog {
       position: absolute;
       display: flex;
@@ -97,6 +103,7 @@
 <body>
   <div id="canvas-area">
     <canvas id="canvas"></canvas>
+    <input id="label-input" type="text" hidden>
     <div id="crossing-dialog" hidden>
       Add intersections?
       <button id="crossing-yes" type="button">Yes</button>
@@ -208,6 +215,15 @@
   <script>
     const modeButtons = document.querySelectorAll('#mode-menu [data-mode]');
     const labelTools = document.getElementById('label-tools');
+    const newLabelButton = document.getElementById('new-label');
+    let addingLabel = false;
+
+    function setAddingLabel(on) {
+      addingLabel = on;
+      newLabelButton.setAttribute('aria-pressed', on);
+      updateCursor();
+    }
+    newLabelButton.addEventListener('click', () => setAddingLabel(!addingLabel));
     const modePanels = {
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
@@ -235,6 +251,10 @@
       }
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
+      if (mode !== 'labels') {
+        setAddingLabel(false);
+        finishLabel(false);
+      }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
       setTool('select');
@@ -727,6 +747,7 @@
         paths: copiedPaths,
         fills: fills.map((fill) => Object.assign(new Set([...fill].filter((p) => copies.has(p)).map(copy)), { visible: fill.visible, color: fill.color })),
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
+        labels: labels.map((label) => ({ ...label })),
         selection: copiedSelection,
       };
     }
@@ -737,10 +758,11 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
+      labels.splice(0, labels.length, ...restoredLabels);
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -879,6 +901,7 @@
         for (const group of groups) {
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
+        drawLabels();
         updatePanel();
         return;
       }
@@ -1028,6 +1051,8 @@
         ctx.fill();
         ctx.restore();
       }
+
+      drawLabels();
 
       if (drag?.marquee && drag.active) {
         const box = marqueeBox();
@@ -1212,6 +1237,58 @@
       group.segments.forEach(traceSegment);
       ctx.stroke();
       ctx.restore();
+    }
+
+    // Text labels on the map, at background-pixel positions. Their text size is
+    // in background pixels too, so labels scale with the map.
+    const labels = []; // { x, y, text }
+    const LABEL_SIZE = 24;
+    const labelInput = document.getElementById('label-input');
+    let editingLabel = null; // the spot a label is being typed for
+
+    function startLabel(p) {
+      finishLabel(true);
+      editingLabel = p;
+      labelInput.value = '';
+      labelInput.hidden = false;
+      placeLabelInput();
+      labelInput.focus();
+    }
+
+    function finishLabel(keep) {
+      if (!editingLabel) return;
+      const text = labelInput.value.trim();
+      if (keep && text) {
+        recordUndo();
+        labels.push({ x: editingLabel.x, y: editingLabel.y, text });
+      }
+      editingLabel = null;
+      labelInput.hidden = true;
+      draw();
+    }
+
+    function placeLabelInput() {
+      if (!editingLabel) return;
+      labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
+      labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
+      labelInput.style.fontSize = `${LABEL_SIZE * view.scale}px`;
+    }
+
+    labelInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finishLabel(true);
+      if (e.key === 'Escape') finishLabel(false);
+    });
+    labelInput.addEventListener('blur', () => finishLabel(true));
+
+    function drawLabels() {
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.font = `${LABEL_SIZE}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const label of labels) ctx.fillText(label.text, label.x, label.y);
+      ctx.restore();
+      placeLabelInput();
     }
 
     function traceArea(area) {
@@ -1422,6 +1499,7 @@
 
     function updateCursor() {
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      else if (addingLabel && !labelTools.hidden) canvas.style.cursor = 'text';
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 
@@ -1672,6 +1750,10 @@
         toggleInSelection(toggle);
       } else if (marquee && wasClick && base.length) {
         // A Shift-click on empty space leaves the selection alone.
+      } else if (wasClick && addingLabel && !labelTools.hidden) {
+        const s = canvasPoint(e);
+        const p = toBackground(s.x, s.y);
+        if (inBackground(p)) startLabel(p);
       } else if (wasClick && !pathTools.hidden) {
         const s = canvasPoint(e);
         const target = addTarget(s);

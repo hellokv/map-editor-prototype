@@ -1562,9 +1562,7 @@
     function closeStyleMenus() {
       for (const items of document.querySelectorAll('.style-menu [role="menu"]')) items.hidden = true;
     }
-    // A style's ⋮ menu. Its actions open the style's form, which can't show
-    // while labels are selected, so they let go of any selected labels first;
-    // a clone made from there is given to those labels.
+    // A style's ⋮ menu. A clone made while labels are selected is given to them.
     function styleMenu(style, { deletable = false } = {}) {
       const menu = document.createElement('span');
       menu.className = 'style-menu';
@@ -1597,8 +1595,7 @@
         items.hidden = !opening;
       });
       edit.addEventListener('click', () => {
-        selectedLabels = [];
-        draw();
+        setAsideLabels();
         openStyleForm(style);
       });
       clone.addEventListener('click', () => {
@@ -1606,8 +1603,7 @@
         const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
         labelStyles.push(copy);
         for (const label of selectedLabels) label.styleId = copy.id;
-        selectedLabels = [];
-        draw();
+        setAsideLabels();
         renderLabelStyles();
         openStyleForm(copy, true);
         styleInputs.name.select();
@@ -1707,20 +1703,32 @@
       draw();
     }
 
-    // Selected labels take the new style, and are let go so its form can show.
+    // Selected labels take the new style.
     function newLabelStyle() {
       recordUndo();
       const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
       labelStyles.push(style);
       for (const label of selectedLabels) label.styleId = style.id;
-      selectedLabels = [];
-      draw();
+      setAsideLabels();
       renderLabelStyles();
       openStyleForm(style, true);
       styleInputs.name.select();
     }
     document.getElementById('new-label-style').addEventListener('click', newLabelStyle);
-    document.getElementById('style-back').addEventListener('click', closeStyleForm);
+    // A style's form can't show while labels are selected, so opening it from
+    // a label lets go of the selection, and the back arrow restores it.
+    let labelsSetAside = [];
+    function setAsideLabels() {
+      labelsSetAside = selectedLabels;
+      selectedLabels = [];
+      draw();
+    }
+    document.getElementById('style-back').addEventListener('click', () => {
+      closeStyleForm();
+      selectedLabels = labelsSetAside.filter((label) => labels.includes(label));
+      labelsSetAside = [];
+      draw();
+    });
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
     // Enter in a field would otherwise submit the form and reload the page.

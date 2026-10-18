@@ -1761,13 +1761,15 @@
       const cornerY = label.y + (dy * box.h) / 2;
       const length = style.size * 0.75;
       const unit = Math.hypot(dx, dy);
-      const endX = cornerX + (dx / unit) * length;
-      const endY = cornerY + (dy / unit) * length;
-      // A rounded corner is cut away from the box's true corner, so start the
-      // line back inside the box, where the box drawn over it hides the join.
+      // A rounded corner is cut away from the box's true corner, so the line
+      // starts at the corner's centre of curvature, inside the box where the
+      // box drawn over it hides the join, and its visible part is measured
+      // from the curved edge. Sides have no curve, so this changes nothing there.
       const inset = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
       const startX = cornerX - dx * inset;
       const startY = cornerY - dy * inset;
+      const endX = startX + (dx / unit) * (inset + length);
+      const endY = startY + (dy / unit) * (inset + length);
       ctx.save();
       ctx.strokeStyle = style.background ? style.outline ?? style.background : style.color;
       ctx.lineWidth = style.size * 0.1;

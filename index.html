@@ -156,29 +156,10 @@
       font-weight: 600;
       font-size: 17px;
     }
-    .layer-chip {
+    .layer-name {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      border: 2px solid;
-      font-weight: 600;
     }
-    .layer-chip .lines {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      width: 20px;
-    }
-    .layer-chip .lines span {
-      height: 3px;
-    }
-    .layer-chip.sky { border-color: #4a86d6; background: #d8e5f5; }
-    .layer-chip.canopy { border-color: #2f7a6b; background: #d0e3df; }
-    .layer-chip.ground { border-color: #85765c; background: #e6e4de; }
-    .layer-lines-sky { background: #4a86d6; }
-    .layer-lines-canopy { background: #2f7a6b; }
-    .layer-lines-ground { background: #85765c; }
     .zoom-field {
       display: flex;
       align-items: center;
@@ -211,10 +192,6 @@
       background: none;
       color: #6b7585;
       cursor: pointer;
-    }
-    .zoom-field button:disabled {
-      color: #cdd2da;
-      cursor: default;
     }
     #auto-layers {
       font: 12px system-ui, sans-serif;
@@ -2928,17 +2905,12 @@
     }
     const labelShown = (label) => layerSelect.value === 'All' || shownLayers().some((layer) => label.layers?.[layer]);
     // The zoom range form. Sky starts at the furthest zoom out and ground
-    // ends at the furthest zoom in, so those two ends are fixed.
+    // ends at the furthest zoom in, so those two ends are fixed, though they
+    // can still be previewed.
     const layerZoomGrid = document.getElementById('layer-zoom-grid');
     for (const layer of LAYERS) {
       const name = layer[0].toUpperCase() + layer.slice(1);
-      const chip = document.createElement('div');
-      chip.className = `layer-chip ${layer}`;
-      const lines = document.createElement('span');
-      lines.className = 'lines';
-      for (const shown of LAYERS.slice(LAYERS.indexOf(layer))) lines.append(Object.assign(document.createElement('span'), { className: `layer-lines-${shown}` }));
-      chip.append(lines, name);
-      layerZoomGrid.append(chip);
+      layerZoomGrid.append(Object.assign(document.createElement('div'), { className: 'layer-name', textContent: name }));
       for (const end of ['min', 'max']) {
         const fixed = (layer === 'sky' && end === 'min') || (layer === 'ground' && end === 'max');
         const field = document.createElement('div');
@@ -2949,7 +2921,6 @@
         wrap.append(input);
         const useZoom = document.createElement('button');
         useZoom.type = 'button';
-        useZoom.disabled = fixed;
         useZoom.setAttribute('aria-label', 'Zoom the map to this level');
         useZoom.innerHTML = '<span class="material-symbols-rounded">fit_screen</span>';
         // Changes save straight away.

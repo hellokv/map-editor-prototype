@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_selector_tool,delete,image,label,new_label,route">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,delete,image,label,new_label,route">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -196,9 +196,14 @@
         </label>
       </div>
       <div id="label-styles">
-        <div id="label-style-list"></div>
-        <button id="new-label-style" class="field" type="button">New label style</button>
+        <div id="label-style-browser">
+          <div id="label-style-list"></div>
+          <button id="new-label-style" class="field" type="button">New label style</button>
+        </div>
         <form id="label-style-form" hidden>
+          <button id="style-back" type="button" aria-label="Back to label styles">
+            <span class="material-symbols-rounded">arrow_back</span>
+          </button>
           <label class="field">
             Name
             <input id="style-name" type="text" required>
@@ -267,10 +272,6 @@
             Border radius
             <input id="style-radius" type="number" min="0" max="200" step="1">
           </label>
-          <div class="field">
-            <button type="submit">Save</button>
-            <button id="style-cancel" type="button">Cancel</button>
-          </div>
         </form>
       </div>
     </div>
@@ -1262,10 +1263,10 @@
     const styleInputs = Object.fromEntries(
       ['name', 'font', 'weight', 'size', 'line-height', 'caps', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
-    // Edits to an existing style show on the map as they're made. Save keeps
-    // them as one undo step; Cancel puts back the values from when editing began.
-    let editingStyle = null; // the style being edited, or null for a new one
-    let styleBefore = null; // { values, snapshot } from when editing began
+    // A style's form saves as it goes: each change applies to the style and
+    // its labels at once, and a whole visit to the form is one undo step.
+    let editingStyle = null;
+    let styleBefore = null; // { snapshot, recorded } from when the form opened
     const googleFonts = new Set(GOOGLE_FONTS);
 
     // Searchable font list: typing filters Google Fonts by any part of the
@@ -1372,11 +1373,13 @@
       };
     }
 
-    function openStyleForm(style) {
-      cancelStyleForm();
+    const styleBrowser = document.getElementById('label-style-browser');
+
+    function openStyleForm(style, recorded = false) {
+      closeStyleForm();
       editingStyle = style;
-      styleBefore = style && { values: { ...style }, snapshot: snapshot() };
-      const values = style ?? { ...NEW_STYLE, name: '' };
+      styleBefore = { snapshot: snapshot(), recorded };
+      const values = style;
       styleInputs.name.value = values.name;
       styleInputs.font.value = values.font;
       styleInputs.weight.value = values.weight;
@@ -1393,6 +1396,7 @@
       styleInputs['background-on'].checked = !!values.background;
       styleInputs.background.value = values.background ?? '#ffffff';
       styleInputs.radius.value = values.radius;
+      styleBrowser.hidden = true;
       styleForm.hidden = false;
       styleInputs.name.focus();
     }
@@ -1401,42 +1405,38 @@
       editingStyle = null;
       styleBefore = null;
       styleForm.hidden = true;
+      styleBrowser.hidden = false;
     }
 
-    function cancelStyleForm() {
-      if (styleForm.hidden) return;
-      if (editingStyle) Object.assign(editingStyle, styleBefore.values);
-      closeStyleForm();
-      draw();
-    }
-
-    function previewStyleForm() {
+    function applyStyleForm() {
       if (!editingStyle) return;
       const values = readStyleForm();
-      // Half-typed font names aren't fonts; keep showing the last real one.
+      // Half-typed font names aren't fonts, and a style needs a name; keep
+      // the last good value of each.
       if (!googleFonts.has(values.font)) delete values.font;
+      if (!values.name) delete values.name;
+      if (!styleBefore.recorded) {
+        recordUndo(styleBefore.snapshot);
+        styleBefore.recorded = true;
+      }
       Object.assign(editingStyle, values);
+      renderLabelStyles();
       draw();
     }
 
-    document.getElementById('new-label-style').addEventListener('click', () => openStyleForm(null));
-    document.getElementById('style-cancel').addEventListener('click', cancelStyleForm);
-    styleForm.addEventListener('input', previewStyleForm);
-    styleForm.addEventListener('change', previewStyleForm);
-    styleForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const values = readStyleForm();
-      if (editingStyle) {
-        recordUndo(styleBefore.snapshot);
-        Object.assign(editingStyle, values);
-      } else {
-        recordUndo();
-        labelStyles.push({ id: nextStyleId++, ...values });
-      }
-      closeStyleForm();
+    document.getElementById('new-label-style').addEventListener('click', () => {
+      recordUndo();
+      const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
+      labelStyles.push(style);
       renderLabelStyles();
-      draw();
+      openStyleForm(style, true);
+      styleInputs.name.select();
     });
+    document.getElementById('style-back').addEventListener('click', closeStyleForm);
+    styleForm.addEventListener('input', applyStyleForm);
+    styleForm.addEventListener('change', applyStyleForm);
+    // Enter in a field would otherwise submit the form and reload the page.
+    styleForm.addEventListener('submit', (e) => e.preventDefault());
 
     labelStyleSelect.addEventListener('change', () => {
       recordUndo();
@@ -1571,8 +1571,8 @@
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
       labelStylesSection.hidden = anyLabels;
-      // Selecting a label hides the form, so an unsaved edit is abandoned.
-      if (anyLabels) cancelStyleForm();
+      // Selecting a label swaps the style list and form for its properties.
+      if (anyLabels && editingStyle) closeStyleForm();
       // Mixed styles leave the picker blank.
       const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
       labelStyleSelect.value = styleIds.size === 1 ? [...styleIds][0] : '';

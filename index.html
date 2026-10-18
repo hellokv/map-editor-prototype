@@ -393,6 +393,9 @@
             <textarea id="label-text" rows="2"></textarea>
           </label>
           <label class="row">
+            <span><input id="label-hide-text" type="checkbox"> Hide text</span>
+          </label>
+          <label class="row">
             X
             <input id="label-x" type="number" min="0" max="1500" step="1">
           </label>
@@ -2148,6 +2151,7 @@
         for (const button of pointerButtons) {
           button.setAttribute('aria-pressed', button.dataset.pointer === (selectedLabel.pointer ?? ''));
         }
+        labelHideTextToggle.checked = !!selectedLabel.hideText;
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
         document.getElementById('label-icon-field').hidden = !iconOn;
@@ -2158,6 +2162,16 @@
 
     // A label's icon is a Material Symbols name; '' while switched on with
     // none picked yet, and absent when off.
+    const labelHideTextToggle = document.getElementById('label-hide-text');
+    labelHideTextToggle.addEventListener('change', () => {
+      const label = soleLabel();
+      if (!label) return;
+      recordUndo();
+      if (labelHideTextToggle.checked) label.hideText = true;
+      else delete label.hideText;
+      labelHideTextToggle.blur();
+      draw();
+    });
     const labelIconToggle = document.getElementById('label-icon-on');
     const labelIconInput = document.getElementById('label-icon');
     const labelIconPreview = document.getElementById('label-icon-preview');
@@ -2361,11 +2375,12 @@
     const ICON_GAP = 0.25;
     // How a label's content lies, centred on its spot: its lines, each
     // centred on textX with the block centred on y, as [{ text, y, width }];
-    // its icon centred on iconX; and the content's width and height.
+    // its icon centred on iconX; and the content's width and height. Hidden
+    // text is kept on the label for accessibility but takes no room.
     function labelLayout(label) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
-      const texts = (style.caps ? label.text.toUpperCase() : label.text).split('\n');
+      const texts = label.hideText ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
       const lines = texts.map((text, i) => ({
@@ -2374,7 +2389,7 @@
         width: ctx.measureText(text).width,
       }));
       ctx.restore();
-      const textWidth = Math.max(...lines.map((line) => line.width));
+      const textWidth = Math.max(0, ...lines.map((line) => line.width));
       const icon = label.icon ? style.iconSize : 0;
       const gap = icon && textWidth ? icon * ICON_GAP : 0;
       const width = icon + gap + textWidth;
@@ -2384,7 +2399,7 @@
         textX: left + icon + gap + textWidth / 2,
         iconX: left + icon / 2,
         width,
-        height: Math.max(style.size + (texts.length - 1) * step, icon),
+        height: Math.max(texts.length ? style.size + (texts.length - 1) * step : 0, icon),
       };
     }
 

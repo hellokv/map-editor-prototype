@@ -123,7 +123,7 @@
 <body>
   <div id="canvas-area">
     <canvas id="canvas"></canvas>
-    <input id="label-input" type="text" hidden>
+    <textarea id="label-input" rows="1" hidden></textarea>
     <div id="crossing-dialog" hidden>
       Add intersections?
       <button id="crossing-yes" type="button">Yes</button>
@@ -165,7 +165,7 @@
         <div id="label-single-fields">
           <label class="field">
             Text
-            <input id="label-text" type="text">
+            <textarea id="label-text" rows="2"></textarea>
           </label>
           <label class="field">
             X
@@ -913,7 +913,7 @@
     });
 
     document.addEventListener('keydown', (e) => {
-      if (pathTools.hidden || e.target.closest('input')) return;
+      if (pathTools.hidden || e.target.closest('input, textarea, select')) return;
       const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
       if (plain && e.key === '1') setTool('select');
       if (plain && e.key === '2') setTool('add');
@@ -1640,10 +1640,23 @@
     }
 
     labelInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finishLabel(true);
+      lastTyped = performance.now();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        finishLabel(true);
+      }
       if (e.key === 'Escape') finishLabel(false);
     });
-    labelInput.addEventListener('input', () => draw());
+    labelInput.addEventListener('input', () => {
+      lastTyped = performance.now();
+      draw();
+    });
+
+    // The caret stays solid while typing and blinks once typing pauses.
+    const CARET_BLINK = 530;
+    let lastTyped = 0;
+    const caretShown = () => performance.now() - lastTyped < CARET_BLINK || Math.floor(performance.now() / CARET_BLINK) % 2 === 0;
+    setInterval(() => { if (editingLabel) draw(); }, CARET_BLINK / 2);
 
     canvas.addEventListener('dblclick', (e) => {
       if (labelTools.hidden || labelTool !== 'select') return;
@@ -1653,14 +1666,32 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
+    // Lines of a label stack this far apart, as a multiple of the font size.
+    const LINE_HEIGHT = 1.2;
+
+    // A label's lines, each centred on the label's x, with the block centred
+    // on its y: [{ text, y, width }].
+    function labelLines(label) {
+      const style = styleOf(label);
+      const step = style.size * LINE_HEIGHT;
+      const lines = label.text.split('\n');
+      ctx.save();
+      ctx.font = fontOf(style);
+      const measured = lines.map((text, i) => ({
+        text,
+        y: label.y + (i - (lines.length - 1) / 2) * step,
+        width: ctx.measureText(text).width,
+      }));
+      ctx.restore();
+      return measured;
+    }
+
     // A label's box in background pixels, centred on its spot, padding included.
     function labelBox(label) {
       const style = styleOf(label);
-      ctx.save();
-      ctx.font = fontOf(style);
-      const width = ctx.measureText(label.text).width + 2 * style.paddingX;
-      ctx.restore();
-      const height = style.size + 2 * style.paddingY;
+      const lines = labelLines(label);
+      const width = Math.max(...lines.map((line) => line.width)) + 2 * style.paddingX;
+      const height = style.size + (lines.length - 1) * style.size * LINE_HEIGHT + 2 * style.paddingY;
       return { x: label.x - width / 2, y: label.y - height / 2, w: width, h: height };
     }
 
@@ -1703,23 +1734,24 @@
             ctx.lineWidth = style.size * 0.08;
             ctx.stroke();
           }
-        } else if (style.outline) {
+        }
+        const lines = labelLines(label);
+        if (!style.background && style.outline) {
           ctx.strokeStyle = style.outline;
           ctx.lineWidth = style.size * 0.15;
-          ctx.strokeText(label.text, label.x, label.y);
+          for (const line of lines) ctx.strokeText(line.text, label.x, line.y);
           ctx.shadowColor = 'transparent';
         }
         ctx.fillStyle = style.color;
-        ctx.fillText(label.text, label.x, label.y);
+        for (const line of lines) ctx.fillText(line.text, label.x, line.y);
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
-      if (typing) {
-        const style = typingStyle;
-        ctx.font = fontOf(style);
-        const caretX = typing.x + ctx.measureText(typing.text).width / 2 + 2 / view.scale;
-        ctx.fillStyle = style.color;
-        ctx.fillRect(caretX, typing.y - style.size / 2, 2 / view.scale, style.size);
+      if (typing && caretShown()) {
+        const last = labelLines(typing).at(-1);
+        const caretX = typing.x + last.width / 2 + 2 / view.scale;
+        ctx.fillStyle = typingStyle.color;
+        ctx.fillRect(caretX, last.y - typingStyle.size / 2, 2 / view.scale, typingStyle.size);
       }
       // Same white-with-shadow look as other selections, a few pixels clear of the text.
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -1727,7 +1759,9 @@
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2 / view.scale;
       const pad = 4 / view.scale;
-      for (const label of selectedLabels) {
+      const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
+      if (typing && !editingLabel.label) boxed.push(typing);
+      for (const label of boxed) {
         const box = labelBox(label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
@@ -1736,7 +1770,7 @@
     }
 
     document.addEventListener('keydown', (e) => {
-      if (labelTools.hidden || e.target.closest('input')) return;
+      if (labelTools.hidden || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         selectedLabels = [];

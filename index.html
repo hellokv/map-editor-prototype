@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,block,delete,east,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -120,7 +120,8 @@
       min-width: 0;
       max-width: 100%;
     }
-    #image-delete {
+    #image-delete,
+    #label-style-picker button {
       flex: none;
       display: flex;
       padding: 0;
@@ -1497,7 +1498,18 @@
         c.shadowBlur = style.size * 0.25 * scale * dpr;
         c.shadowOffsetY = style.size * 0.08 * scale * dpr;
         paintLabel(c, label, style);
-        option.append(pick, preview);
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.setAttribute('aria-label', 'Edit style');
+        edit.innerHTML = '<span class="material-symbols-rounded">edit</span>';
+        edit.addEventListener('click', (e) => {
+          // Inside the label, a click would otherwise also pick the style.
+          e.preventDefault();
+          selectedLabels = [];
+          openStyleForm(style);
+          draw();
+        });
+        option.append(pick, preview, edit);
         return option;
       }));
     }

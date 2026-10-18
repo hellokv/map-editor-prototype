@@ -407,7 +407,7 @@
             Text
             <textarea id="label-text" rows="2"></textarea>
           </label>
-          <label class="row">
+          <label id="label-hide-text-field" class="row">
             <span><input id="label-hide-text" type="checkbox"> Hide text</span>
           </label>
           <label class="row">
@@ -2260,9 +2260,19 @@
         for (const button of pointerButtons) {
           button.setAttribute('aria-pressed', button.dataset.pointer === (selectedLabel.pointer ?? ''));
         }
-        labelHideTextToggle.checked = !!selectedLabel.hideText;
+        // Text can only be hidden behind an icon, which then has to stay,
+        // and sits plainly inside the label: no outside, offset or gap.
+        const textHidden = textIsHidden(selectedLabel);
+        document.getElementById('label-hide-text-field').hidden = !selectedLabel.icon;
+        labelHideTextToggle.checked = textHidden;
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
+        labelIconToggle.disabled = textHidden;
+        labelIconOutsideToggle.disabled = textHidden;
+        for (const field of [labelIconOffsetInput, labelIconGapInput]) {
+          field.disabled = textHidden;
+          field.previousElementSibling.disabled = textHidden;
+        }
         document.getElementById('label-icon-field').hidden = !iconOn;
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
@@ -2277,10 +2287,10 @@
         document.getElementById('label-icon-gap-field').hidden = !iconOn;
         document.getElementById('label-icon-outside-field').hidden = !iconOn;
         document.getElementById('label-icon-offset-field').hidden = !iconOn;
-        labelIconOutsideToggle.checked = !!selectedLabel.iconOutside;
-        show(labelIconOffsetInput, selectedLabel.iconOffset ?? 0);
+        labelIconOutsideToggle.checked = !!selectedLabel.iconOutside && !textHidden;
+        show(labelIconOffsetInput, textHidden ? 0 : selectedLabel.iconOffset ?? 0);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
-        show(labelIconGapInput, selectedLabel.iconGap ?? '');
+        show(labelIconGapInput, textHidden ? 0 : selectedLabel.iconGap ?? '');
         // A blank field's slider sits at the default shown in the field.
         for (const slider of iconSliders) {
           const field = slider.nextElementSibling;
@@ -2289,18 +2299,23 @@
       }
     }
 
-    // A label's icon is a Material Symbols name; '' while switched on with
-    // none picked yet, and absent when off.
+    const textIsHidden = (label) => !!(label.hideText && label.icon);
     const labelHideTextToggle = document.getElementById('label-hide-text');
     labelHideTextToggle.addEventListener('change', () => {
       const label = soleLabel();
       if (!label) return;
       recordUndo();
-      if (labelHideTextToggle.checked) label.hideText = true;
-      else delete label.hideText;
+      if (labelHideTextToggle.checked) {
+        label.hideText = true;
+        for (const key of ['iconOutside', 'iconOffset', 'iconGap']) delete label[key];
+      } else {
+        delete label.hideText;
+      }
       labelHideTextToggle.blur();
       draw();
     });
+    // A label's icon is a Material Symbols name; '' while switched on with
+    // none picked yet, and absent when off.
     const labelIconToggle = document.getElementById('label-icon-on');
     const labelIconInput = document.getElementById('label-icon');
     const labelIconPreview = document.getElementById('label-icon-preview');
@@ -2520,7 +2535,8 @@
     function labelLayout(label) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
-      const texts = label.hideText ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
+      const hidden = textIsHidden(label);
+      const texts = hidden ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
       const widths = texts.map((text) => ctx.measureText(text).width);
@@ -2528,11 +2544,11 @@
       const tw = Math.max(0, ...widths);
       const th = texts.length ? style.size + (texts.length - 1) * step : 0;
       const s = label.icon ? style.iconSize : 0;
-      const outside = s && label.iconOutside;
+      const outside = s && label.iconOutside && !hidden;
       const gap = s && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
       const side = label.iconSide ?? 'left';
       const across = side === 'left' || side === 'right';
-      const offset = label.iconOffset ?? 0;
+      const offset = hidden ? 0 : label.iconOffset ?? 0;
       const reach = ICON_OFFSET_REACH * (label.iconSize ?? style.iconSize);
       const pad = (r) => ({ x: r.x - style.paddingX, y: r.y - style.paddingY, w: r.w + 2 * style.paddingX, h: r.h + 2 * style.paddingY });
       // Laid out around the text's centre at (0, 0), then moved onto the spot.

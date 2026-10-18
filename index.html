@@ -101,6 +101,121 @@
       border: 1px solid #ccc;
       border-radius: 4px;
     }
+    #view-menu button,
+    #layers-close {
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      cursor: pointer;
+    }
+    #view-menu button:hover,
+    #layers-close:hover {
+      background: #eee;
+    }
+    #view-menu .percent-field input,
+    .zoom-field input {
+      box-sizing: border-box;
+      width: 64px;
+      padding: 2px 18px 2px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font: 13px system-ui, sans-serif;
+      appearance: textfield;
+    }
+    #layers-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.3);
+    }
+    #layers-modal [role="dialog"] {
+      position: relative;
+      padding: 28px 24px 24px;
+      background: #e3e6ee;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      font: 15px system-ui, sans-serif;
+      color: #2b3441;
+    }
+    #layers-close {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+    }
+    #layer-zoom-grid {
+      display: grid;
+      grid-template-columns: 130px 130px 130px;
+      gap: 8px;
+    }
+    #layer-zoom-grid > div:nth-child(-n + 3) {
+      font-weight: 600;
+      font-size: 17px;
+    }
+    .layer-chip {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border: 2px solid;
+      font-weight: 600;
+    }
+    .layer-chip .lines {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 20px;
+    }
+    .layer-chip .lines span {
+      height: 3px;
+    }
+    .layer-chip.sky { border-color: #4a86d6; background: #d8e5f5; }
+    .layer-chip.canopy { border-color: #2f7a6b; background: #d0e3df; }
+    .layer-chip.ground { border-color: #85765c; background: #e6e4de; }
+    .layer-lines-sky { background: #4a86d6; }
+    .layer-lines-canopy { background: #2f7a6b; }
+    .layer-lines-ground { background: #85765c; }
+    .zoom-field {
+      display: flex;
+      align-items: center;
+      border: 2px solid #a3abb8;
+      border-radius: 6px;
+      background: #fff;
+    }
+    .zoom-field:has(input:disabled) {
+      border-color: #cdd2da;
+      background: #f6f7f9;
+    }
+    .zoom-field .percent-field {
+      flex: 1;
+    }
+    .zoom-field input {
+      width: 100%;
+      padding: 8px 22px 8px 10px;
+      border: none;
+      background: none;
+      font: inherit;
+      outline: none;
+    }
+    .zoom-field input:disabled {
+      color: #a3abb8;
+    }
+    .zoom-field button {
+      display: flex;
+      padding: 4px;
+      border: none;
+      background: none;
+      color: #6b7585;
+      cursor: pointer;
+    }
+    .zoom-field button:disabled {
+      color: #cdd2da;
+      cursor: default;
+    }
     #view-menu select {
       padding: 2px 4px;
       border: 1px solid #ccc;
@@ -437,6 +552,7 @@
       </div>
     </div>
     <div id="view-menu">
+      <button id="layers-button" type="button" aria-label="Layer zoom levels"><span class="material-symbols-rounded">layers</span></button>
       <select id="layer-select" aria-label="Layer">
         <option>Sky</option>
         <option>Canopy</option>
@@ -444,6 +560,16 @@
         <option>All</option>
         <option>Automatic</option>
       </select>
+      <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
+      <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
+    </div>
+    <div id="layers-modal" hidden>
+      <div role="dialog" aria-label="Layer zoom levels">
+        <button id="layers-close" type="button" aria-label="Close"><span class="material-symbols-rounded">close</span></button>
+        <div id="layer-zoom-grid">
+          <div>Layer</div><div>Min</div><div>Max</div>
+        </div>
+      </div>
     </div>
     <div id="shape-menu" hidden>
       <button type="button" data-shape="circle" aria-label="Circle" aria-pressed="true">
@@ -1520,7 +1646,7 @@
 
     const BACKGROUND = 1500;
     const MIN_SCALE = 0.1;
-    const MAX_SCALE = 20;
+    const MAX_SCALE = 6;
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -1530,6 +1656,36 @@
 
     const view = { scale: 1, x: 0, y: 0 };
     let size = null;
+
+    const zoomInput = document.getElementById('zoom-input');
+    const zoomPercent = () => Math.round(view.scale * 100);
+    // Zooms about the middle of the canvas.
+    function zoomTo(scale) {
+      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+      const mx = canvas.clientWidth / 2;
+      const my = canvas.clientHeight / 2;
+      view.x = mx - (mx - view.x) * (next / view.scale);
+      view.y = my - (my - view.y) * (next / view.scale);
+      view.scale = next;
+      draw();
+    }
+    zoomInput.addEventListener('change', () => {
+      zoomTo((Number(zoomInput.value) || zoomPercent()) / 100);
+      zoomInput.blur();
+      draw();
+    });
+    // Arrow keys step the zoom in whole percents straight away.
+    zoomInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      zoomTo((zoomPercent() + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)) / 100);
+      zoomInput.value = zoomPercent();
+    });
+    document.getElementById('fit-button').addEventListener('click', (e) => {
+      centerBackground(canvas.clientWidth, canvas.clientHeight);
+      e.currentTarget.blur();
+      draw();
+    });
 
     function centerBackground(w, h) {
       view.scale = Math.min(w, h) / BACKGROUND * 0.9;
@@ -1557,6 +1713,7 @@
     }
 
     function draw() {
+      if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -2581,7 +2738,8 @@
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
         // A new label goes on the layers being shown, so it stays in view.
-        created.layers = shownLayer() ? { [shownLayer()]: true } : { sky: true, canopy: true, ground: true };
+        const layers = shownLayers().length ? shownLayers() : LAYERS;
+        created.layers = Object.fromEntries(layers.map((layer) => [layer, true]));
         labels.push(created);
       }
       editingLabel = null;
@@ -2701,14 +2859,76 @@
     // The box plus an icon outside it: what can be clicked and selected.
     const labelBounds = (label) => labelLayout(label).bounds;
 
-    // The canvas only shows labels on the layer picked in the bottom menu;
-    // All, and for now Automatic, show every label.
+    // The canvas only shows labels on the layers picked in the bottom menu:
+    // one layer, all of them, or under Automatic, every layer whose zoom
+    // range (in percent, overlaps allowed) holds the current zoom.
+    const LAYERS = ['sky', 'canopy', 'ground'];
+    const layerZoom = { sky: { min: 10, max: 75 }, canopy: { min: 76, max: 100 }, ground: { min: 101, max: 600 } };
     const layerSelect = document.getElementById('layer-select');
-    const shownLayer = () => (['Sky', 'Canopy', 'Ground'].includes(layerSelect.value) ? layerSelect.value.toLowerCase() : null);
-    const labelShown = (label) => {
-      const layer = shownLayer();
-      return !layer || !!label.layers?.[layer];
-    };
+    function shownLayers() {
+      if (layerSelect.value === 'All') return LAYERS;
+      if (layerSelect.value === 'Automatic') {
+        const zoom = zoomPercent();
+        return LAYERS.filter((layer) => layerZoom[layer].min <= zoom && zoom <= layerZoom[layer].max);
+      }
+      return [layerSelect.value.toLowerCase()];
+    }
+    const labelShown = (label) => layerSelect.value === 'All' || shownLayers().some((layer) => label.layers?.[layer]);
+    // The zoom range form. Sky starts at the furthest zoom out and ground
+    // ends at the furthest zoom in, so those two ends are fixed.
+    const layerZoomGrid = document.getElementById('layer-zoom-grid');
+    for (const layer of LAYERS) {
+      const name = layer[0].toUpperCase() + layer.slice(1);
+      const chip = document.createElement('div');
+      chip.className = `layer-chip ${layer}`;
+      const lines = document.createElement('span');
+      lines.className = 'lines';
+      for (const shown of LAYERS.slice(LAYERS.indexOf(layer))) lines.append(Object.assign(document.createElement('span'), { className: `layer-lines-${shown}` }));
+      chip.append(lines, name);
+      layerZoomGrid.append(chip);
+      for (const end of ['min', 'max']) {
+        const fixed = (layer === 'sky' && end === 'min') || (layer === 'ground' && end === 'max');
+        const field = document.createElement('div');
+        field.className = 'zoom-field';
+        const input = Object.assign(document.createElement('input'), { type: 'number', step: 1, value: layerZoom[layer][end], disabled: fixed });
+        input.setAttribute('aria-label', `${name} ${end}`);
+        const wrap = Object.assign(document.createElement('span'), { className: 'percent-field' });
+        wrap.append(input);
+        const useZoom = document.createElement('button');
+        useZoom.type = 'button';
+        useZoom.disabled = fixed;
+        useZoom.setAttribute('aria-label', 'Use current zoom');
+        useZoom.innerHTML = '<span class="material-symbols-rounded">fit_screen</span>';
+        // Changes save straight away.
+        const save = () => {
+          layerZoom[layer][end] = Number(input.value) || 0;
+          draw();
+        };
+        input.addEventListener('input', save);
+        useZoom.addEventListener('click', () => {
+          input.value = zoomPercent();
+          save();
+        });
+        field.append(wrap, useZoom);
+        layerZoomGrid.append(field);
+      }
+    }
+    const layersModal = document.getElementById('layers-modal');
+    const closeLayersModal = () => { layersModal.hidden = true; };
+    document.getElementById('layers-button').addEventListener('click', (e) => {
+      layersModal.hidden = false;
+      e.currentTarget.blur();
+    });
+    document.getElementById('layers-close').addEventListener('click', closeLayersModal);
+    layersModal.addEventListener('pointerdown', (e) => { if (e.target === layersModal) closeLayersModal(); });
+    // Esc closes the form before any other Esc handling sees it.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || layersModal.hidden) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeLayersModal();
+    }, true);
+
     layerSelect.addEventListener('change', () => {
       selectedLabels = selectedLabels.filter(labelShown);
       layerSelect.blur();

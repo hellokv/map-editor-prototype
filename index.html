@@ -140,7 +140,22 @@
     </div>
   </div>
   <div id="panel">
-    <div id="labels-panel" hidden></div>
+    <div id="labels-panel" hidden>
+      <div id="label-properties" hidden>
+        <label class="field">
+          Text
+          <input id="label-text" type="text">
+        </label>
+        <label class="field">
+          X
+          <input id="label-x" type="number" min="0" max="1500" step="1">
+        </label>
+        <label class="field">
+          Y
+          <input id="label-y" type="number" min="0" max="1500" step="1">
+        </label>
+      </div>
+    </div>
     <div id="path-panel">
       <label class="field">
         Snap distance
@@ -1122,6 +1137,10 @@
     const pathWidthColor = liveField('path-width-color', 'widthColor', (input) => input.value);
     const selectedFill = () => selected?.area && fillOf(selected.area);
     const fillColorInput = liveField('fill-color', 'color', (input) => input.value, selectedFill);
+    const labelProperties = document.getElementById('label-properties');
+    const labelTextInput = liveField('label-text', 'text', (input) => input.value, () => selectedLabel);
+    const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
+    const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
     const fillVisibleField = document.getElementById('fill-visible-field');
     const fillColorField = document.getElementById('fill-color-field');
     const fillVisibleToggle = document.getElementById('fill-visible');
@@ -1236,6 +1255,14 @@
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
       if (fill) fillColorInput.value = fill.color;
+      labelProperties.hidden = !selectedLabel;
+      if (selectedLabel) {
+        // Leave a field alone while it's being typed in.
+        const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
+        show(labelTextInput, selectedLabel.text);
+        show(labelXInput, Math.round(selectedLabel.x));
+        show(labelYInput, Math.round(selectedLabel.y));
+      }
     }
 
     function strokeGroupWidth(group) {
@@ -1687,6 +1714,15 @@
         updateCursor();
         return;
       }
+      const pressedLabel = !labelTools.hidden && labelTool === 'select' && labelAt(toBackground(s.x, s.y));
+      if (pressedLabel) {
+        selectedLabel = pressedLabel;
+        const p = toBackground(s.x, s.y);
+        // The snapshot only becomes the undo step once the label actually moves.
+        drag = { label: pressedLabel, dx: pressedLabel.x - p.x, dy: pressedLabel.y - p.y, before: snapshot() };
+        draw();
+        return;
+      }
       const hit = pathTools.hidden || addTarget(s)?.connect ? null : pointAt(s.x, s.y);
       const handle = !hit && tool === 'select' && !pathTools.hidden ? segmentHit(s.x, s.y) : null;
       const p = toBackground(s.x, s.y);
@@ -1759,6 +1795,14 @@
           const p = toBackground(pointer.x, pointer.y);
           bendSegment(drag.bend, drag.t, p);
         }
+      } else if (drag?.label) {
+        if (drag.before) {
+          recordUndo(drag.before);
+          drag.before = null;
+        }
+        const p = toBackground(pointer.x, pointer.y);
+        drag.label.x = clampToBackground(p.x + drag.dx);
+        drag.label.y = clampToBackground(p.y + drag.dy);
       } else if (drag?.group) {
         if (drag.moving || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
           if (!drag.moving) recordUndo(drag.before);
@@ -1793,7 +1837,7 @@
       if (!drag) return;
       const { toggle, marquee, active, base, group, moving, item } = drag;
       if (drag.point && drag.snapTo) mergePoints(drag.path, drag.point, drag.snapTo);
-      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !active && !group
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.label && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
       if (group && !moving) {

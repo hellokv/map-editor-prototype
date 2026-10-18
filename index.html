@@ -142,18 +142,20 @@
   <div id="panel">
     <div id="labels-panel" hidden>
       <div id="label-properties" hidden>
-        <label class="field">
-          Text
-          <input id="label-text" type="text">
-        </label>
-        <label class="field">
-          X
-          <input id="label-x" type="number" min="0" max="1500" step="1">
-        </label>
-        <label class="field">
-          Y
-          <input id="label-y" type="number" min="0" max="1500" step="1">
-        </label>
+        <div id="label-single-fields">
+          <label class="field">
+            Text
+            <input id="label-text" type="text">
+          </label>
+          <label class="field">
+            X
+            <input id="label-x" type="number" min="0" max="1500" step="1">
+          </label>
+          <label class="field">
+            Y
+            <input id="label-y" type="number" min="0" max="1500" step="1">
+          </label>
+        </div>
         <label class="field">
           Style
           <select id="label-style"></select>
@@ -308,7 +310,8 @@
     const labelTools = document.getElementById('label-tools');
     const labelToolButtons = document.querySelectorAll('[data-label-tool]');
     let labelTool = 'select';
-    let selectedLabel = null;
+    let selectedLabels = [];
+    const soleLabel = () => (selectedLabels.length === 1 ? selectedLabels[0] : null);
 
     function setLabelTool(name) {
       labelTool = name;
@@ -350,7 +353,7 @@
       if (mode !== 'labels') {
         setLabelTool('select');
         finishLabel(false);
-        selectedLabel = null;
+        selectedLabels = [];
       }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
@@ -864,7 +867,7 @@
       labelStyles.splice(0, labelStyles.length, ...restoredStyles);
       renderLabelStyles();
       closeStyleForm();
-      selectedLabel = null;
+      selectedLabels = [];
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -1004,6 +1007,7 @@
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
         drawLabels();
+        drawMarquee();
         updatePanel();
         return;
       }
@@ -1156,15 +1160,7 @@
 
       drawLabels();
 
-      if (drag?.marquee && drag.active) {
-        const box = marqueeBox();
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fillRect(box.x, box.y, box.w, box.h);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w, box.h);
-      }
+      drawMarquee();
       updatePanel();
     }
 
@@ -1348,13 +1344,13 @@
 
     labelStyleSelect.addEventListener('change', () => {
       recordUndo();
-      selectedLabel.styleId = Number(labelStyleSelect.value);
+      for (const label of selectedLabels) label.styleId = Number(labelStyleSelect.value);
       labelStyleSelect.blur();
       draw();
     });
-    const labelTextInput = liveField('label-text', 'text', (input) => input.value, () => selectedLabel);
-    const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
-    const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), () => selectedLabel);
+    const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
+    const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
+    const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const fillVisibleField = document.getElementById('fill-visible-field');
     const fillColorField = document.getElementById('fill-color-field');
     const fillVisibleToggle = document.getElementById('fill-visible');
@@ -1469,12 +1465,17 @@
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
       if (fill) fillColorInput.value = fill.color;
-      labelProperties.hidden = !selectedLabel;
-      labelStylesSection.hidden = !!selectedLabel;
+      const anyLabels = selectedLabels.length > 0;
+      labelProperties.hidden = !anyLabels;
+      labelStylesSection.hidden = anyLabels;
       // Selecting a label hides the form, so an unsaved edit is abandoned.
-      if (selectedLabel) cancelStyleForm();
+      if (anyLabels) cancelStyleForm();
+      // Mixed styles leave the picker blank.
+      const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
+      labelStyleSelect.value = styleIds.size === 1 ? [...styleIds][0] : '';
+      const selectedLabel = soleLabel();
+      document.getElementById('label-single-fields').hidden = !selectedLabel;
       if (selectedLabel) {
-        labelStyleSelect.value = styleOf(selectedLabel).id;
         // Leave a field alone while it's being typed in.
         const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
         show(labelTextInput, selectedLabel.text);
@@ -1622,14 +1623,14 @@
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
-      if (selectedLabel) {
-        // Same white-with-shadow look as other selections, a few pixels clear of the text.
-        const box = labelBox(selectedLabel);
-        const pad = 4 / view.scale;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-        ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2 / view.scale;
+      // Same white-with-shadow look as other selections, a few pixels clear of the text.
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2 / view.scale;
+      const pad = 4 / view.scale;
+      for (const label of selectedLabels) {
+        const box = labelBox(label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
       ctx.restore();
@@ -1640,14 +1641,14 @@
       if (labelTools.hidden || e.target.closest('input')) return;
       if (e.key === 'Escape') {
         e.preventDefault();
-        selectedLabel = null;
+        selectedLabels = [];
         setLabelTool('select');
         draw();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLabel) {
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLabels.length) {
         e.preventDefault();
         recordUndo();
-        labels.splice(labels.indexOf(selectedLabel), 1);
-        selectedLabel = null;
+        for (const label of selectedLabels) labels.splice(labels.indexOf(label), 1);
+        selectedLabels = [];
         draw();
       }
     });
@@ -1959,6 +1960,30 @@
       return { x, y, w: Math.abs(pointer.x - drag.x0), h: Math.abs(pointer.y - drag.y0) };
     }
 
+    function drawMarquee() {
+      if (!drag?.marquee || !drag.active) return;
+      const box = marqueeBox();
+      const dpr = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w, box.h);
+      ctx.restore();
+    }
+
+    // Labels lying wholly inside the box (in screen pixels).
+    function labelsInBox(box) {
+      return labels.filter((label) => {
+        const b = labelBox(label);
+        const x = b.x * view.scale + view.x;
+        const y = b.y * view.scale + view.y;
+        return x >= box.x && y >= box.y && x + b.w * view.scale <= box.x + box.w && y + b.h * view.scale <= box.y + box.h;
+      });
+    }
+
     // Dots inside the box, and segments lying wholly inside it.
     function itemsInBox(box) {
       const inside = (p) => {
@@ -1995,12 +2020,22 @@
         updateCursor();
         return;
       }
-      const pressedLabel = !labelTools.hidden && labelTool === 'select' && labelAt(toBackground(s.x, s.y));
-      if (pressedLabel) {
-        selectedLabel = pressedLabel;
+      if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
-        // The snapshot only becomes the undo step once the label actually moves.
-        drag = { label: pressedLabel, dx: pressedLabel.x - p.x, dy: pressedLabel.y - p.y, before: snapshot() };
+        const pressedLabel = labelAt(p);
+        if (pressedLabel && shiftHeld) {
+          selectedLabels = selectedLabels.includes(pressedLabel)
+            ? selectedLabels.filter((label) => label !== pressedLabel)
+            : [...selectedLabels, pressedLabel];
+        } else if (pressedLabel) {
+          const member = selectedLabels.includes(pressedLabel);
+          if (!member) selectedLabels = [pressedLabel];
+          // The snapshot only becomes the undo step once the labels actually
+          // move. A click on one of several without moving narrows to it.
+          drag = { labels: [...selectedLabels], last: p, before: snapshot(), narrowTo: member ? pressedLabel : null };
+        } else {
+          drag = { marquee: true, labelMarquee: true, x0: s.x, y0: s.y, startX: e.clientX, startY: e.clientY, base: shiftHeld ? [...selectedLabels] : [] };
+        }
         draw();
         return;
       }
@@ -2076,14 +2111,18 @@
           const p = toBackground(pointer.x, pointer.y);
           bendSegment(drag.bend, drag.t, p);
         }
-      } else if (drag?.label) {
+      } else if (drag?.labels) {
         if (drag.before) {
           recordUndo(drag.before);
           drag.before = null;
+          drag.narrowTo = null;
         }
         const p = toBackground(pointer.x, pointer.y);
-        drag.label.x = clampToBackground(p.x + drag.dx);
-        drag.label.y = clampToBackground(p.y + drag.dy);
+        for (const label of drag.labels) {
+          label.x = clampToBackground(label.x + p.x - drag.last.x);
+          label.y = clampToBackground(label.y + p.y - drag.last.y);
+        }
+        drag.last = p;
       } else if (drag?.group) {
         if (drag.moving || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
           if (!drag.moving) recordUndo(drag.before);
@@ -2091,6 +2130,11 @@
           const p = toBackground(pointer.x, pointer.y);
           moveSelection(p.x - drag.last.x, p.y - drag.last.y);
           drag.last = p;
+        }
+      } else if (drag?.labelMarquee) {
+        if (drag.active || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
+          drag.active = true;
+          selectedLabels = [...new Set([...drag.base, ...labelsInBox(marqueeBox())])];
         }
       } else if (drag?.marquee) {
         if (drag.active || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) {
@@ -2117,8 +2161,9 @@
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
       const { toggle, marquee, active, base, group, moving, item } = drag;
+      if (drag.narrowTo) selectedLabels = [drag.narrowTo];
       if (drag.point && drag.snapTo) mergePoints(drag.path, drag.point, drag.snapTo);
-      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.label && !active && !group
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
       if (group && !moving) {
@@ -2134,7 +2179,7 @@
         if (labelTool === 'add') {
           if (inBackground(p)) startLabel(p);
         } else {
-          selectedLabel = labelAt(p);
+          selectedLabels = [];
         }
       } else if (wasClick && !pathTools.hidden) {
         const s = canvasPoint(e);

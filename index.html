@@ -1810,8 +1810,11 @@
     // background are null when off. The first style is the default and can't
     // be deleted.
     const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
-    const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
-    let nextStyleId = 2;
+    const labelStyles = [
+      { id: 1, name: 'Default', ...NEW_STYLE },
+      { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
+    ];
+    let nextStyleId = 3;
     // The style new labels are created in, picked in the style list.
     let currentStyleId = 1;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];

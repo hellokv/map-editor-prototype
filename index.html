@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&icon_names=add_circle,add_location,arrow_back,arrow_selector_tool,block,delete,east,edit,image,label,location_on,new_label,north,north_east,north_west,route,south,south_east,south_west,west">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -222,7 +222,12 @@
       display: flex;
       padding: 2px;
     }
-    #label-pointer button[aria-pressed="true"] {
+    #panel #add-pin {
+      display: flex;
+      padding: 2px;
+    }
+    #label-pointer button[aria-pressed="true"],
+    #panel #add-pin[aria-pressed="true"] {
       background: #ddd;
     }
     #image-upload {
@@ -321,6 +326,12 @@
               <button type="button" data-pointer="s" aria-label="Bottom"><span class="material-symbols-rounded">south</span></button>
               <button type="button" data-pointer="se" aria-label="Bottom right"><span class="material-symbols-rounded">south_east</span></button>
             </div>
+          <div class="row">
+            Pins
+            <button id="add-pin" type="button" aria-label="Add location" aria-pressed="false">
+              <span class="material-symbols-rounded">add_location</span>
+            </button>
+          </div>
           </div>
         </div>
         <div id="label-style-picker" class="group">
@@ -517,14 +528,24 @@
     let labelTool = 'select';
     let selectedLabels = [];
     const soleLabel = () => (selectedLabels.length === 1 ? selectedLabels[0] : null);
+    // Selected pins always belong to selected labels.
+    let selectedPins = [];
+    const pinOwner = (pin) => labels.find((label) => label.pins.includes(pin));
+    const addPinButton = document.getElementById('add-pin');
 
+    // 'pin' drops one pin for the selected label, from the panel's button.
     function setLabelTool(name) {
       labelTool = name;
       for (const button of labelToolButtons) {
         button.setAttribute('aria-pressed', button.dataset.labelTool === name);
       }
+      addPinButton.setAttribute('aria-pressed', name === 'pin');
       updateCursor();
     }
+    addPinButton.addEventListener('click', () => {
+      setLabelTool(labelTool === 'pin' ? 'select' : 'pin');
+      addPinButton.blur();
+    });
     for (const button of labelToolButtons) {
       button.addEventListener('click', () => setLabelTool(button.dataset.labelTool));
     }
@@ -1057,7 +1078,7 @@
         paths: copiedPaths,
         fills: fills.map((fill) => Object.assign(new Set([...fill].filter((p) => copies.has(p)).map(copy)), { visible: fill.visible, color: fill.color })),
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
-        labels: labels.map((label) => ({ ...label })),
+        labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
         selection: copiedSelection,
       };
@@ -1078,6 +1099,7 @@
       renderLabelStyles();
       closeStyleForm();
       selectedLabels = [];
+      selectedPins = [];
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -1218,6 +1240,7 @@
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
         drawLabels();
+        if (!labelTools.hidden) drawPins();
         drawMarquee();
         updatePanel();
         return;
@@ -1904,7 +1927,7 @@
         selectedLabels = selectedLabels.filter((other) => labels.includes(other));
       } else if (!label && keep && text) {
         recordUndo();
-        created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id };
+        created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
         labels.push(created);
       }
       editingLabel = null;
@@ -2103,12 +2126,72 @@
       placeLabelInput();
     }
 
+    // Pins keep the same on-screen size at any zoom, with the glyph's tip on the spot.
+    const PIN_SIZE = 32;
+    const pinFont = () => `300 ${PIN_SIZE / view.scale}px "Material Symbols Rounded"`;
+    document.fonts.load(pinFont(), 'location_on').then(() => draw());
+    function pinBox(pin) {
+      const w = (PIN_SIZE * 0.7) / view.scale;
+      const h = (PIN_SIZE * 0.85) / view.scale;
+      return { x: pin.x - w / 2, y: pin.y - h, w, h };
+    }
+    function pinAt(p) {
+      for (const label of [...labels].reverse()) {
+        for (const pin of [...label.pins].reverse()) {
+          const box = pinBox(pin);
+          if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return pin;
+        }
+      }
+      return null;
+    }
+    // Pins of labels that aren't selected are ghosted.
+    function drawPins() {
+      selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
+      ctx.save();
+      ctx.font = pinFont();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.lineJoin = 'round';
+      const drop = ctx.measureText('location_on').actualBoundingBoxDescent;
+      for (const label of labels) {
+        ctx.globalAlpha = selectedLabels.includes(label) ? 1 : 0.35;
+        for (const pin of label.pins) {
+          // A white halo keeps the pin visible over dark backgrounds.
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 3 / view.scale;
+          ctx.strokeText('location_on', pin.x, pin.y - drop);
+          ctx.fillStyle = '#000';
+          ctx.fillText('location_on', pin.x, pin.y - drop);
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2 / view.scale;
+      const pad = 2 / view.scale;
+      for (const pin of selectedPins) {
+        const box = pinBox(pin);
+        ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+      }
+      ctx.restore();
+    }
+
     document.addEventListener('keydown', (e) => {
       if (labelTools.hidden || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         selectedLabels = [];
         setLabelTool('select');
+        draw();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPins.length) {
+        e.preventDefault();
+        recordUndo();
+        for (const pin of selectedPins) {
+          const owner = pinOwner(pin);
+          owner.pins.splice(owner.pins.indexOf(pin), 1);
+        }
+        selectedPins = [];
         draw();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLabels.length) {
         e.preventDefault();
@@ -2171,6 +2254,24 @@
       c.strokeText('add_circle', 12, 12);
       c.fillText('add_circle', 12, 12);
       addCursor = `url(${icon.toDataURL()}) 12 12, crosshair`;
+      updateCursor();
+    });
+
+    // The pin cursor's hotspot is the tip of the pin.
+    let pinCursor = 'crosshair';
+    document.fonts.load('300 24px "Material Symbols Rounded"', 'add_location').then(() => {
+      const icon = document.createElement('canvas');
+      icon.width = icon.height = 24;
+      const c = icon.getContext('2d');
+      c.font = '300 24px "Material Symbols Rounded"';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.strokeStyle = '#fff';
+      c.lineWidth = 3;
+      c.strokeText('add_location', 12, 12);
+      c.fillText('add_location', 12, 12);
+      const tip = Math.min(23, Math.round(12 + c.measureText('add_location').actualBoundingBoxDescent));
+      pinCursor = `url(${icon.toDataURL()}) 12 ${tip}, crosshair`;
       updateCursor();
     });
 
@@ -2328,6 +2429,7 @@
     function updateCursor() {
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
+      else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 
@@ -2488,6 +2590,23 @@
       }
       if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
+        const pressedPin = pinAt(p);
+        if (pressedPin) {
+          // Selecting a pin selects its label too, so it shows at full opacity.
+          const owner = pinOwner(pressedPin);
+          if (shiftHeld) {
+            selectedPins = selectedPins.includes(pressedPin)
+              ? selectedPins.filter((pin) => pin !== pressedPin)
+              : [...selectedPins, pressedPin];
+            if (!selectedLabels.includes(owner)) selectedLabels = [...selectedLabels, owner];
+          } else {
+            selectedPins = [pressedPin];
+            selectedLabels = [owner];
+          }
+          draw();
+          return;
+        }
+        if (!shiftHeld) selectedPins = [];
         const pressedLabel = labelAt(p);
         if (pressedLabel && shiftHeld) {
           selectedLabels = selectedLabels.includes(pressedLabel)
@@ -2648,6 +2767,13 @@
             startLabel(p);
             setLabelTool('select');
           }
+        } else if (labelTool === 'pin') {
+          const label = soleLabel();
+          if (label && inBackground(p)) {
+            recordUndo();
+            label.pins.push({ x: p.x, y: p.y });
+          }
+          setLabelTool('select');
         } else {
           selectedLabels = [];
         }

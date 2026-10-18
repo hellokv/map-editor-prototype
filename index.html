@@ -131,6 +131,17 @@
     * + .field {
       margin-top: 8px;
     }
+    #label-style-picker {
+      padding: 8px 0;
+      border-top: 1px solid #ddd;
+      border-bottom: 1px solid #ddd;
+    }
+    #label-style-picker label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -203,10 +214,9 @@
             </div>
           </div>
         </div>
-        <label class="field">
+        <div id="label-style-picker" class="field">
           Style
-          <select id="label-style"></select>
-        </label>
+        </div>
       </div>
       <div id="label-styles">
         <div id="label-style-browser">
@@ -1271,7 +1281,9 @@
     const labelProperties = document.getElementById('label-properties');
     const labelStylesSection = document.getElementById('label-styles');
     const labelStyleList = document.getElementById('label-style-list');
-    const labelStyleSelect = document.getElementById('label-style');
+    const labelStylePicker = document.getElementById('label-style-picker');
+    let stylePickerKey = '';
+    let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
       ['name', 'font', 'weight', 'size', 'line-height', 'caps', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
@@ -1364,8 +1376,6 @@
         }
         return row;
       }));
-      labelStyleSelect.replaceChildren(...labelStyles.map((style) =>
-        Object.assign(document.createElement('option'), { value: style.id, textContent: style.name })));
     }
 
     function readStyleForm() {
@@ -1451,12 +1461,46 @@
     // Enter in a field would otherwise submit the form and reload the page.
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
-    labelStyleSelect.addEventListener('change', () => {
-      recordUndo();
-      for (const label of selectedLabels) label.styleId = Number(labelStyleSelect.value);
-      labelStyleSelect.blur();
-      draw();
-    });
+    function renderStylePicker(text) {
+      const dpr = window.devicePixelRatio || 1;
+      const room = labelStylePicker.clientWidth - 30;
+      labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
+        const option = document.createElement('label');
+        const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
+        pick.addEventListener('change', () => {
+          recordUndo();
+          for (const label of selectedLabels) label.styleId = style.id;
+          pick.blur();
+          draw();
+        });
+        const preview = document.createElement('canvas');
+        const label = { x: 0, y: 0, text, styleId: style.id };
+        const box = labelBox(label);
+        // Room for the outline and shadow around the box.
+        const margin = style.size * 0.5;
+        const w = box.w + 2 * margin;
+        const h = box.h + 2 * margin;
+        const scale = Math.min(1, room / w);
+        preview.style.width = `${w * scale}px`;
+        preview.style.height = `${h * scale}px`;
+        preview.width = Math.ceil(w * scale * dpr);
+        preview.height = Math.ceil(h * scale * dpr);
+        const c = preview.getContext('2d');
+        c.scale(scale * dpr, scale * dpr);
+        c.translate(w / 2, h / 2);
+        c.textAlign = 'center';
+        c.textBaseline = 'alphabetic';
+        c.lineJoin = 'round';
+        loadFont(style.font, style.weight);
+        c.font = fontOf(style);
+        c.shadowColor = style.shadow ?? 'transparent';
+        c.shadowBlur = style.size * 0.25 * scale * dpr;
+        c.shadowOffsetY = style.size * 0.08 * scale * dpr;
+        paintLabel(c, label, style);
+        option.append(pick, preview);
+        return option;
+      }));
+    }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
@@ -1588,9 +1632,19 @@
       labelStylesSection.hidden = anyLabels;
       // Selecting a label swaps the style list and form for its properties.
       if (anyLabels && editingStyle) closeStyleForm();
-      // Mixed styles leave the picker blank.
-      const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
-      labelStyleSelect.value = styleIds.size === 1 ? [...styleIds][0] : '';
+      if (anyLabels) {
+        const text = selectedLabels[0].text;
+        const key = JSON.stringify([text, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        if (key !== stylePickerKey) {
+          stylePickerKey = key;
+          renderStylePicker(text);
+        }
+        // Mixed styles leave the picker blank.
+        const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
+        for (const pick of labelStylePicker.querySelectorAll('input')) {
+          pick.checked = styleIds.size === 1 && styleIds.has(Number(pick.value));
+        }
+      }
       const selectedLabel = soleLabel();
       document.getElementById('label-single-fields').hidden = !selectedLabel;
       if (selectedLabel) {
@@ -1648,7 +1702,10 @@
         link.rel = 'stylesheet';
         link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@${w}&display=swap`;
         document.head.append(link);
-        link.addEventListener('load', () => document.fonts.load(`${w} 16px "${font}"`).then(() => draw()));
+        link.addEventListener('load', () => document.fonts.load(`${w} 16px "${font}"`).then(() => {
+          loadedFontCount++;
+          draw();
+        }));
       }
     }
 
@@ -1798,6 +1855,33 @@
       ctx.restore();
     }
 
+    // Expects c's font, alignment and shadow to be set up for the style.
+    function paintLabel(c, label, style) {
+      const baseline = c.measureText('H').actualBoundingBoxAscent / 2;
+      if (style.background) {
+        // With a background, the outline and shadow belong to the box, not the text.
+        const box = labelBox(label);
+        c.beginPath();
+        c.roundRect(box.x, box.y, box.w, box.h, Math.min(style.radius, box.w / 2, box.h / 2));
+        c.fillStyle = style.background;
+        c.fill();
+        c.shadowColor = 'transparent';
+        if (style.outline) {
+          c.strokeStyle = style.outline;
+          c.lineWidth = style.size * 0.08;
+          c.stroke();
+        }
+      }
+      const lines = labelLines(label);
+      if (!style.background && style.outline) {
+        c.strokeStyle = style.outline;
+        c.lineWidth = style.size * 0.15;
+        for (const line of lines) c.strokeText(line.text, label.x, line.y + baseline);
+        c.shadowColor = 'transparent';
+      }
+      c.fillStyle = style.color;
+      for (const line of lines) c.fillText(line.text, label.x, line.y + baseline);
+    }
     function drawLabels() {
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
@@ -1815,35 +1899,12 @@
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
-        const baseline = ctx.measureText('H').actualBoundingBoxAscent / 2;
         // Canvas shadows are in device pixels, so scale them with the map.
         ctx.shadowColor = style.shadow ?? 'transparent';
         ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
         if (label.pointer) drawPointer(label, style);
-        if (style.background) {
-          // With a background, the outline and shadow belong to the box, not the text.
-          const box = labelBox(label);
-          ctx.beginPath();
-          ctx.roundRect(box.x, box.y, box.w, box.h, Math.min(style.radius, box.w / 2, box.h / 2));
-          ctx.fillStyle = style.background;
-          ctx.fill();
-          ctx.shadowColor = 'transparent';
-          if (style.outline) {
-            ctx.strokeStyle = style.outline;
-            ctx.lineWidth = style.size * 0.08;
-            ctx.stroke();
-          }
-        }
-        const lines = labelLines(label);
-        if (!style.background && style.outline) {
-          ctx.strokeStyle = style.outline;
-          ctx.lineWidth = style.size * 0.15;
-          for (const line of lines) ctx.strokeText(line.text, label.x, line.y + baseline);
-          ctx.shadowColor = 'transparent';
-        }
-        ctx.fillStyle = style.color;
-        for (const line of lines) ctx.fillText(line.text, label.x, line.y + baseline);
+        paintLabel(ctx, label, style);
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;

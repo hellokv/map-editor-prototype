@@ -121,7 +121,10 @@
       </button>
       <div id="label-tools" hidden>
         <hr>
-        <button id="new-label" type="button" aria-label="New label">
+        <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
+          <span class="material-symbols-rounded">arrow_selector_tool</span>
+        </button>
+        <button type="button" data-label-tool="add" aria-label="New label" aria-pressed="false">
           <span class="material-symbols-rounded">new_label</span>
         </button>
       </div>
@@ -215,15 +218,20 @@
   <script>
     const modeButtons = document.querySelectorAll('#mode-menu [data-mode]');
     const labelTools = document.getElementById('label-tools');
-    const newLabelButton = document.getElementById('new-label');
-    let addingLabel = false;
+    const labelToolButtons = document.querySelectorAll('[data-label-tool]');
+    let labelTool = 'select';
+    let selectedLabel = null;
 
-    function setAddingLabel(on) {
-      addingLabel = on;
-      newLabelButton.setAttribute('aria-pressed', on);
+    function setLabelTool(name) {
+      labelTool = name;
+      for (const button of labelToolButtons) {
+        button.setAttribute('aria-pressed', button.dataset.labelTool === name);
+      }
       updateCursor();
     }
-    newLabelButton.addEventListener('click', () => setAddingLabel(!addingLabel));
+    for (const button of labelToolButtons) {
+      button.addEventListener('click', () => setLabelTool(button.dataset.labelTool));
+    }
     const modePanels = {
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
@@ -252,8 +260,9 @@
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
       if (mode !== 'labels') {
-        setAddingLabel(false);
+        setLabelTool('select');
         finishLabel(false);
+        selectedLabel = null;
       }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
@@ -763,6 +772,7 @@
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
       labels.splice(0, labels.length, ...restoredLabels);
+      selectedLabel = null;
       fills.splice(0, fills.length, ...restoredFills);
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
@@ -1280,6 +1290,23 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
+    // A label's box in background pixels, centred on its spot.
+    function labelBox(label) {
+      ctx.save();
+      ctx.font = `${LABEL_SIZE}px sans-serif`;
+      const width = ctx.measureText(label.text).width;
+      ctx.restore();
+      return { x: label.x - width / 2, y: label.y - LABEL_SIZE / 2, w: width, h: LABEL_SIZE };
+    }
+
+    function labelAt(p) {
+      for (let i = labels.length - 1; i >= 0; i--) {
+        const box = labelBox(labels[i]);
+        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return labels[i];
+      }
+      return null;
+    }
+
     function drawLabels() {
       ctx.save();
       ctx.fillStyle = '#000';
@@ -1287,9 +1314,35 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (const label of labels) ctx.fillText(label.text, label.x, label.y);
+      if (selectedLabel) {
+        // Same white-with-shadow look as other selections, a few pixels clear of the text.
+        const box = labelBox(selectedLabel);
+        const pad = 4 / view.scale;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2 / view.scale;
+        ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+      }
       ctx.restore();
       placeLabelInput();
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (labelTools.hidden || e.target.closest('input')) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        selectedLabel = null;
+        setLabelTool('select');
+        draw();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLabel) {
+        e.preventDefault();
+        recordUndo();
+        labels.splice(labels.indexOf(selectedLabel), 1);
+        selectedLabel = null;
+        draw();
+      }
+    });
 
     function traceArea(area) {
       ctx.beginPath();
@@ -1499,7 +1552,7 @@
 
     function updateCursor() {
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
-      else if (addingLabel && !labelTools.hidden) canvas.style.cursor = 'text';
+      else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
       else canvas.style.cursor = addTarget() ? addCursor : '';
     }
 
@@ -1750,10 +1803,14 @@
         toggleInSelection(toggle);
       } else if (marquee && wasClick && base.length) {
         // A Shift-click on empty space leaves the selection alone.
-      } else if (wasClick && addingLabel && !labelTools.hidden) {
+      } else if (wasClick && !labelTools.hidden) {
         const s = canvasPoint(e);
         const p = toBackground(s.x, s.y);
-        if (inBackground(p)) startLabel(p);
+        if (labelTool === 'add') {
+          if (inBackground(p)) startLabel(p);
+        } else {
+          selectedLabel = labelAt(p);
+        }
       } else if (wasClick && !pathTools.hidden) {
         const s = canvasPoint(e);
         const target = addTarget(s);

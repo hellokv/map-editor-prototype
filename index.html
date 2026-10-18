@@ -1191,7 +1191,11 @@
     const styleInputs = Object.fromEntries(
       ['name', 'font', 'size', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
+    // Edits to an existing style show on the map as they're made. Save keeps
+    // them as one undo step; Cancel puts back the values from when editing began.
     let editingStyle = null; // the style being edited, or null for a new one
+    let styleBefore = null; // { values, snapshot } from when editing began
+    const googleFonts = new Set(GOOGLE_FONTS);
 
     document.getElementById('google-fonts-list').append(
       ...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })),
@@ -1221,8 +1225,21 @@
         Object.assign(document.createElement('option'), { value: style.id, textContent: style.name })));
     }
 
+    function readStyleForm() {
+      return {
+        name: styleInputs.name.value.trim(),
+        font: styleInputs.font.value.trim(),
+        size: Math.max(4, Number(styleInputs.size.value) || 24),
+        color: styleInputs.color.value,
+        outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
+        shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
+      };
+    }
+
     function openStyleForm(style) {
+      cancelStyleForm();
       editingStyle = style;
+      styleBefore = style && { values: { ...style }, snapshot: snapshot() };
       const values = style ?? { name: '', font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null };
       styleInputs.name.value = values.name;
       styleInputs.font.value = values.font;
@@ -1238,24 +1255,40 @@
 
     function closeStyleForm() {
       editingStyle = null;
+      styleBefore = null;
       styleForm.hidden = true;
     }
 
+    function cancelStyleForm() {
+      if (styleForm.hidden) return;
+      if (editingStyle) Object.assign(editingStyle, styleBefore.values);
+      closeStyleForm();
+      draw();
+    }
+
+    function previewStyleForm() {
+      if (!editingStyle) return;
+      const values = readStyleForm();
+      // Half-typed font names aren't fonts; keep showing the last real one.
+      if (!googleFonts.has(values.font)) delete values.font;
+      Object.assign(editingStyle, values);
+      draw();
+    }
+
     document.getElementById('new-label-style').addEventListener('click', () => openStyleForm(null));
-    document.getElementById('style-cancel').addEventListener('click', closeStyleForm);
+    document.getElementById('style-cancel').addEventListener('click', cancelStyleForm);
+    styleForm.addEventListener('input', previewStyleForm);
+    styleForm.addEventListener('change', previewStyleForm);
     styleForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      recordUndo();
-      const values = {
-        name: styleInputs.name.value.trim(),
-        font: styleInputs.font.value.trim(),
-        size: Math.max(4, Number(styleInputs.size.value) || 24),
-        color: styleInputs.color.value,
-        outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
-        shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
-      };
-      if (editingStyle) Object.assign(editingStyle, values);
-      else labelStyles.push({ id: nextStyleId++, ...values });
+      const values = readStyleForm();
+      if (editingStyle) {
+        recordUndo(styleBefore.snapshot);
+        Object.assign(editingStyle, values);
+      } else {
+        recordUndo();
+        labelStyles.push({ id: nextStyleId++, ...values });
+      }
       closeStyleForm();
       renderLabelStyles();
       draw();
@@ -1386,6 +1419,8 @@
       if (fill) fillColorInput.value = fill.color;
       labelProperties.hidden = !selectedLabel;
       labelStylesSection.hidden = !!selectedLabel;
+      // Selecting a label hides the form, so an unsaved edit is abandoned.
+      if (selectedLabel) cancelStyleForm();
       if (selectedLabel) {
         labelStyleSelect.value = styleOf(selectedLabel).id;
         // Leave a field alone while it's being typed in.

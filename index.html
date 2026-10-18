@@ -2597,7 +2597,7 @@
       const p = toBackground(s.x, s.y);
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
       if (backgroundTool === 'segments') {
-        drawSketchPoint(p, s);
+        drawSketchPoint(sketchTarget(s));
         return;
       }
       if (backgroundTool === 'shapes') {
@@ -2716,32 +2716,90 @@
       };
     }
     const toScreen = (p) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
-    function sketchPointAt(s) {
-      return sketch.points.findLast((point) => {
+    // The nearest point within reach of a screen point, in screen pixels.
+    function sketchPointAt(s, reach = SKETCH_HIT_DISTANCE, exclude = null) {
+      let best = null;
+      for (const point of sketch.points) {
         const q = toScreen(point);
-        return Math.hypot(q.x - s.x, q.y - s.y) <= SKETCH_HIT_DISTANCE;
-      }) ?? null;
+        const d = Math.hypot(q.x - s.x, q.y - s.y);
+        if (point !== exclude && d <= reach && (!best || d < best.d)) best = { point, d };
+      }
+      return best?.point ?? null;
     }
-    function sketchSegmentAt(s) {
-      return sketch.segments.findLast(([a, b]) => {
-        const p = toScreen(a);
-        const q = toScreen(b);
+    // The nearest segment within reach, as { segment, t } with t along it.
+    function sketchSegmentHit(s, reach = SKETCH_HIT_DISTANCE, exclude = null) {
+      let best = null;
+      for (const segment of sketch.segments) {
+        if (exclude && segment.includes(exclude)) continue;
+        const p = toScreen(segment[0]);
+        const q = toScreen(segment[1]);
         const length2 = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
         const t = length2 ? Math.max(0, Math.min(1, ((s.x - p.x) * (q.x - p.x) + (s.y - p.y) * (q.y - p.y)) / length2)) : 0;
-        return Math.hypot(p.x + t * (q.x - p.x) - s.x, p.y + t * (q.y - p.y) - s.y) <= SKETCH_HIT_DISTANCE;
-      }) ?? null;
+        const d = Math.hypot(p.x + t * (q.x - p.x) - s.x, p.y + t * (q.y - p.y) - s.y);
+        if (d <= reach && (!best || d < best.d)) best = { segment, t, d };
+      }
+      return best;
     }
-    // Each click adds a point joined to the last; clicking an existing point
-    // joins to it, which ends the chain when one was being drawn.
-    function drawSketchPoint(p, s) {
-      const hit = sketchPointAt(s);
-      const point = hit ?? { x: p.x, y: p.y };
-      const joined = sketchActive && sketchActive !== point
+    const sketchSegmentAt = (s) => sketchSegmentHit(s)?.segment ?? null;
+    // Where a click with the Segments tool would land, snapping as the path
+    // tool does: Shift locks to 45° from the point being drawn from, then it
+    // snaps to a point, else onto a segment, within snap distance.
+    function sketchTarget(s) {
+      if (!s) return null;
+      const reach = Math.max(Number(snapInput.value), SKETCH_HIT_DISTANCE);
+      let q = s;
+      let guide = null;
+      if (shiftHeld && sketchActive) {
+        q = lockAngle(sketchActive, s);
+        guide = { origin: sketchActive, dx: q.dx, dy: q.dy };
+      }
+      const point = sketchPointAt(q, reach, sketchActive);
+      if (point) return { point, at: point, guide };
+      const onto = sketchSegmentHit(q, reach, sketchActive);
+      if (onto) {
+        const [a, b] = onto.segment;
+        return { split: onto, at: { x: a.x + (b.x - a.x) * onto.t, y: a.y + (b.y - a.y) * onto.t }, guide };
+      }
+      const at = toBackground(q.x, q.y);
+      return inBackground(at) ? { add: at, at, guide } : null;
+    }
+    // Each click adds a point joined to the last. Joining onto an existing
+    // point or segment ends the chain; closing a loop selects it for filling.
+    function drawSketchPoint(target) {
+      if (!target) return;
+      const joins = (point) => sketchActive && sketchActive !== point
         && !sketch.segments.some(([a, b]) => (a === sketchActive && b === point) || (a === point && b === sketchActive));
-      if (!hit || joined) recordUndo();
-      if (!hit) sketch.points.push(point);
-      if (joined) sketch.segments.push([sketchActive, point]);
-      sketchActive = hit && sketchActive ? null : point;
+      if (target.point && !joins(target.point)) {
+        sketchActive = sketchActive ? null : target.point;
+        return;
+      }
+      recordUndo();
+      sketchSelected = null;
+      let point = target.point;
+      if (target.split) {
+        const [a, b] = target.split.segment;
+        point = { ...target.at };
+        sketch.segments.splice(sketch.segments.indexOf(target.split.segment), 1, [a, point], [point, b]);
+        // A loop through the split segment now runs through the new point too.
+        for (const fill of sketchFills) if (fill.has(a) && fill.has(b)) fill.add(point);
+      } else if (target.add) {
+        point = { ...target.at };
+      }
+      if (!target.point) sketch.points.push(point);
+      if (!joins(point)) {
+        sketchActive = sketchActive ? null : point;
+        return;
+      }
+      const segment = [sketchActive, point];
+      sketch.segments.push(segment);
+      const closed = computeAreas([sketch]).filter((area) => area.loop.some((edge) => edge.segment === segment));
+      if (closed.length) {
+        const smallest = closed.reduce((a, b) => (b.area < a.area ? b : a));
+        sketchSelected = { area: smallest.points };
+        sketchActive = null;
+      } else {
+        sketchActive = target.point || target.split ? null : point;
+      }
     }
     function deleteSketchSelection() {
       const { point, segment, area } = sketchSelected;
@@ -2800,18 +2858,31 @@
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
       }
-      if (sketchActive && pointer && backgroundTool === 'segments') {
-        const p = toBackground(pointer.x, pointer.y);
+      const target = backgroundTool === 'segments' && !spaceHeld ? sketchTarget(pointer) : null;
+      if (target?.guide) {
+        const { origin, dx, dy } = target.guide;
+        const length = 4 * BACKGROUND;
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = px;
+        ctx.beginPath();
+        ctx.moveTo(origin.x - dx * length, origin.y - dy * length);
+        ctx.lineTo(origin.x + dx * length, origin.y + dy * length);
+        ctx.stroke();
+      }
+      if (target && sketchActive) {
         ctx.globalAlpha = 0.5;
         ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2 * px;
         ctx.beginPath();
         ctx.moveTo(sketchActive.x, sketchActive.y);
-        ctx.lineTo(p.x, p.y);
+        ctx.lineTo(target.at.x, target.at.y);
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
-      for (const point of sketch.points) {
-        const marked = point === sketchActive || point === sketchSelected?.point;
+      // Where the next click lands, when it snaps to a point or a segment.
+      const snapped = target && !target.add ? [target.at] : [];
+      for (const point of [...sketch.points, ...snapped]) {
+        const marked = point === sketchActive || point === sketchSelected?.point || snapped.includes(point);
         ctx.fillStyle = marked ? highlight : '#fff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.lineWidth = px;

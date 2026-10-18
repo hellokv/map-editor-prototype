@@ -447,11 +447,17 @@
             <div id="label-icon-side">
               <button type="button" data-icon-side="left" aria-label="Icon left of text"><span class="material-symbols-rounded">align_horizontal_left</span></button>
               <button type="button" data-icon-side="right" aria-label="Icon right of text"><span class="material-symbols-rounded">align_horizontal_right</span></button>
+              <button type="button" data-icon-side="top" aria-label="Icon above text"><span class="material-symbols-rounded">align_vertical_top</span></button>
+              <button type="button" data-icon-side="bottom" aria-label="Icon below text"><span class="material-symbols-rounded">align_vertical_bottom</span></button>
             </div>
           </div>
           <label id="label-icon-size-field" class="row">
             Icon size
             <input id="label-icon-size" type="number" min="4" max="200" step="1">
+          </label>
+          <label id="label-icon-gap-field" class="row">
+            Icon gap
+            <input id="label-icon-gap" type="number" min="0" max="200" step="1">
           </label>
         </div>
         <div id="label-style-picker" class="group">
@@ -504,6 +510,10 @@
             <label class="row">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
+            </label>
+            <label class="row">
+              Icon gap
+              <input id="style-icon-gap" type="number" min="0" max="200" step="1">
             </label>
             <label class="row">
               <span><input id="style-caps" type="checkbox"> All caps</span>
@@ -1699,7 +1709,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'icon-size', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -1847,6 +1857,7 @@
         size: Math.max(4, Number(styleInputs.size.value) || 24),
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
         iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
+        iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
         color: colorOf(styleInputs.color),
         outline: styleInputs['outline-on'].checked ? colorOf(styleInputs.outline) : null,
@@ -1872,6 +1883,7 @@
       styleInputs.size.value = values.size;
       styleInputs['line-height'].value = values.lineHeight;
       styleInputs['icon-size'].value = values.iconSize;
+      styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
       showColor(styleInputs.color, values.color);
       styleInputs['outline-on'].checked = !!values.outline;
@@ -1945,7 +1957,7 @@
 
     // A canvas showing text drawn in a style.
     const PREVIEW_TEXT_SIZE = 20;
-    // extra carries a label's icon, iconSize and iconSide, if any.
+    // extra carries a label's icon, iconSize, iconSide and iconGap, if any.
     function stylePreview(style, text, room, extra = {}) {
       const { icon, iconSize } = extra;
       const dpr = window.devicePixelRatio || 1;
@@ -1979,7 +1991,7 @@
       paintLabel(c, label, style);
       return preview;
     }
-    function renderStylePicker({ text, icon, iconSize, iconSide }) {
+    function renderStylePicker({ text, icon, iconSize, iconSide, iconGap }) {
       const room = labelStylePicker.clientWidth - 30;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
@@ -1990,7 +2002,7 @@
           pick.blur();
           draw();
         });
-        option.append(pick, stylePreview(style, text, room, { icon, iconSize, iconSide }), styleMenu(style));
+        option.append(pick, stylePreview(style, text, room, { icon, iconSize, iconSide, iconGap }), styleMenu(style));
         return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
@@ -1998,6 +2010,7 @@
       labelStylePicker.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
+    const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
     const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
@@ -2014,8 +2027,8 @@
     for (const button of iconSideButtons) {
       button.addEventListener('click', () => {
         recordUndo();
-        if (button.dataset.iconSide === 'right') soleLabel().iconSide = 'right';
-        else delete soleLabel().iconSide;
+        if (button.dataset.iconSide === 'left') delete soleLabel().iconSide;
+        else soleLabel().iconSide = button.dataset.iconSide;
         button.blur();
         draw();
       });
@@ -2166,8 +2179,8 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
-        const { text, icon, iconSize, iconSide } = selectedLabels[0];
-        const key = JSON.stringify([text, icon, iconSize, iconSide, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        const { text, icon, iconSize, iconSide, iconGap } = selectedLabels[0];
+        const key = JSON.stringify([text, icon, iconSize, iconSide, iconGap, labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
           renderStylePicker(selectedLabels[0]);
@@ -2203,6 +2216,9 @@
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
+        document.getElementById('label-icon-gap-field').hidden = !iconOn;
+        labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
+        show(labelIconGapInput, selectedLabel.iconGap ?? '');
       }
     }
 
@@ -2308,7 +2324,7 @@
     // is how thick the outline looks. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -2417,37 +2433,46 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
-    // An icon sits beside the text, left unless iconSide is 'right', this
-    // fraction of its size apart.
-    const ICON_GAP = 0.25;
     // How a label's content lies, centred on its spot: its lines, each
-    // centred on textX with the block centred on y, as [{ text, y, width }];
-    // its icon centred on iconX; and the content's width and height. Hidden
-    // text is kept on the label for accessibility but takes no room.
+    // centred on textX, as [{ text, y, width }]; its icon centred on
+    // (iconX, iconY), on the iconSide of the text (left when absent), the
+    // icon gap apart; and the content's width and height. Hidden text is kept
+    // on the label for accessibility but takes no room.
     function labelLayout(label) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
       const texts = label.hideText ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
-      const lines = texts.map((text, i) => ({
-        text,
-        y: label.y + (i - (texts.length - 1) / 2) * step,
-        width: ctx.measureText(text).width,
-      }));
+      const widths = texts.map((text) => ctx.measureText(text).width);
       ctx.restore();
-      const textWidth = Math.max(0, ...lines.map((line) => line.width));
+      const textWidth = Math.max(0, ...widths);
+      const textHeight = texts.length ? style.size + (texts.length - 1) * step : 0;
       const icon = label.icon ? style.iconSize : 0;
-      const gap = icon && textWidth ? icon * ICON_GAP : 0;
-      const width = icon + gap + textWidth;
+      const gap = icon && textWidth ? label.iconGap ?? style.iconGap : 0;
+      const side = label.iconSide ?? 'left';
+      const across = side === 'left' || side === 'right';
+      const width = across ? icon + gap + textWidth : Math.max(icon, textWidth);
+      const height = across ? Math.max(textHeight, icon) : icon + gap + textHeight;
       const left = label.x - width / 2;
-      return {
-        lines,
-        textX: label.iconSide === 'right' ? left + textWidth / 2 : left + icon + gap + textWidth / 2,
-        iconX: label.iconSide === 'right' ? left + width - icon / 2 : left + icon / 2,
-        width,
-        height: Math.max(texts.length ? style.size + (texts.length - 1) * step : 0, icon),
-      };
+      const top = label.y - height / 2;
+      let { x: textX, y: textY } = label;
+      let { x: iconX, y: iconY } = label;
+      if (side === 'left') {
+        iconX = left + icon / 2;
+        textX = left + icon + gap + textWidth / 2;
+      } else if (side === 'right') {
+        textX = left + textWidth / 2;
+        iconX = left + width - icon / 2;
+      } else if (side === 'top') {
+        iconY = top + icon / 2;
+        textY = top + icon + gap + textHeight / 2;
+      } else {
+        textY = top + textHeight / 2;
+        iconY = top + height - icon / 2;
+      }
+      const lines = texts.map((text, i) => ({ text, y: textY + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
+      return { lines, textX, iconX, iconY, width, height };
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -2523,21 +2548,21 @@
           c.stroke();
         }
       }
-      const { lines, textX, iconX } = labelLayout(label);
+      const { lines, textX, iconX, iconY } = labelLayout(label);
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
         // Half of a stroke falls inside the glyphs, under the fill.
         c.lineWidth = style.outlineWidth * 2;
         for (const line of lines) c.strokeText(line.text, textX, line.y + baseline);
-        if (label.icon) paintIcon(c, label, style, iconX, 'strokeText');
+        if (label.icon) paintIcon(c, label, style, iconX, iconY, 'strokeText');
         c.shadowColor = 'transparent';
       }
       c.fillStyle = style.color;
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
-      if (label.icon) paintIcon(c, label, style, iconX, 'fillText');
+      if (label.icon) paintIcon(c, label, style, iconX, iconY, 'fillText');
     }
-    // Draws a label's icon centred on (x, label.y), once its glyph has loaded.
-    function paintIcon(c, label, style, x, method) {
+    // Draws a label's icon centred on (x, y), once its glyph has loaded.
+    function paintIcon(c, label, style, x, y, method) {
       // A label's own icon size changes only how big the icon looks; its room
       // in the label stays the style's icon size.
       const font = `300 ${label.iconSize ?? style.iconSize}px "Material Symbols Rounded"`;
@@ -2551,7 +2576,7 @@
       const textFont = c.font;
       c.font = font;
       const glyph = c.measureText(label.icon);
-      c[method](label.icon, x, label.y + (glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
+      c[method](label.icon, x, y + (glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
       c.font = textFont;
     }
     function drawLabels() {

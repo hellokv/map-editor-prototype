@@ -189,6 +189,19 @@
             Shadow color
             <input id="style-shadow" type="color">
           </label>
+          <label class="field">
+            Padding
+            <input id="style-padding" type="number" min="0" max="200" step="1">
+          </label>
+          <label class="field">
+            <input id="style-background-on" type="checkbox">
+            Background color
+            <input id="style-background" type="color">
+          </label>
+          <label class="field">
+            Border radius
+            <input id="style-radius" type="number" min="0" max="200" step="1">
+          </label>
           <div class="field">
             <button type="submit">Save</button>
             <button id="style-cancel" type="button">Cancel</button>
@@ -1189,7 +1202,7 @@
     const labelStyleSelect = document.getElementById('label-style');
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'size', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'size', 'color', 'outline-on', 'outline', 'shadow-on', 'shadow', 'padding', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Edits to an existing style show on the map as they're made. Save keeps
     // them as one undo step; Cancel puts back the values from when editing began.
@@ -1233,6 +1246,9 @@
         color: styleInputs.color.value,
         outline: styleInputs['outline-on'].checked ? styleInputs.outline.value : null,
         shadow: styleInputs['shadow-on'].checked ? styleInputs.shadow.value : null,
+        padding: Math.max(0, Number(styleInputs.padding.value) || 0),
+        background: styleInputs['background-on'].checked ? styleInputs.background.value : null,
+        radius: Math.max(0, Number(styleInputs.radius.value) || 0),
       };
     }
 
@@ -1240,7 +1256,7 @@
       cancelStyleForm();
       editingStyle = style;
       styleBefore = style && { values: { ...style }, snapshot: snapshot() };
-      const values = style ?? { name: '', font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null };
+      const values = style ?? { ...NEW_STYLE, name: '' };
       styleInputs.name.value = values.name;
       styleInputs.font.value = values.font;
       styleInputs.size.value = values.size;
@@ -1249,6 +1265,10 @@
       styleInputs.outline.value = values.outline ?? '#ffffff';
       styleInputs['shadow-on'].checked = !!values.shadow;
       styleInputs.shadow.value = values.shadow ?? '#000000';
+      styleInputs.padding.value = values.padding;
+      styleInputs['background-on'].checked = !!values.background;
+      styleInputs.background.value = values.background ?? '#ffffff';
+      styleInputs.radius.value = values.radius;
       styleForm.hidden = false;
       styleInputs.name.focus();
     }
@@ -1446,9 +1466,11 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, size, color, outline, shadow }; outline and shadow are
-    // null when off. The first style is the default and can't be deleted.
-    const labelStyles = [{ id: 1, name: 'Default', font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null }];
+    // { id, name, font, size, color, outline, shadow, padding, background,
+    // radius }; outline, shadow and background are null when off. The first
+    // style is the default and can't be deleted.
+    const NEW_STYLE = { font: 'Roboto', size: 24, color: '#000000', outline: null, shadow: null, padding: 0, background: null, radius: 0 };
+    const labelStyles = [{ id: 1, name: 'Default', ...NEW_STYLE }];
     let nextStyleId = 2;
     const styleOf = (label) => labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0];
     const fontOf = (style) => `${style.size}px "${style.font}", sans-serif`;
@@ -1504,14 +1526,15 @@
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
-    // A label's box in background pixels, centred on its spot.
+    // A label's box in background pixels, centred on its spot, padding included.
     function labelBox(label) {
       const style = styleOf(label);
       ctx.save();
       ctx.font = fontOf(style);
-      const width = ctx.measureText(label.text).width;
+      const width = ctx.measureText(label.text).width + 2 * style.padding;
       ctx.restore();
-      return { x: label.x - width / 2, y: label.y - style.size / 2, w: width, h: style.size };
+      const height = style.size + 2 * style.padding;
+      return { x: label.x - width / 2, y: label.y - height / 2, w: width, h: height };
     }
 
     function labelAt(p) {
@@ -1536,7 +1559,20 @@
         ctx.shadowColor = style.shadow ?? 'transparent';
         ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
-        if (style.outline) {
+        if (style.background) {
+          // With a background, the outline and shadow belong to the box, not the text.
+          const box = labelBox(label);
+          ctx.beginPath();
+          ctx.roundRect(box.x, box.y, box.w, box.h, Math.min(style.radius, box.w / 2, box.h / 2));
+          ctx.fillStyle = style.background;
+          ctx.fill();
+          ctx.shadowColor = 'transparent';
+          if (style.outline) {
+            ctx.strokeStyle = style.outline;
+            ctx.lineWidth = style.size * 0.08;
+            ctx.stroke();
+          }
+        } else if (style.outline) {
           ctx.strokeStyle = style.outline;
           ctx.lineWidth = style.size * 0.15;
           ctx.strokeText(label.text, label.x, label.y);

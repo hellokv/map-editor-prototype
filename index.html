@@ -55,19 +55,6 @@
     #font-options div[aria-selected="true"] {
       background: #ddd;
     }
-    #label-pointer {
-      display: grid;
-      grid-template-columns: repeat(3, max-content);
-      gap: 2px;
-      margin-top: 4px;
-    }
-    #label-pointer button {
-      display: flex;
-      padding: 2px;
-    }
-    #label-pointer button[aria-pressed="true"] {
-      background: #ddd;
-    }
     #crossing-dialog {
       position: absolute;
       display: flex;
@@ -108,30 +95,81 @@
     #panel {
       flex: none;
       width: 300px;
-      padding: 8px;
+      padding: 4px 8px;
       box-sizing: border-box;
       background: #f2f2f2;
+      font: 13px system-ui, sans-serif;
     }
-    #image-preview {
+    .group {
+      padding: 6px 0;
+    }
+    .group:not(:first-child) {
+      border-top: 1px solid #ddd;
+    }
+    .group:not(:has(> :not([hidden]))) {
+      display: none;
+    }
+    .row {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
+      justify-content: space-between;
       gap: 8px;
+      min-height: 28px;
     }
-    #image-preview img {
-      min-width: 0;
-      max-width: 100%;
+    .row > span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    #image-delete,
-    #label-style-picker label button {
-      flex: none;
-      display: flex;
-      padding: 0;
+    .row.stacked {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      padding: 4px 0;
     }
-    .field {
-      display: block;
+    .row input[type="checkbox"],
+    .row input[type="radio"] {
+      margin: 0;
     }
-    * + .field {
-      margin-top: 8px;
+    #panel input[type="text"],
+    #panel input[type="number"],
+    #panel select,
+    #panel textarea {
+      box-sizing: border-box;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font: inherit;
+    }
+    #panel textarea {
+      resize: vertical;
+    }
+    .row input[type="text"],
+    .row select {
+      width: 140px;
+    }
+    .row input[type="number"]:not(.opacity) {
+      width: 64px;
+    }
+    #panel .opacity {
+      width: 52px;
+      margin-left: 2px;
+      padding: 3px 4px;
+    }
+    .slider {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .slider input {
+      width: 110px;
+      margin: 0;
+    }
+    .slider output {
+      min-width: 36px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
     .color-field {
       display: inline-flex;
@@ -146,73 +184,66 @@
       border-radius: 4px;
       background: none;
     }
-    .opacity {
-      width: 52px;
-      margin-left: 2px;
+    #panel button {
+      padding: 4px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font: inherit;
+      cursor: pointer;
     }
-    #label-style-form {
-      font: 13px system-ui, sans-serif;
+    #panel button:hover {
+      background: #f8f8f8;
     }
-    #style-back {
+    .group > button {
+      display: block;
+      margin: 4px 0;
+    }
+    #panel #style-back,
+    #panel #image-delete,
+    #label-style-picker label button {
+      flex: none;
       display: flex;
       padding: 2px;
       border: none;
-      border-radius: 4px;
       background: none;
-      cursor: pointer;
     }
-    #style-back:hover {
-      background: #eee;
+    #panel #style-back:hover,
+    #panel #image-delete:hover,
+    #label-style-picker label button:hover {
+      background: #e4e4e4;
     }
-    .style-group {
-      padding: 6px 0;
-      border-bottom: 1px solid #ddd;
+    #label-pointer {
+      display: grid;
+      grid-template-columns: repeat(3, max-content);
+      gap: 2px;
     }
-    .style-group:last-child {
-      border-bottom: none;
-    }
-    .style-row {
+    #label-pointer button {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      padding: 2px;
+    }
+    #label-pointer button[aria-pressed="true"] {
+      background: #ddd;
+    }
+    #image-upload {
+      max-width: 100%;
+      font: inherit;
+    }
+    #image-preview {
+      display: flex;
+      align-items: flex-start;
       gap: 8px;
-      min-height: 28px;
+      margin-top: 8px;
     }
-    .style-row > span:first-child {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    #image-preview img {
+      min-width: 0;
+      max-width: 100%;
     }
-    .style-row input[type="checkbox"] {
-      margin: 0;
+    #label-style-list .row {
+      justify-content: flex-start;
     }
-    .style-row input[type="text"],
-    .style-row input[type="number"]:not(.opacity),
-    .style-row select {
-      box-sizing: border-box;
-      width: 140px;
-      padding: 3px 6px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font: inherit;
-    }
-    .style-row input[type="number"]:not(.opacity) {
-      width: 64px;
-    }
-    .style-row .opacity {
-      box-sizing: border-box;
-      padding: 3px 4px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font: inherit;
-    }
-    .style-row .font-picker input {
-      width: 140px;
-    }
-    #label-style-picker {
-      padding: 8px 0;
-      border-top: 1px solid #ddd;
-      border-bottom: 1px solid #ddd;
+    #label-style-list .row > span {
+      flex: 1;
     }
     #label-style-picker label {
       display: flex;
@@ -264,20 +295,20 @@
   <div id="panel">
     <div id="labels-panel" hidden>
       <div id="label-properties" hidden>
-        <div id="label-single-fields">
-          <label class="field">
+        <div id="label-single-fields" class="group">
+          <label class="row stacked">
             Text
             <textarea id="label-text" rows="2"></textarea>
           </label>
-          <label class="field">
+          <label class="row">
             X
             <input id="label-x" type="number" min="0" max="1500" step="1">
           </label>
-          <label class="field">
+          <label class="row">
             Y
             <input id="label-y" type="number" min="0" max="1500" step="1">
           </label>
-          <div class="field">
+          <div class="row">
             Pointer
             <div id="label-pointer">
               <button type="button" data-pointer="nw" aria-label="Top left"><span class="material-symbols-rounded">north_west</span></button>
@@ -292,32 +323,32 @@
             </div>
           </div>
         </div>
-        <div id="label-style-picker" class="field">
+        <div id="label-style-picker" class="group">
           Style
         </div>
       </div>
       <div id="label-styles">
-        <div id="label-style-browser">
+        <div id="label-style-browser" class="group">
           <div id="label-style-list"></div>
-          <button id="new-label-style" class="field" type="button">New label style</button>
+          <button id="new-label-style" type="button">New label style</button>
         </div>
         <form id="label-style-form" hidden>
           <button id="style-back" type="button" aria-label="Back to label styles">
             <span class="material-symbols-rounded">arrow_back</span>
           </button>
-          <div class="style-group">
-            <label class="style-row">
+          <div class="group">
+            <label class="row">
               Name
               <input id="style-name" type="text" required>
             </label>
-            <label class="style-row">
+            <label class="row">
               Font
               <span class="font-picker">
                 <input id="style-font" type="text" autocomplete="off" required>
                 <div id="font-options" hidden></div>
               </span>
             </label>
-            <label class="style-row">
+            <label class="row">
               Font weight
               <select id="style-weight">
                 <option value="100">Thin</option>
@@ -331,50 +362,50 @@
                 <option value="900">Black</option>
               </select>
             </label>
-            <label class="style-row">
+            <label class="row">
               Font size
               <input id="style-size" type="number" min="4" max="200" step="1" required>
             </label>
-            <label class="style-row">
+            <label class="row">
               Line height
               <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
             </label>
-            <label class="style-row">
+            <label class="row">
               <span><input id="style-caps" type="checkbox"> All caps</span>
             </label>
           </div>
-          <div class="style-group">
-            <label class="style-row">
+          <div class="group">
+            <label class="row">
               Color
               <span class="color-field"><input id="style-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
-            <label class="style-row">
+            <label class="row">
               <span><input id="style-outline-on" type="checkbox"> Outline color</span>
               <span class="color-field"><input id="style-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
-            <label class="style-row">
+            <label class="row">
               Outline weight
               <input id="style-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
-            <label class="style-row">
+            <label class="row">
               <span><input id="style-shadow-on" type="checkbox"> Shadow color</span>
               <span class="color-field"><input id="style-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
           </div>
-          <div class="style-group">
-            <label class="style-row">
+          <div class="group">
+            <label class="row">
               Padding top and bottom
               <input id="style-padding-y" type="number" min="0" max="200" step="1">
             </label>
-            <label class="style-row">
+            <label class="row">
               Padding sides
               <input id="style-padding-x" type="number" min="0" max="200" step="1">
             </label>
-            <label class="style-row">
+            <label class="row">
               <span><input id="style-background-on" type="checkbox"> Background color</span>
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
-            <label class="style-row">
+            <label class="row">
               Border radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
             </label>
@@ -383,77 +414,77 @@
       </div>
     </div>
     <div id="path-panel">
-      <label class="field">
-        Snap distance
-        <input id="snap-distance" type="range" min="0" max="50" value="15">
-        <output for="snap-distance"></output>
-      </label>
-      <label class="field">
-        Segment hover distance
-        <input id="segment-distance" type="range" min="1" max="50" value="10">
-        <output for="segment-distance"></output>
-      </label>
-      <label class="field">
-        Bend focus
-        <input id="bend-focus" type="range" min="0" max="100" value="0">
-        <output for="bend-focus"></output>
-      </label>
-      <label class="field">
-        Nudge amount
-        <input id="nudge-amount" type="range" min="1" max="20" value="1">
-        <output for="nudge-amount"></output>
-      </label>
-      <label class="field">
-        Path color
-        <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-      </label>
-      <label id="intersection-field" class="field" hidden>
-        <input id="intersection" type="checkbox">
-        Intersection
-      </label>
-      <button id="create-path" class="field" type="button" hidden>Create path</button>
-      <label id="path-visible-field" class="field" hidden>
-        <input id="path-visible" type="checkbox">
-        Visible
-      </label>
-      <div id="path-width-fields" hidden>
-        <label class="field">
-          Width
-          <input id="path-width" type="range" min="1" max="100">
-          <output for="path-width"></output>
+      <div class="group">
+        <label class="row">
+          <span><input id="show-labels" type="checkbox" checked> Show labels</span>
         </label>
-        <label class="field">
-          Width color
-          <span class="color-field"><input id="path-width-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        <label class="row">
+          Snap distance
+          <span class="slider"><input id="snap-distance" type="range" min="0" max="50" value="15"><output for="snap-distance"></output></span>
+        </label>
+        <label class="row">
+          Segment hover distance
+          <span class="slider"><input id="segment-distance" type="range" min="1" max="50" value="10"><output for="segment-distance"></output></span>
+        </label>
+        <label class="row">
+          Bend focus
+          <span class="slider"><input id="bend-focus" type="range" min="0" max="100" value="0"><output for="bend-focus"></output></span>
+        </label>
+        <label class="row">
+          Nudge amount
+          <span class="slider"><input id="nudge-amount" type="range" min="1" max="20" value="1"><output for="nudge-amount"></output></span>
+        </label>
+        <label class="row">
+          Path color
+          <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
-      <button id="destroy-path" class="field" type="button" hidden>Destroy path</button>
-      <button id="delete-bend" class="field" type="button" hidden>Delete bend</button>
-      <label id="fill-area-field" class="field" hidden>
-        <input id="fill-area" type="checkbox">
-        Fill area
-      </label>
-      <label id="fill-visible-field" class="field" hidden>
-        <input id="fill-visible" type="checkbox">
-        Visible
-      </label>
-      <label id="fill-color-field" class="field" hidden>
-        Fill color
-        <span class="color-field"><input id="fill-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-      </label>
+      <div class="group">
+        <label id="intersection-field" class="row" hidden>
+          <span><input id="intersection" type="checkbox"> Intersection</span>
+        </label>
+        <button id="create-path" type="button" hidden>Create path</button>
+        <label id="path-visible-field" class="row" hidden>
+          <span><input id="path-visible" type="checkbox"> Visible</span>
+        </label>
+        <div id="path-width-fields" hidden>
+          <label class="row">
+            Width
+            <span class="slider"><input id="path-width" type="range" min="1" max="100"><output for="path-width"></output></span>
+          </label>
+          <label class="row">
+            Width color
+            <span class="color-field"><input id="path-width-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          </label>
+        </div>
+        <button id="destroy-path" type="button" hidden>Destroy path</button>
+        <button id="delete-bend" type="button" hidden>Delete bend</button>
+        <label id="fill-area-field" class="row" hidden>
+          <span><input id="fill-area" type="checkbox"> Fill area</span>
+        </label>
+        <label id="fill-visible-field" class="row" hidden>
+          <span><input id="fill-visible" type="checkbox"> Visible</span>
+        </label>
+        <label id="fill-color-field" class="row" hidden>
+          Fill color
+          <span class="color-field"><input id="fill-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+      </div>
     </div>
     <div id="background-panel" hidden>
-      <input id="image-upload" type="file" accept="image/*">
-      <div id="image-preview" hidden>
-        <img alt="Background image">
-        <button id="image-delete" type="button" aria-label="Delete image">
-          <span class="material-symbols-rounded">delete</span>
-        </button>
+      <div class="group">
+        <input id="image-upload" type="file" accept="image/*">
+        <div id="image-preview" hidden>
+          <img alt="Background image">
+          <button id="image-delete" type="button" aria-label="Delete image">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+        <label class="row">
+          Background color
+          <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
       </div>
-      <label class="field">
-        Background color
-        <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-      </label>
     </div>
   </div>
   <script src="google-fonts.js"></script>
@@ -627,6 +658,11 @@
       ArrowUp: [0, -1],
       ArrowDown: [0, 1],
     };
+    const showLabelsToggle = document.getElementById('show-labels');
+    showLabelsToggle.addEventListener('change', () => {
+      showLabelsToggle.blur();
+      draw();
+    });
     const pathColor = document.getElementById('path-color');
     pathColor.addEventListener('input', () => draw());
 
@@ -1333,7 +1369,7 @@
         ctx.restore();
       }
 
-      drawLabels();
+      if (showLabelsToggle.checked) drawLabels();
 
       drawMarquee();
       updatePanel();
@@ -1457,7 +1493,7 @@
     function renderLabelStyles() {
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
-        row.className = 'field';
+        row.className = 'row';
         const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
         edit.addEventListener('click', () => openStyleForm(style));
         const pick = Object.assign(document.createElement('input'), {
@@ -1470,7 +1506,7 @@
           currentStyleId = style.id;
           pick.blur();
         });
-        row.append(pick, ` ${style.name} `, edit);
+        row.append(pick, Object.assign(document.createElement('span'), { textContent: style.name }), edit);
         if (i > 0) {
           const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
           remove.addEventListener('click', () => {
@@ -1479,7 +1515,7 @@
             renderLabelStyles();
             draw();
           });
-          row.append(' ', remove);
+          row.append(remove);
         }
         return row;
       }));
@@ -1625,7 +1661,7 @@
         option.append(pick, preview, edit);
         return option;
       }));
-      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'field', textContent: 'New label style' });
+      const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
       create.addEventListener('click', newLabelStyle);
       labelStylePicker.append(create);
     }

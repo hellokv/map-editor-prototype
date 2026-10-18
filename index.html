@@ -1769,7 +1769,10 @@
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      // Each line's baseline sits half a cap height below its centre, so
+      // capitals are centred. The 'middle' baseline centres the font's em box,
+      // which leaves text sitting high in most fonts.
+      ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
@@ -1779,6 +1782,7 @@
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
+        const baseline = ctx.measureText('H').actualBoundingBoxAscent / 2;
         // Canvas shadows are in device pixels, so scale them with the map.
         ctx.shadowColor = style.shadow ?? 'transparent';
         ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
@@ -1802,11 +1806,11 @@
         if (!style.background && style.outline) {
           ctx.strokeStyle = style.outline;
           ctx.lineWidth = style.size * 0.15;
-          for (const line of lines) ctx.strokeText(line.text, label.x, line.y);
+          for (const line of lines) ctx.strokeText(line.text, label.x, line.y + baseline);
           ctx.shadowColor = 'transparent';
         }
         ctx.fillStyle = style.color;
-        for (const line of lines) ctx.fillText(line.text, label.x, line.y);
+        for (const line of lines) ctx.fillText(line.text, label.x, line.y + baseline);
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;

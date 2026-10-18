@@ -1599,12 +1599,14 @@
     }
 
     const labelInput = document.getElementById('label-input');
-    let editingLabel = null; // the spot a label is being typed for
+    // A label being typed: { x, y } for a new one, or { x, y, label } when
+    // editing an existing label in place.
+    let editingLabel = null;
 
-    function startLabel(p) {
+    function startLabel(p, label = null) {
       finishLabel(true);
-      editingLabel = p;
-      labelInput.value = '';
+      editingLabel = { x: p.x, y: p.y, label };
+      labelInput.value = label?.text ?? '';
       labelInput.hidden = false;
       placeLabelInput();
       labelInput.focus();
@@ -1613,7 +1615,14 @@
     function finishLabel(keep) {
       if (!editingLabel) return;
       const text = labelInput.value.trim();
-      if (keep && text) {
+      const { label } = editingLabel;
+      if (label && keep && text !== label.text) {
+        // Clearing an existing label's text deletes it.
+        recordUndo();
+        if (text) label.text = text;
+        else labels.splice(labels.indexOf(label), 1);
+        selectedLabels = selectedLabels.filter((other) => labels.includes(other));
+      } else if (!label && keep && text) {
         recordUndo();
         labels.push({ x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id });
       }
@@ -1635,6 +1644,13 @@
       if (e.key === 'Escape') finishLabel(false);
     });
     labelInput.addEventListener('input', () => draw());
+
+    canvas.addEventListener('dblclick', (e) => {
+      if (labelTools.hidden || labelTool !== 'select') return;
+      const s = canvasPoint(e);
+      const label = labelAt(toBackground(s.x, s.y));
+      if (label) startLabel(label, label);
+    });
     labelInput.addEventListener('blur', () => finishLabel(true));
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -1663,8 +1679,10 @@
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
       // The label being typed is drawn like a real one in the style it will get.
-      const typing = editingLabel && { ...editingLabel, text: labelInput.value, styleId: currentStyle().id };
-      for (const label of typing ? [...labels, typing] : labels) {
+      const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
+      const typing = editingLabel && { x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id };
+      const shown = labels.filter((label) => label !== editingLabel?.label);
+      for (const label of typing ? [...shown, typing] : shown) {
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
@@ -1697,7 +1715,7 @@
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
       if (typing) {
-        const style = currentStyle();
+        const style = typingStyle;
         ctx.font = fontOf(style);
         const caretX = typing.x + ctx.measureText(typing.text).width / 2 + 2 / view.scale;
         ctx.fillStyle = style.color;

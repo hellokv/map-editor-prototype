@@ -2575,6 +2575,8 @@
       } else if (!label && keep && text) {
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
+        // A new label goes on the layer being shown, so it stays in view.
+        if (shownLayer()) created.layers = { [shownLayer()]: true };
         labels.push(created);
       }
       editingLabel = null;
@@ -2694,8 +2696,23 @@
     // The box plus an icon outside it: what can be clicked and selected.
     const labelBounds = (label) => labelLayout(label).bounds;
 
+    // The canvas only shows labels on the layer picked in the bottom menu;
+    // All, and for now Automatic, show every label.
+    const layerSelect = document.getElementById('layer-select');
+    const shownLayer = () => (['Sky', 'Canopy', 'Ground'].includes(layerSelect.value) ? layerSelect.value.toLowerCase() : null);
+    const labelShown = (label) => {
+      const layer = shownLayer();
+      return !layer || !!label.layers?.[layer];
+    };
+    layerSelect.addEventListener('change', () => {
+      selectedLabels = selectedLabels.filter(labelShown);
+      layerSelect.blur();
+      draw();
+    });
+
     function labelAt(p) {
       for (let i = labels.length - 1; i >= 0; i--) {
+        if (!labelShown(labels[i])) continue;
         const box = labelBounds(labels[i]);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return labels[i];
       }
@@ -2801,7 +2818,7 @@
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
       const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false };
-      const shown = labels.filter((label) => label !== editingLabel?.label);
+      const shown = labels.filter((label) => label !== editingLabel?.label && labelShown(label));
       for (const label of typing ? [...shown, typing] : shown) {
         const style = styleOf(label);
         loadFont(style.font, style.weight);
@@ -2850,7 +2867,7 @@
       return { x: pin.x - 8 * unit, y: pin.y - 20 * unit, w: 16 * unit, h: 20 * unit };
     }
     function pinAt(p) {
-      for (const label of [...labels].reverse()) {
+      for (const label of [...labels].reverse().filter(labelShown)) {
         for (const pin of [...label.pins].reverse()) {
           const box = pinBox(pin);
           if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return pin;
@@ -2863,7 +2880,7 @@
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
       const unit = pinUnit();
-      for (const label of labels) {
+      for (const label of labels.filter(labelShown)) {
         const style = styleOf(label);
         ctx.fillStyle = style.background ?? style.color;
         ctx.globalAlpha = selectedLabels.includes(label) ? 1 : 0.35;
@@ -3992,7 +4009,7 @@
 
     // Labels lying wholly inside the box (in screen pixels).
     function labelsInBox(box) {
-      return labels.filter((label) => {
+      return labels.filter(labelShown).filter((label) => {
         const b = labelBounds(label);
         const x = b.x * view.scale + view.x;
         const y = b.y * view.scale + view.y;

@@ -943,6 +943,8 @@
     }
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
+    // Intersection dots are drawn this much bigger.
+    const dotScale = (point) => (point.intersection ? 1.5 : 1);
     // Bending right at an end would swing the control points wildly, so a
     // bend is placed at least this far (as a fraction of the segment) from
     // either end.
@@ -1668,7 +1670,7 @@
         for (const point of path.points) {
           if (selectedPoints.has(point) || point === hovered) continue;
           ctx.beginPath();
-          ctx.arc(point.x, point.y, DOT_RADIUS * px, 0, Math.PI * 2);
+          ctx.arc(point.x, point.y, DOT_RADIUS * dotScale(point) * px, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -1677,7 +1679,7 @@
         ctx.save();
         shadow();
         ctx.beginPath();
-        ctx.arc(point.x, point.y, SELECTED_DOT_RADIUS * px, 0, Math.PI * 2);
+        ctx.arc(point.x, point.y, SELECTED_DOT_RADIUS * dotScale(point) * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         ctx.strokeStyle = `rgba(255, 255, 255, ${outlineAlpha})`;

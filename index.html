@@ -1927,7 +1927,8 @@
     // Enter in a field would otherwise submit the form and reload the page.
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
-    // A canvas showing text drawn in a style, scaled down to fit room if needed.
+    // A canvas showing text drawn in a style.
+    const PREVIEW_TEXT_SIZE = 20;
     function stylePreview(style, text, room, icon = null, iconSize = undefined) {
       const dpr = window.devicePixelRatio || 1;
       const preview = document.createElement('canvas');
@@ -1939,7 +1940,9 @@
       const margin = style.size * 0.5 + overflow;
       const w = box.w + 2 * margin;
       const h = box.h + 2 * margin;
-      const scale = Math.min(1, room / w);
+      // Every style is shown at one text size, whatever its real size, and
+      // shrunk further if that's too wide for the room.
+      const scale = Math.min(PREVIEW_TEXT_SIZE / style.size, room / w);
       preview.style.width = `${w * scale}px`;
       preview.style.height = `${h * scale}px`;
       preview.width = Math.ceil(w * scale * dpr);

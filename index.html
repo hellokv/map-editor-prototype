@@ -2010,6 +2010,14 @@
       labelStylePicker.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
+    // A blank override field shows its default as the placeholder; stepping
+    // it with the arrows or spinner starts from that default, not from zero.
+    for (const input of document.querySelectorAll('#panel input[type="number"]')) {
+      const fillDefault = () => { if (input.value === '' && input.placeholder !== '') input.value = input.placeholder; };
+      // Only presses on the spinner, at the right edge, so clicking in to type stays blank.
+      input.addEventListener('pointerdown', (e) => { if (e.clientX > input.getBoundingClientRect().right - 20) fillDefault(); });
+      input.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') fillDefault(); });
+    }
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);

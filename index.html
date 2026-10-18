@@ -2187,9 +2187,34 @@
       ctx.restore();
     }
 
+    // Copies leave their pins behind. Each paste lands a step further along,
+    // so repeated pastes don't stack on one spot.
+    const PASTE_OFFSET = 20;
+    let copiedLabels = [];
+    let pasteCount = 0;
+
     document.addEventListener('keydown', (e) => {
       if (labelTools.hidden || e.target.closest('input, textarea, select')) return;
-      if (e.key === 'Escape') {
+      const command = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+      if (command && e.key.toLowerCase() === 'c' && selectedLabels.length) {
+        e.preventDefault();
+        copiedLabels = selectedLabels.map((label) => ({ ...label, pins: [] }));
+        pasteCount = 0;
+      } else if (command && e.key.toLowerCase() === 'v' && copiedLabels.length) {
+        e.preventDefault();
+        recordUndo();
+        pasteCount++;
+        const pasted = copiedLabels.map((label) => ({
+          ...label,
+          x: clampToBackground(label.x + PASTE_OFFSET * pasteCount),
+          y: clampToBackground(label.y + PASTE_OFFSET * pasteCount),
+          pins: [],
+        }));
+        labels.push(...pasted);
+        selectedLabels = pasted;
+        setLabelTool('select');
+        draw();
+      } else if (e.key === 'Escape') {
         e.preventDefault();
         selectedLabels = [];
         setLabelTool('select');

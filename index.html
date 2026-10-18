@@ -2392,7 +2392,11 @@
         const s = canvasPoint(e);
         const p = toBackground(s.x, s.y);
         if (labelTool === 'add') {
-          if (inBackground(p)) startLabel(p);
+          // New label places one label, then hands back to the cursor tool.
+          if (inBackground(p)) {
+            startLabel(p);
+            setLabelTool('select');
+          }
         } else {
           selectedLabels = [];
         }

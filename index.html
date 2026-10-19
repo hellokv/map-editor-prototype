@@ -1760,15 +1760,9 @@
     // Splits a segment at t, keeping any bend's shape. The split point is new
     // unless one already in the path is given.
     function splitSegment(path, segment, t, point = segmentPoint(segment, t)) {
-      const [a, b, c1, c2] = segment;
+      const [a, b] = segment;
       if (!path.points.includes(point)) path.points.push(point);
-      let halves = [[a, point], [point, b]];
-      if (c1) {
-        const p01 = lerp(a, c1, t);
-        const p12 = lerp(c1, c2, t);
-        const p23 = lerp(c2, b, t);
-        halves = [[a, point, p01, lerp(p01, p12, t)], [point, b, lerp(p12, p23, t), p23]];
-      }
+      const halves = segmentHalves(segment, t, point);
       path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
       const group = groupOf(segment);
       if (group) {
@@ -1779,6 +1773,15 @@
         if (fill.has(a) && fill.has(b)) fill.add(point);
       }
       return point;
+    }
+
+    // The two segments either side of point at t, each keeping its share of any bend.
+    function segmentHalves([a, b, c1, c2], t, point) {
+      if (!c1) return [[a, point], [point, b]];
+      const p01 = lerp(a, c1, t);
+      const p12 = lerp(c1, c2, t);
+      const p23 = lerp(c2, b, t);
+      return [[a, point, p01, lerp(p01, p12, t)], [point, b, lerp(p12, p23, t), p23]];
     }
 
     function insertOnSegment({ t }) {
@@ -4416,6 +4419,10 @@
         if (sketchPoint) {
           sketchSelected = { point: sketchPoint };
           drag = { ...base, sketchPoints: [sketchPoint], last: p };
+        } else if (sketchSegment && figureOf(sketchSelected)?.has(sketchSegment[0])) {
+          // On a shape already selected, a segment bends as a path's does.
+          const hit = sketchSegmentHit(s);
+          drag = { ...base, sketchBend: sketchSegment, t: bendT(hit.t), grab: segmentPoint(sketchSegment, hit.t) };
         } else {
           const figure = sketchFigure(sketchSegment ? sketchSegment[0] : [...sketchArea.points][0]);
           sketchSelected = { figure };
@@ -4480,11 +4487,16 @@
         }
       } else if (drag.sketchPoints) {
         if (!drag.active) recordUndo(drag.before);
-        for (const point of drag.sketchPoints) {
-          point.x += p.x - drag.last.x;
-          point.y += p.y - drag.last.y;
-        }
+        keepingBends(new Set(drag.sketchPoints), () => {
+          for (const point of drag.sketchPoints) {
+            point.x += p.x - drag.last.x;
+            point.y += p.y - drag.last.y;
+          }
+        }, sketch.segments);
         drag.last = p;
+      } else if (drag.sketchBend) {
+        if (!drag.active) recordUndo(drag.before);
+        bendSegment(drag.sketchBend, drag.t, p);
       } else if (drag.moving) {
         if (!drag.active) recordUndo(drag.before);
         drag.narrowTo = null;
@@ -4552,7 +4564,7 @@
     function copySketch() {
       const copies = new Map(sketch.points.map((point) => [point, { ...point }]));
       return {
-        sketch: { points: [...copies.values()], segments: sketch.segments.map(([a, b]) => [copies.get(a), copies.get(b)]) },
+        sketch: { points: [...copies.values()], segments: sketch.segments.map(([a, b, ...controls]) => [copies.get(a), copies.get(b), ...controls.map((c) => ({ ...c }))]) },
         sketchFills: sketchFills.map((fill) => newLoop([...fill].map((point) => copies.get(point)), lookOf(fill))),
       };
     }
@@ -4572,16 +4584,21 @@
       let best = null;
       for (const segment of sketch.segments) {
         if (exclude && segment.includes(exclude)) continue;
-        const p = toScreen(segment[0]);
-        const q = toScreen(segment[1]);
-        const length2 = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
-        const t = length2 ? Math.max(0, Math.min(1, ((s.x - p.x) * (q.x - p.x) + (s.y - p.y) * (q.y - p.y)) / length2)) : 0;
-        const d = Math.hypot(p.x + t * (q.x - p.x) - s.x, p.y + t * (q.y - p.y) - s.y);
+        const { t, distance } = closestOnSegment(segment, toBackground(s.x, s.y));
+        const d = distance * view.scale;
         if (d <= reach && (!best || d < best.d)) best = { segment, t, d };
       }
       return best;
     }
     const sketchSegmentAt = (s) => sketchSegmentHit(s)?.segment ?? null;
+    function sketchBendGhost() {
+      if (drag?.sketchBend) return drag.active ? segmentPoint(drag.sketchBend, drag.t) : drag.grab;
+      const figure = figureOf(sketchSelected);
+      if (!figure || !pointer || drag || spaceHeld || backgroundTool !== 'select') return null;
+      if (sketchPointAt(pointer, SKETCH_HIT_DISTANCE, null, shownSketchPoints())) return null;
+      const hit = sketchSegmentHit(pointer);
+      return hit && figure.has(hit.segment[0]) ? segmentPoint(hit.segment, hit.t) : null;
+    }
     // Where a click with the Pen tool would land, snapping as the path
     // tool does: Shift locks to 45° from the point being drawn from, then it
     // snaps to a point, else onto a segment, within snap distance.
@@ -4598,8 +4615,7 @@
       if (point) return { point, at: point, guide };
       const onto = sketchSegmentHit(q, reach, sketchActive);
       if (onto) {
-        const [a, b] = onto.segment;
-        return { split: onto, at: { x: a.x + (b.x - a.x) * onto.t, y: a.y + (b.y - a.y) * onto.t }, guide };
+        return { split: onto, at: segmentPoint(onto.segment, onto.t), guide };
       }
       const at = toBackground(q.x, q.y);
       return inBackground(at) ? { add: at, at, guide } : null;
@@ -4620,7 +4636,7 @@
       if (target.split) {
         const [a, b] = target.split.segment;
         point = { ...target.at };
-        sketch.segments.splice(sketch.segments.indexOf(target.split.segment), 1, [a, point], [point, b]);
+        sketch.segments.splice(sketch.segments.indexOf(target.split.segment), 1, ...segmentHalves(target.split.segment, target.split.t, point));
         // A loop through the split segment now runs through the new point too.
         for (const fill of sketchFills) if (fill.has(a) && fill.has(b)) fill.add(point);
       } else if (target.add) {
@@ -4702,8 +4718,7 @@
         ctx.strokeStyle = selectedFigure?.has(a) ? SELECTED_COLOR : '#fff';
         ctx.lineWidth = (selectedFigure?.has(a) ? SELECTED_LINE : 2) * px;
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+        traceSegment(segment);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -4726,6 +4741,16 @@
         ctx.moveTo(sketchActive.x, sketchActive.y);
         ctx.lineTo(target.at.x, target.at.y);
         ctx.stroke();
+      }
+      // Where a segment of the selected shape would be grabbed to bend it.
+      const ghost = sketchBendGhost();
+      if (ghost) {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = SELECTED_COLOR;
+        ctx.beginPath();
+        ctx.arc(ghost.x, ghost.y, SKETCH_POINT_RADIUS * px, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
       // Where the next click lands, when it snaps to a point or a segment.
       const snapped = target && !target.add ? [target.at] : [];
@@ -5201,22 +5226,20 @@
     // Runs `move`, holding each bend on a segment touching one of `moving` in
     // place relative to that segment's ends, so curves keep their shape rather
     // than being twisted by control points left behind.
-    function keepingBends(moving, move) {
+    function keepingBends(moving, move, segments = paths.flatMap((path) => path.segments)) {
       // Control points as (along, across) the segment, in units of its length.
       const bends = [];
-      for (const path of paths) {
-        for (const segment of path.segments) {
-          const [a, b, ...controls] = segment;
-          if (!controls.length || !(moving.has(a) || moving.has(b))) continue;
-          const ex = b.x - a.x;
-          const ey = b.y - a.y;
-          const lengthSq = ex * ex + ey * ey;
-          if (lengthSq === 0) continue;
-          for (const c of controls) {
-            const cx = c.x - a.x;
-            const cy = c.y - a.y;
-            bends.push({ segment, c, along: (cx * ex + cy * ey) / lengthSq, across: (cy * ex - cx * ey) / lengthSq });
-          }
+      for (const segment of segments) {
+        const [a, b, ...controls] = segment;
+        if (!controls.length || !(moving.has(a) || moving.has(b))) continue;
+        const ex = b.x - a.x;
+        const ey = b.y - a.y;
+        const lengthSq = ex * ex + ey * ey;
+        if (lengthSq === 0) continue;
+        for (const c of controls) {
+          const cx = c.x - a.x;
+          const cy = c.y - a.y;
+          bends.push({ segment, c, along: (cx * ex + cy * ey) / lengthSq, across: (cy * ex - cx * ey) / lengthSq });
         }
       }
 

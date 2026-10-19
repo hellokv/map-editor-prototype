@@ -3834,9 +3834,8 @@
     // behind the four-pointed one.
     const COMPASS_BACK = new Path2D('M16.8 19.0556C15.7339 17.5691 17.5691 15.7339 19.0556 16.8L32.9991 26.7996C33.5622 27.2035 34.3201 27.2035 34.8832 26.7996L48.8266 16.8C50.3132 15.7339 52.1484 17.5691 51.0823 19.0556L41.0826 32.9991C40.6788 33.5622 40.6788 34.3201 41.0826 34.8832L51.0823 48.8266C52.1484 50.3132 50.3132 52.1484 48.8266 51.0823L34.8832 41.0826C34.3201 40.6788 33.5622 40.6788 32.9991 41.0826L19.0556 51.0823C17.5691 52.1484 15.7339 50.3132 16.8 48.8266L26.7996 34.8832C27.2035 34.3201 27.2035 33.5622 26.7996 32.9991L16.8 19.0556Z');
     const COMPASS_FRONT = new Path2D('M31.8734 3.74614C32.2698 1.33946 35.7302 1.33946 36.1266 3.74614L39.8449 26.3199C39.9951 27.2315 40.7096 27.9461 41.6212 28.0962L64.195 31.8145C66.6017 32.2109 66.6017 35.6714 64.195 36.0678L41.6212 39.786C40.7096 39.9362 39.9951 40.6507 39.8449 41.5624L36.1266 64.1361C35.7302 66.5428 32.2698 66.5428 31.8734 64.1361L28.1551 41.5624C28.0049 40.6507 27.2904 39.9362 26.3788 39.786L3.80501 36.0678C1.39833 35.6714 1.39833 32.2109 3.80501 31.8145L26.3788 28.0962C27.2904 27.9461 28.0049 27.2315 28.1551 26.3199L31.8734 3.74614Z');
-    // The back star is a lighter shade of the compass's color, as in the
-    // original artwork's grey behind black.
-    const COMPASS_BACK_ALPHA = 0.67;
+    // As in the artwork, the back star is 20% black whatever the compass's color.
+    const COMPASS_BACK_COLOR = 'rgba(0, 0, 0, 0.2)';
     // Direction letters sit this far outside the stars, as a share of their size.
     const COMPASS_LETTER_GAP = 0.3;
     function drawCompass(shape) {
@@ -3845,15 +3844,15 @@
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.rotate(shape.rotation ?? 0);
-      ctx.fillStyle = shape.color;
       ctx.save();
       ctx.scale(side / 68, side / 68);
       ctx.translate(-34, -34);
-      ctx.globalAlpha *= COMPASS_BACK_ALPHA;
+      ctx.fillStyle = COMPASS_BACK_COLOR;
       ctx.fill(COMPASS_BACK);
-      ctx.globalAlpha /= COMPASS_BACK_ALPHA;
+      ctx.fillStyle = shape.color;
       ctx.fill(COMPASS_FRONT);
       ctx.restore();
+      ctx.fillStyle = shape.color;
       const letters = shape.directions === 'all' ? ['N', 'E', 'S', 'W'] : shape.directions === 'north' ? ['N'] : [];
       if (letters.length) {
         loadFont(shape.font, shape.weight);

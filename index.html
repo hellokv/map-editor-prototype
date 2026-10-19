@@ -63,9 +63,10 @@
       position: relative;
       display: inline-block;
     }
-    #font-options {
+    .font-options {
       position: absolute;
       z-index: 1;
+      top: 100%;
       left: 0;
       right: 0;
       max-height: 200px;
@@ -73,7 +74,7 @@
       background: #fff;
       border: 1px solid #ccc;
     }
-    #font-options div {
+    .font-options div {
       padding: 2px 6px;
       cursor: pointer;
     }
@@ -99,7 +100,7 @@
       cursor: pointer;
     }
     #icon-options div[aria-selected="true"],
-    #font-options div[aria-selected="true"] {
+    .font-options div[aria-selected="true"] {
       background: var(--neutral);
     }
     #crossing-dialog {
@@ -816,7 +817,7 @@
               Font
               <span class="font-picker">
                 <input id="style-font" type="text" autocomplete="off" required>
-                <div id="font-options" hidden></div>
+                <div id="font-options" class="font-options" hidden></div>
               </span>
             </label>
             <label class="row">
@@ -1015,8 +1016,10 @@
           </label>
           <label class="row compass-text-field">
             Font
-            <input id="compass-font" type="text" list="compass-fonts" autocomplete="off">
-            <datalist id="compass-fonts"></datalist>
+            <span class="font-picker">
+              <input id="compass-font" type="text" autocomplete="off">
+              <div class="font-options" hidden></div>
+            </span>
           </label>
           <label class="row compass-text-field">
             Weight
@@ -2352,57 +2355,57 @@
     let styleBefore = null; // { snapshot, recorded } from when the form opened
     const googleFonts = new Set(GOOGLE_FONTS);
 
-    // Searchable font list: typing filters Google Fonts by any part of the
-    // name; arrows move, Enter or a click picks.
-    const fontInput = styleInputs.font;
-    const fontOptions = document.getElementById('font-options');
-    let fontMatches = [];
-    let activeFont = -1;
-
-    function showFontOptions() {
-      const query = fontInput.value.trim().toLowerCase();
-      // A complete font name shows the whole list rather than just itself.
-      const filter = googleFonts.has(fontInput.value.trim()) ? '' : query;
-      fontMatches = GOOGLE_FONTS.filter((font) => font.toLowerCase().includes(filter));
-      activeFont = fontMatches.indexOf(fontInput.value.trim());
-      fontOptions.replaceChildren(...fontMatches.map((font, i) => {
-        const option = Object.assign(document.createElement('div'), { textContent: font });
-        option.setAttribute('aria-selected', i === activeFont);
-        // mousedown, not click, so the input keeps focus.
-        option.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          pickFont(font);
-        });
-        return option;
-      }));
-      fontOptions.hidden = fontMatches.length === 0;
-      fontOptions.children[activeFont]?.scrollIntoView({ block: 'nearest' });
-    }
-
-    function pickFont(font) {
-      fontInput.value = font;
-      fontInput.dispatchEvent(new Event('input', { bubbles: true }));
-      fontOptions.hidden = true;
-    }
-
-    fontInput.addEventListener('focus', showFontOptions);
-    fontInput.addEventListener('input', () => { if (document.activeElement === fontInput) showFontOptions(); });
-    fontInput.addEventListener('blur', () => { fontOptions.hidden = true; });
-    fontInput.addEventListener('keydown', (e) => {
-      if (fontOptions.hidden && e.key !== 'ArrowDown') return;
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (fontOptions.hidden) showFontOptions();
-        activeFont = Math.max(0, Math.min(fontMatches.length - 1, activeFont + (e.key === 'ArrowDown' ? 1 : -1)));
-        [...fontOptions.children].forEach((option, i) => option.setAttribute('aria-selected', i === activeFont));
-        fontOptions.children[activeFont]?.scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter' && fontMatches[activeFont]) {
-        e.preventDefault();
-        pickFont(fontMatches[activeFont]);
-      } else if (e.key === 'Escape') {
-        fontOptions.hidden = true;
+    // Searchable font list for a text input and the list element after it:
+    // typing filters Google Fonts by any part of the name; arrows move,
+    // Enter or a click picks.
+    function fontPicker(input, list) {
+      let matches = [];
+      let active = -1;
+      function show() {
+        const query = input.value.trim().toLowerCase();
+        // A complete font name shows the whole list rather than just itself.
+        const filter = googleFonts.has(input.value.trim()) ? '' : query;
+        matches = GOOGLE_FONTS.filter((font) => font.toLowerCase().includes(filter));
+        active = matches.indexOf(input.value.trim());
+        list.replaceChildren(...matches.map((font, i) => {
+          const option = Object.assign(document.createElement('div'), { textContent: font });
+          option.setAttribute('aria-selected', i === active);
+          // mousedown, not click, so the input keeps focus.
+          option.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            pick(font);
+          });
+          return option;
+        }));
+        list.hidden = matches.length === 0;
+        list.children[active]?.scrollIntoView({ block: 'nearest' });
       }
-    });
+      function pick(font) {
+        input.value = font;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        list.hidden = true;
+      }
+      input.addEventListener('focus', show);
+      input.addEventListener('input', () => { if (document.activeElement === input) show(); });
+      input.addEventListener('blur', () => { list.hidden = true; });
+      input.addEventListener('keydown', (e) => {
+        if (list.hidden && e.key !== 'ArrowDown') return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (list.hidden) show();
+          active = Math.max(0, Math.min(matches.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
+          [...list.children].forEach((option, i) => option.setAttribute('aria-selected', i === active));
+          list.children[active]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && matches[active]) {
+          e.preventDefault();
+          pick(matches[active]);
+        } else if (e.key === 'Escape') {
+          list.hidden = true;
+        }
+      });
+    }
+    fontPicker(styleInputs.font, document.getElementById('font-options'));
 
     // Rebuilds the style list and the label style picker from labelStyles.
     function closeStyleMenus() {
@@ -3782,7 +3785,7 @@
       draw();
     });
     const compassFontInput = document.getElementById('compass-font');
-    document.getElementById('compass-fonts').replaceChildren(...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })));
+    fontPicker(compassFontInput, compassFontInput.nextElementSibling);
     // Only a real Google font is taken; anything else waits for more typing.
     bindShapeInput(compassFontInput, (shape) => { if (googleFonts.has(compassFontInput.value.trim())) shape.font = compassFontInput.value.trim(); });
     const compassWeightInput = document.getElementById('compass-weight');

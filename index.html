@@ -2609,7 +2609,7 @@
       // Room for the outline and shadow around the box, and for an icon drawn
       // bigger than the room the label gives it.
       const overflow = icon && iconSize ? Math.max(0, (iconSize - style.iconSize) / 2) : 0;
-      const margin = style.size * 0.25 + overflow;
+      const margin = style.size * 0.25 + (style.outline ? style.outlineWidth : 0) + overflow;
       const w = box.w + 2 * margin;
       const h = box.h + 2 * margin;
       // Every style is shown at one text size, whatever its real size, and
@@ -3562,28 +3562,37 @@
         // With a background, the outline and shadow belong to the box, not the text.
         const box = labelBox(label);
         const radius = Math.min(style.radius, box.w / 2, box.h / 2);
-        c.beginPath();
+        const shape = new Path2D();
         if (style.corners === 'chamfer') {
           const { x, y, w, h } = box;
-          c.moveTo(x + radius, y);
-          c.lineTo(x + w - radius, y);
-          c.lineTo(x + w, y + radius);
-          c.lineTo(x + w, y + h - radius);
-          c.lineTo(x + w - radius, y + h);
-          c.lineTo(x + radius, y + h);
-          c.lineTo(x, y + h - radius);
-          c.lineTo(x, y + radius);
-          c.closePath();
+          shape.moveTo(x + radius, y);
+          shape.lineTo(x + w - radius, y);
+          shape.lineTo(x + w, y + radius);
+          shape.lineTo(x + w, y + h - radius);
+          shape.lineTo(x + w - radius, y + h);
+          shape.lineTo(x + radius, y + h);
+          shape.lineTo(x, y + h - radius);
+          shape.lineTo(x, y + radius);
+          shape.closePath();
         } else {
-          c.roundRect(box.x, box.y, box.w, box.h, radius);
+          shape.roundRect(box.x, box.y, box.w, box.h, radius);
         }
         c.fillStyle = style.background;
-        c.fill();
+        c.fill(shape);
         c.shadowColor = 'transparent';
         if (style.outline) {
+          // The outline sits wholly outside the box: a stroke twice as wide,
+          // clipped to everything but the box.
+          const width = style.outlineWidth;
+          const outside = new Path2D();
+          outside.rect(box.x - 2 * width, box.y - 2 * width, box.w + 4 * width, box.h + 4 * width);
+          outside.addPath(shape);
+          c.save();
+          c.clip(outside, 'evenodd');
           c.strokeStyle = style.outline;
-          c.lineWidth = style.outlineWidth;
-          c.stroke();
+          c.lineWidth = width * 2;
+          c.stroke(shape);
+          c.restore();
         }
       }
       const { lines, textX, iconX, iconY } = labelLayout(label);

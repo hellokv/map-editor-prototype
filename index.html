@@ -1021,6 +1021,11 @@
     </div>
     <div id="background-panel" hidden>
       <div class="group">
+        <label class="row">
+          <span><input id="background-show-labels" type="checkbox" checked> Show labels</span>
+        </label>
+      </div>
+      <div class="group">
         <input id="image-upload" type="file" accept="image/*">
         <div id="image-preview" hidden>
           <img alt="Background image">
@@ -1553,11 +1558,16 @@
       ArrowUp: [0, -1],
       ArrowDown: [0, 1],
     };
+    // Path and Background mode each have a Show labels toggle; they're one setting.
     const showLabelsToggle = document.getElementById('show-labels');
-    showLabelsToggle.addEventListener('change', () => {
-      showLabelsToggle.blur();
-      draw();
-    });
+    const showLabelsToggles = [showLabelsToggle, document.getElementById('background-show-labels')];
+    for (const toggle of showLabelsToggles) {
+      toggle.addEventListener('change', () => {
+        for (const other of showLabelsToggles) other.checked = toggle.checked;
+        toggle.blur();
+        draw();
+      });
+    }
     const pathColor = document.getElementById('path-color');
     pathColor.addEventListener('input', () => {
       draw();
@@ -2173,7 +2183,7 @@
         for (const group of groups) {
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
-        drawLabels();
+        if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
         if (!labelTools.hidden) drawPins();
         if (!backgroundTools.hidden) {
           drawSketch();

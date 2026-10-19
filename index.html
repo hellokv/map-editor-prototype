@@ -467,7 +467,6 @@
       display: block;
       margin: 4px 0;
     }
-    #panel #style-back,
     #panel #image-delete {
       flex: none;
       display: flex;
@@ -475,7 +474,6 @@
       border: none;
       background: none;
     }
-    #panel #style-back:hover,
     #panel #image-delete:hover {
       background: #e4e4e4;
     }
@@ -840,9 +838,6 @@
           <button id="new-label-style" type="button">New label style</button>
         </div>
         <form id="label-style-form" hidden>
-          <button id="style-back" type="button" aria-label="Back to label styles">
-            <span class="material-symbols-rounded">arrow_back</span>
-          </button>
           <div class="group">
             <label class="row">
               Name
@@ -2858,6 +2853,7 @@
       styleInputs['pointer-end'].value = values.pointerEnd;
       styleBrowser.hidden = true;
       styleForm.hidden = false;
+      draw();
       styleInputs.name.focus();
     }
 
@@ -2904,12 +2900,12 @@
       selectedLabels = [];
       draw();
     }
-    document.getElementById('style-back').addEventListener('click', () => {
+    function leaveStyleForm() {
       closeStyleForm();
       selectedLabels = labelsSetAside.filter((label) => labels.includes(label));
       labelsSetAside = [];
       draw();
-    });
+    }
     // The slider and the field move each other; the field can go past 100%.
     const zoomScaleSlider = styleInputs['zoom-scale'].closest('.slider').querySelector('input[type="range"]');
     zoomScaleSlider.addEventListener('input', () => { styleInputs['zoom-scale'].value = zoomScaleSlider.value; });
@@ -3213,8 +3209,13 @@
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
     }
-    // The back arrow leaves the selection for the mode's own panel.
+    // The back arrow leaves a style being edited for wherever it was opened
+    // from, else the selection for the mode's own panel.
     document.getElementById('panel-back').addEventListener('click', () => {
+      if (editingStyle && !labelTools.hidden) {
+        leaveStyleForm();
+        return;
+      }
       selectedLabels = [];
       selectedPins = [];
       selectedShapes = [];
@@ -3230,7 +3231,7 @@
       placeCrossingDialog();
       document.getElementById('panel-title').textContent = panelTitle();
       const selecting = hasSelection();
-      document.getElementById('panel-back').hidden = !selecting;
+      document.getElementById('panel-back').hidden = !selecting && !(editingStyle && !labelTools.hidden);
       // A closed panel opens when something comes to be selected.
       if (selecting && !hadSelection) setPanelOpen(true);
       hadSelection = selecting;

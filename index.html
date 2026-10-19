@@ -29,6 +29,26 @@
       width: 100%;
       height: 100%;
     }
+    #place-suggestions {
+      position: absolute;
+      z-index: 5;
+      min-width: 160px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 4px 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      font: 13px system-ui, sans-serif;
+    }
+    #place-suggestions div {
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    #place-suggestions div[aria-selected="true"] {
+      background: #eee;
+    }
     #label-input {
       position: absolute;
       opacity: 0;
@@ -300,6 +320,10 @@
     #panel textarea {
       resize: vertical;
     }
+    #panel .row textarea {
+      width: 140px;
+      resize: none;
+    }
     .row input[type="text"],
     .row select {
       width: 140px;
@@ -538,6 +562,7 @@
   <div id="canvas-area">
     <canvas id="canvas"></canvas>
     <textarea id="label-input" rows="1" hidden></textarea>
+    <div id="place-suggestions" hidden></div>
     <div id="crossing-dialog" hidden>
       Add intersections?
       <button id="crossing-yes" type="button">Yes</button>
@@ -628,16 +653,16 @@
     <div id="labels-panel" hidden>
       <div id="label-properties" hidden>
         <div id="label-single-fields" class="group">
-          <label class="row stacked">
-            Text
-            <textarea id="label-text" rows="2"></textarea>
-          </label>
-          <label id="label-hide-text-field" class="row">
-            <span><input id="label-hide-text" type="checkbox"> Hide text</span>
-          </label>
           <label class="row">
             Place
             <select id="label-place"></select>
+          </label>
+          <label class="row">
+            Label
+            <textarea id="label-text" rows="1"></textarea>
+          </label>
+          <label id="label-hide-text-field" class="row">
+            <span><input id="label-hide-text" type="checkbox"> Hide text</span>
           </label>
           <label class="row">
             X
@@ -2883,8 +2908,13 @@
       const label = soleLabel();
       if (!label) return;
       recordUndo();
-      if (labelPlaceSelect.value) label.place = labelPlaceSelect.value;
-      else delete label.place;
+      // Picking a place names the label after it; the name can then be retyped.
+      if (labelPlaceSelect.value) {
+        label.place = labelPlaceSelect.value;
+        label.text = labelPlaceSelect.value;
+      } else {
+        delete label.place;
+      }
       labelPlaceSelect.blur();
       draw();
     });
@@ -3039,6 +3069,7 @@
       labelInput.hidden = false;
       placeLabelInput();
       labelInput.focus();
+      showPlaceSuggestions();
     }
 
     function finishLabel(keep) {
@@ -3055,6 +3086,7 @@
       } else if (!label && keep && text) {
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
+        if (editingLabel.place) created.place = editingLabel.place;
         // A new label goes on the layers being shown, so it stays in view.
         const layers = shownLayers().length ? shownLayers() : LAYERS;
         created.layers = Object.fromEntries(layers.map((layer) => [layer, true]));
@@ -3062,6 +3094,7 @@
       }
       editingLabel = null;
       labelInput.hidden = true;
+      placeSuggestions.hidden = true;
       draw();
       return created;
     }
@@ -3072,10 +3105,67 @@
       if (!editingLabel) return;
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
+      if (!placeSuggestions.hidden) {
+        const box = labelBox({ x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: currentStyle().id });
+        placeSuggestions.style.left = `${box.x * view.scale + view.x}px`;
+        placeSuggestions.style.top = `${(box.y + box.h) * view.scale + view.y + 8}px`;
+      }
+    }
+
+    // A new label's text box doubles as a search for places: the matches
+    // list under the label, the first highlighted once something's typed,
+    // and picking one names the label after the place and links them. Text
+    // that's left unpicked makes a label with no place.
+    const placeSuggestions = document.getElementById('place-suggestions');
+    let placeMatches = [];
+    let activePlace = -1;
+    function showPlaceSuggestions() {
+      if (!editingLabel || editingLabel.label) return;
+      const typed = labelInput.value.trim().toLowerCase();
+      placeMatches = PLACES.filter((place) => place.toLowerCase().includes(typed));
+      activePlace = typed && placeMatches.length ? 0 : -1;
+      placeSuggestions.replaceChildren(...placeMatches.map((place) => {
+        const option = Object.assign(document.createElement('div'), { textContent: place });
+        // mousedown, not click, so the text box keeps focus until the pick.
+        option.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          pickPlace(place);
+        });
+        return option;
+      }));
+      placeSuggestions.hidden = placeMatches.length === 0;
+      markActivePlace();
+      placeLabelInput();
+    }
+    function markActivePlace() {
+      [...placeSuggestions.children].forEach((option, i) => option.setAttribute('aria-selected', i === activePlace));
+      placeSuggestions.children[activePlace]?.scrollIntoView({ block: 'nearest' });
+    }
+    function pickPlace(place) {
+      labelInput.value = place;
+      editingLabel.place = place;
+      const created = finishLabel(true);
+      if (created) {
+        selectedLabels = [created];
+        setLabelTool('select');
+        draw();
+      }
     }
 
     labelInput.addEventListener('keydown', (e) => {
       lastTyped = performance.now();
+      if (!placeSuggestions.hidden && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        // Up past the first match leaves none picked, for a label of its own.
+        activePlace = Math.max(-1, Math.min(placeMatches.length - 1, activePlace + (e.key === 'ArrowDown' ? 1 : -1)));
+        markActivePlace();
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !placeSuggestions.hidden && placeMatches[activePlace]) {
+        e.preventDefault();
+        pickPlace(placeMatches[activePlace]);
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         // Enter on a new label leaves it selected, ready to move or restyle.
@@ -3090,6 +3180,7 @@
     });
     labelInput.addEventListener('input', () => {
       lastTyped = performance.now();
+      showPlaceSuggestions();
       draw();
     });
 

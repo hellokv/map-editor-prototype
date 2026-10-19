@@ -1833,6 +1833,7 @@
       if (!path.points.includes(point)) path.points.push(point);
       const halves = segmentHalves(segment, t, point);
       path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
+      if (drawnChain.delete(segment)) for (const half of halves) drawnChain.add(half);
       const group = groupOf(segment);
       if (group) {
         group.segments.delete(segment);
@@ -1944,6 +1945,10 @@
       }
       return best;
     }
+
+    // The segments drawn since the add tool last started from nothing, kept
+    // through splits, for Enter to select.
+    const drawnChain = new Set();
 
     // Returns the segment drawn to the new point, if any.
     function addPoint(point) {
@@ -2211,7 +2216,15 @@
       } else if (e.key === 'Enter') {
         // Stops a focused toolbar button from being pressed.
         e.preventDefault();
-        selected = null;
+        // Finishes what the add tool drew: back to the cursor with it selected.
+        const drawnNow = paths.flatMap((path) => path.segments.filter((segment) => drawnChain.has(segment)).map((segment) => ({ path, segment })));
+        if (tool === 'add' && drawnNow.length) {
+          setTool('select');
+          setSelectionItems(drawnNow);
+        } else {
+          selected = null;
+        }
+        drawnChain.clear();
         draw();
         updateCursor();
       }
@@ -3551,7 +3564,7 @@
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 2, pointerEnd: 'round' };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round' };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -5655,8 +5668,13 @@
         }
         // Near another point, sit exactly on it; letting go there merges them.
         const reach = Math.max(Number(snapInput.value), SELECTED_DOT_RADIUS);
-        drag.snapTo = nearestPoint(target.x * view.scale + view.x, target.y * view.scale + view.y, reach, drag.point);
+        const sx = target.x * view.scale + view.x;
+        const sy = target.y * view.scale + view.y;
+        drag.snapTo = nearestPoint(sx, sy, reach, drag.point);
+        // Failing that, sit on a segment it isn't part of; letting go there splits it.
+        drag.snapOnto = drag.snapTo ? null : segmentHit(sx, sy, reach, (segment) => segment.includes(drag.point));
         if (drag.snapTo) target = { x: drag.snapTo.point.x, y: drag.snapTo.point.y };
+        else if (drag.snapOnto) target = segmentPoint(drag.snapOnto.segment, drag.snapOnto.t);
         keepingBends(new Set([drag.point]), () => {
           drag.point.x = clampX(target.x);
           drag.point.y = clampY(target.y);
@@ -5747,6 +5765,10 @@
         selectedLabels = [pinOwner(drag.narrowToPin)];
       }
       if (drag.point && drag.snapTo) mergePoints(drag.path, drag.point, drag.snapTo);
+      if (drag.point && drag.snapOnto) {
+        const { path, segment, t } = drag.snapOnto;
+        mergePoints(drag.path, drag.point, { path, point: splitSegment(path, segment, t) });
+      }
       const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !drag.pins && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
@@ -5780,6 +5802,7 @@
         const s = canvasPoint(e);
         const target = addTarget(s);
         if (target) recordUndo();
+        if (target && !selected?.point) drawnChain.clear();
         let drawn = null;
         if (target?.connect) {
           drawn = connectTo(target.connect);
@@ -5793,6 +5816,7 @@
           if (selected?.point) drawn = connectTo({ path, point });
           else selected = { path, point };
         }
+        if (drawn) drawnChain.add(drawn);
         if (target) {
           const crossing = drawn && findCrossings(drawn)[0];
           if (crossing) askAboutCrossings(drawn, crossing.point);

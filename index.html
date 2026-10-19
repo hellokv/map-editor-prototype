@@ -3894,6 +3894,28 @@
     const SHAPE_OUTLINE_WIDTH = 2;
     const SHAPE_SHADOW_BLUR = 8;
     const SHAPE_SHADOW_DROP = 3;
+    // After a property changes, the selection's white marks step aside so
+    // the change can be seen, then fade back once it's been left alone.
+    const EDIT_HIDE_MS = 500;
+    const EDIT_FADE_MS = 150;
+    let propertyEditAt = -Infinity;
+    let selectionFadeFrame = null;
+    // Caught on the way down, so it's set before a field's own handler redraws.
+    for (const group of [shapeProperties, document.getElementById('sketch-area-fields')]) {
+      const mark = () => { propertyEditAt = performance.now(); };
+      group.addEventListener('input', mark, true);
+      group.addEventListener('change', (e) => { if (e.target.type === 'checkbox') mark(); }, true);
+      group.addEventListener('click', (e) => { if (e.target.closest('button')) mark(); }, true);
+    }
+    function selectionAlpha() {
+      const t = performance.now() - propertyEditAt;
+      if (t >= EDIT_HIDE_MS + EDIT_FADE_MS) return 1;
+      selectionFadeFrame ??= requestAnimationFrame(() => {
+        selectionFadeFrame = null;
+        draw();
+      });
+      return Math.max(0, (t - EDIT_HIDE_MS) / EDIT_FADE_MS);
+    }
     // Applies an input to every selected shape as it changes, as one undo step.
     function bindShapeInput(input, apply) {
       let before = null;
@@ -4132,6 +4154,7 @@
     function drawShapeSelection() {
       if (!selectedShapes.length) return;
       ctx.save();
+      ctx.globalAlpha = selectionAlpha();
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
       ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
       ctx.strokeStyle = '#fff';
@@ -4568,7 +4591,9 @@
       ctx.save();
       ctx.lineCap = 'round';
       const selectedFigure = figureOf(sketchSelected);
+      const fade = selectionAlpha();
       if (selectedFigure) {
+        ctx.globalAlpha = fade;
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
         ctx.strokeStyle = '#fff';
@@ -4589,6 +4614,7 @@
       for (const segment of sketch.segments) {
         const [a, b] = segment;
         if (!editing.has(a) && styled.some((fill) => fill.has(a) && fill.has(b))) continue;
+        ctx.globalAlpha = selectedFigure?.has(a) ? fade : 1;
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
@@ -4596,6 +4622,7 @@
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
       const target = backgroundTool === 'segments' && !spaceHeld ? sketchTarget(pointer) : null;
       if (target?.guide) {
         const { origin, dx, dy } = target.guide;
@@ -4621,6 +4648,7 @@
       const snapped = target && !target.add ? [target.at] : [];
       for (const point of [...shownSketchPoints(), ...snapped]) {
         const marked = point === sketchActive || point === sketchSelected?.point || snapped.includes(point);
+        ctx.globalAlpha = selectedFigure?.has(point) ? fade : 1;
         ctx.fillStyle = marked ? highlight : '#fff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.lineWidth = px;

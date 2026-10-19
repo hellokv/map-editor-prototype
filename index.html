@@ -3100,7 +3100,7 @@
     // is how thick the outline looks. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'Roboto', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -4034,7 +4034,7 @@
       if (backgroundTool === 'compass') {
         // A click places one compass there and hands back to the cursor tool.
         recordUndo();
-        const compass = { kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', directions: 'north', font: 'Roboto', weight: 600, size: 24 };
+        const compass = { kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', directions: 'north', font: 'National Park', weight: 600, size: 24 };
         shapes.push(compass);
         selectedShapes = [compass];
         sketchSelected = null;

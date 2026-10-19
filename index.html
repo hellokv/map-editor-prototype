@@ -2638,6 +2638,9 @@
     const labelStyleList = document.getElementById('label-style-list');
     const labelStylePicker = document.getElementById('label-style-picker');
     let stylePickerKey = '';
+    let stylePickerOpen = false;
+    // The labels the picker was last shown for; a new selection closes it.
+    let stylePickerFor = [];
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
@@ -2988,21 +2991,34 @@
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
     }
-    function renderStylePicker(source) {
+    // Shows the labels' style alone, unless Change style has opened the
+    // whole list to pick from. Mixed styles show only the button.
+    function renderStylePicker(source, styleIds) {
       const { text } = source;
       // The picker has no width yet the first time, while it's empty.
       // Less room than the main list: each card here also has an edit icon.
       const room = (labelStylePicker.clientWidth || 284) - 170;
+      const card = (element, style, pick) => styleCard(element, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true }));
+      if (!stylePickerOpen) {
+        const style = styleIds.size === 1 ? labelStyles.find((each) => styleIds.has(each.id)) : null;
+        const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Change style' });
+        change.addEventListener('click', () => {
+          stylePickerOpen = true;
+          draw();
+        });
+        labelStylePicker.replaceChildren('Style', ...(style ? [card(document.createElement('div'), style, '')] : []), change);
+        return;
+      }
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
-        const option = document.createElement('label');
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
         pick.addEventListener('change', () => {
           recordUndo();
           for (const label of selectedLabels) setLabelStyle(label, style);
+          stylePickerOpen = false;
           pick.blur();
           draw();
         });
-        return styleCard(option, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true }));
+        return card(document.createElement('label'), style, pick);
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
       create.addEventListener('click', newLabelStyle);
@@ -3335,14 +3351,18 @@
         for (const button of layerButtons) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
         }
+        if (selectedLabels.length !== stylePickerFor.length || selectedLabels.some((label, i) => label !== stylePickerFor[i])) {
+          stylePickerOpen = false;
+          stylePickerFor = [...selectedLabels];
+        }
         const source = selectedLabels[0];
-        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth]);
+        const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
+        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds]]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
-          renderStylePicker(selectedLabels[0]);
+          renderStylePicker(source, styleIds);
         }
-        // Mixed styles leave the picker blank.
-        const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
+        // Mixed styles leave the list's radios blank.
         for (const pick of labelStylePicker.querySelectorAll('input')) {
           pick.checked = styleIds.size === 1 && styleIds.has(Number(pick.value));
         }

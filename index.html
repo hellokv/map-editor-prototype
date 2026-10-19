@@ -855,7 +855,7 @@
               <span class="color-field"><input id="style-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
             <label class="row">
-              <span><input id="style-outline-on" type="checkbox"> Outline color</span>
+              <span><input id="style-outline-on" type="checkbox"> Outline</span>
               <span class="color-field"><input id="style-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
             <label class="row">
@@ -863,7 +863,7 @@
               <input id="style-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
             <label class="row">
-              <span><input id="style-shadow-on" type="checkbox"> Shadow color</span>
+              <span><input id="style-shadow-on" type="checkbox"> Shadow</span>
               <span class="color-field"><input id="style-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
           </div>
@@ -2532,6 +2532,7 @@
       styleInputs['outline-width'].value = values.outlineWidth;
       styleInputs['shadow-on'].checked = !!values.shadow;
       showColor(styleInputs.shadow, values.shadow ?? '#000000');
+      showToggledColors();
       styleInputs['padding-y'].value = values.paddingY;
       styleInputs['padding-x'].value = values.paddingX;
       styleInputs['background-on'].checked = !!values.background;
@@ -2592,8 +2593,13 @@
       labelsSetAside = [];
       draw();
     });
+    function showToggledColors() {
+      styleInputs.outline.parentElement.hidden = !styleInputs['outline-on'].checked;
+      styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
+    }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
+    styleForm.addEventListener('change', showToggledColors);
     // Enter in a field would otherwise submit the form and reload the page.
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 

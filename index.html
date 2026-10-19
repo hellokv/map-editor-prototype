@@ -1066,8 +1066,9 @@
       background: document.getElementById('background-panel'),
       labels: document.getElementById('labels-panel'),
     };
-    // Camera cutouts, centred across the top of the screen: a pill (Dynamic
-    // Island), a notch hanging from the top edge, or a round punch hole.
+    // Camera cutouts, centred across the top of the screen (or, with left,
+    // down its left edge): a pill (Dynamic Island), a notch hanging from the
+    // top edge, or a round punch hole.
     const ISLAND = { w: 125, h: 37, top: 11 };
     const PUNCH_HOLE = { w: 24, h: 24, top: 12 };
     // Screen sizes in CSS pixels, with the bands the system and browser take
@@ -1080,7 +1081,9 @@
       { name: 'iPhone Air', w: 420, h: 912, top: 62, bottom: 86, cutout: ISLAND },
       { name: 'iPhone 16e', w: 390, h: 844, top: 47, bottom: 83, cutout: { notch: true, w: 162, h: 32 } },
       { name: 'iPhone Duo (outer)', w: 466, h: 678, top: 62, bottom: 86, cutout: ISLAND },
-      { name: 'iPhone Duo (inner)', w: 626, h: 890, top: 62, bottom: 86, cutout: PUNCH_HOLE },
+      // Held in landscape: the status bar and Safari's tab bar sit on top,
+      // the home indicator below, and the camera on the left edge.
+      { name: 'iPhone Duo (inner)', w: 890, h: 626, top: 74, bottom: 20, cutout: { ...PUNCH_HOLE, left: 12 } },
       { name: 'Pixel 10', w: 412, h: 923, top: 108, bottom: 24, cutout: PUNCH_HOLE },
       { name: 'Pixel 10 Pro', w: 410, h: 914, top: 108, bottom: 24, cutout: PUNCH_HOLE },
       { name: 'Pixel 10 Pro XL', w: 414, h: 921, top: 108, bottom: 24, cutout: PUNCH_HOLE },
@@ -1152,7 +1155,7 @@
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const radius = frame.w * 0.13;
+      const radius = Math.min(frame.w, frame.h) * 0.13;
       // Everything outside the phone is blurred, from a copy of the canvas
       // drawn back through a blur filter, then dimmed.
       blurCopy.width = canvas.width;
@@ -1185,6 +1188,7 @@
       ctx.fillStyle = '#000';
       ctx.beginPath();
       if (cutout.notch) ctx.roundRect(frame.x + (frame.w - cw) / 2, frame.y - ch, cw, 2 * ch, ch / 2);
+      else if (cutout.left !== undefined) ctx.roundRect(frame.x + cutout.left * frame.k, frame.y + (frame.h - ch) / 2, cw, ch, ch / 2);
       else ctx.roundRect(frame.x + (frame.w - cw) / 2, frame.y + cutout.top * frame.k, cw, ch, ch / 2);
       ctx.fill();
       ctx.restore();

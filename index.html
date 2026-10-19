@@ -958,12 +958,12 @@
               <button type="button" data-directions="all" aria-pressed="false">All</button>
             </div>
           </div>
-          <label class="row">
+          <label class="row compass-text-field">
             Font
             <input id="compass-font" type="text" list="compass-fonts" autocomplete="off">
             <datalist id="compass-fonts"></datalist>
           </label>
-          <label class="row">
+          <label class="row compass-text-field">
             Weight
             <select id="compass-weight">
               <option value="100">Thin</option>
@@ -977,8 +977,8 @@
               <option value="900">Black</option>
             </select>
           </label>
-          <label class="row">
-            Size
+          <label class="row compass-text-field">
+            Text size
             <input id="compass-size" type="number" min="4" step="1">
           </label>
         </div>
@@ -1003,13 +1003,17 @@
             Y
             <input id="shape-y" type="number" step="1">
           </label>
-          <label class="row">
+          <label class="row shape-box-field">
             Width
             <input id="shape-w" type="number" min="1" step="1">
           </label>
-          <label class="row">
+          <label class="row shape-box-field">
             Height
             <input id="shape-h" type="number" min="1" step="1">
+          </label>
+          <label id="compass-box-field" class="row">
+            Size
+            <input id="compass-box-size" type="number" min="1" step="1">
           </label>
           <label class="row">
             Rotation
@@ -2863,6 +2867,8 @@
           if (document.activeElement !== compassFontInput) compassFontInput.value = compass.font;
           if (document.activeElement !== compassWeightInput) compassWeightInput.value = compass.weight;
           if (document.activeElement !== compassSizeInput) compassSizeInput.value = compass.size;
+          // The letters' fields only matter when there are letters.
+          for (const row of document.querySelectorAll('.compass-text-field')) row.hidden = compass.directions === 'none';
         }
         if (document.activeElement !== shapeRadiusInput) shapeRadiusInput.value = first.radius ?? 0;
         for (const { key, toggle, input } of shapeColorToggles) {
@@ -2881,6 +2887,10 @@
           }
           document.getElementById('shape-sides-field').hidden = shape.kind !== 'polygon';
           if (shape.kind === 'polygon' && document.activeElement !== shapeSidesInput) shapeSidesInput.value = shape.sides;
+          // A compass is always square, so it has one size for both sides.
+          for (const row of document.querySelectorAll('.shape-box-field')) row.hidden = shape.kind === 'compass';
+          document.getElementById('compass-box-field').hidden = shape.kind !== 'compass';
+          if (shape.kind === 'compass' && document.activeElement !== compassBoxInput) compassBoxInput.value = Math.round(shape.w);
         }
       }
       const anyLabels = selectedLabels.length > 0;
@@ -3709,6 +3719,18 @@
     const shapeXInput = liveField('shape-x', 'x', (input) => Number(input.value) || 0, soleShape);
     const shapeYInput = liveField('shape-y', 'y', (input) => Number(input.value) || 0, soleShape);
     const shapeWInput = liveField('shape-w', 'w', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
+    // Resizes a compass about its centre.
+    const compassBoxInput = liveField('compass-box-size', 'size', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), () => {
+      const shape = soleShape();
+      if (!shape) return null;
+      // liveField sets target.size; this proxy turns it into a square box.
+      return {
+        set size(side) {
+          const c = shapeCentre(shape);
+          Object.assign(shape, { x: c.x - side / 2, y: c.y - side / 2, w: side, h: side });
+        },
+      };
+    });
     const shapeHInput = liveField('shape-h', 'h', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
     const shapeRotationInput = liveField('shape-rotation', 'rotation', (input) => ((Number(input.value) || 0) * Math.PI) / 180, soleShape);
     const POLYGON_SIDES = 5;

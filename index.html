@@ -441,6 +441,16 @@
       display: flex;
       padding: 2px;
     }
+    .toggle-group {
+      display: flex;
+      gap: 2px;
+    }
+    #panel .toggle-group button {
+      padding: 3px 8px;
+    }
+    #panel .toggle-group button[aria-pressed="true"] {
+      background: #ddd;
+    }
     #label-layers {
       display: flex;
       gap: 2px;
@@ -600,6 +610,9 @@
         </button>
         <button type="button" data-background-tool="segments" aria-label="Segments" aria-pressed="false">
           <span class="material-symbols-rounded">polyline</span>
+        </button>
+        <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
+          <span class="material-symbols-rounded">explore</span>
         </button>
       </div>
       <div id="path-tools">
@@ -933,18 +946,51 @@
       </div>
       <div id="shape-properties" class="group" hidden>
         <label class="row">
-          Fill color
+          <span id="shape-color-name">Fill color</span>
           <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
+        <div id="compass-fields">
+          <div class="row">
+            Directions
+            <div id="compass-directions" class="toggle-group">
+              <button type="button" data-directions="none" aria-pressed="false">None</button>
+              <button type="button" data-directions="north" aria-pressed="false">North</button>
+              <button type="button" data-directions="all" aria-pressed="false">All</button>
+            </div>
+          </div>
+          <label class="row">
+            Font
+            <input id="compass-font" type="text" list="compass-fonts" autocomplete="off">
+            <datalist id="compass-fonts"></datalist>
+          </label>
+          <label class="row">
+            Weight
+            <select id="compass-weight">
+              <option value="100">Thin</option>
+              <option value="200">Extra light</option>
+              <option value="300">Light</option>
+              <option value="400">Regular</option>
+              <option value="500">Medium</option>
+              <option value="600">Semi bold</option>
+              <option value="700">Bold</option>
+              <option value="800">Extra bold</option>
+              <option value="900">Black</option>
+            </select>
+          </label>
+          <label class="row">
+            Size
+            <input id="compass-size" type="number" min="4" step="1">
+          </label>
+        </div>
         <label id="shape-radius-field" class="row">
           Border radius
           <input id="shape-radius" type="number" min="0" step="1">
         </label>
-        <label class="row">
+        <label id="shape-outline-field" class="row">
           <span><input id="shape-outline-on" type="checkbox"> Outline color</span>
           <span class="color-field"><input id="shape-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
-        <label class="row">
+        <label id="shape-shadow-field" class="row">
           <span><input id="shape-shadow-on" type="checkbox"> Shadow color</span>
           <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
@@ -2802,7 +2848,22 @@
       if (selectedShapes.length) {
         const first = selectedShapes[0];
         if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, first.color);
-        document.getElementById('shape-radius-field').hidden = selectedShapes.every((shape) => shape.kind === 'circle');
+        // A compass has a color, directions and letters, and none of the
+        // other shapes' radius, outline or shadow.
+        const compasses = selectedShapes.filter((shape) => shape.kind === 'compass');
+        const allCompasses = compasses.length === selectedShapes.length;
+        document.getElementById('shape-color-name').textContent = allCompasses ? 'Color' : 'Fill color';
+        document.getElementById('shape-radius-field').hidden = selectedShapes.every((shape) => shape.kind === 'circle' || shape.kind === 'compass');
+        document.getElementById('shape-outline-field').hidden = allCompasses;
+        document.getElementById('shape-shadow-field').hidden = allCompasses;
+        document.getElementById('compass-fields').hidden = !allCompasses;
+        if (allCompasses) {
+          const compass = compasses[0];
+          for (const button of compassDirectionButtons) button.setAttribute('aria-pressed', button.dataset.directions === compass.directions);
+          if (document.activeElement !== compassFontInput) compassFontInput.value = compass.font;
+          if (document.activeElement !== compassWeightInput) compassWeightInput.value = compass.weight;
+          if (document.activeElement !== compassSizeInput) compassSizeInput.value = compass.size;
+        }
         if (document.activeElement !== shapeRadiusInput) shapeRadiusInput.value = first.radius ?? 0;
         for (const { key, toggle, input } of shapeColorToggles) {
           toggle.checked = !!first[key];
@@ -3568,6 +3629,7 @@
     }
 
     const SHAPE_CLICK_SIZE = 100;
+    const COMPASS_SIZE = 120;
     const SHAPE_MIN_SIZE = 1;
     // Resize handles, as fractions across and down the selection's box.
     const SHAPE_HANDLES = { nw: [0, 0], n: [0.5, 0], ne: [1, 0], e: [1, 0.5], se: [1, 1], s: [0.5, 1], sw: [0, 1], w: [0, 0.5] };
@@ -3627,6 +3689,23 @@
       });
       return { key, toggle, input };
     });
+    const compassDirectionButtons = document.querySelectorAll('[data-directions]');
+    for (const button of compassDirectionButtons) {
+      button.addEventListener('click', () => {
+        recordUndo();
+        for (const shape of selectedShapes) shape.directions = button.dataset.directions;
+        button.blur();
+        draw();
+      });
+    }
+    const compassFontInput = document.getElementById('compass-font');
+    document.getElementById('compass-fonts').replaceChildren(...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })));
+    // Only a real Google font is taken; anything else waits for more typing.
+    bindShapeInput(compassFontInput, (shape) => { if (googleFonts.has(compassFontInput.value.trim())) shape.font = compassFontInput.value.trim(); });
+    const compassWeightInput = document.getElementById('compass-weight');
+    bindShapeInput(compassWeightInput, (shape) => { shape.weight = Number(compassWeightInput.value); });
+    const compassSizeInput = document.getElementById('compass-size');
+    bindShapeInput(compassSizeInput, (shape) => { shape.size = Math.max(4, Number(compassSizeInput.value) || 24); });
     const shapeXInput = liveField('shape-x', 'x', (input) => Number(input.value) || 0, soleShape);
     const shapeYInput = liveField('shape-y', 'y', (input) => Number(input.value) || 0, soleShape);
     const shapeWInput = liveField('shape-w', 'w', (input) => Math.max(SHAPE_MIN_SIZE, Number(input.value) || 0), soleShape);
@@ -3669,7 +3748,7 @@
       ctx.translate(-c.x, -c.y);
       ctx.beginPath();
       const radius = shape.radius ?? 0;
-      if (shape.kind === 'circle') {
+      if (shape.kind === 'circle' || shape.kind === 'compass') {
         ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
       } else if (shape.kind === 'square') {
         ctx.roundRect(shape.x, shape.y, shape.w, shape.h, Math.min(radius, shape.w / 2, shape.h / 2));
@@ -3695,6 +3774,10 @@
       ctx.save();
       ctx.lineJoin = 'round';
       for (const shape of [...shapes, ...drawing]) {
+        if (shape.kind === 'compass') {
+          drawCompass(shape);
+          continue;
+        }
         // Canvas shadows are in device pixels, so they're scaled with the map.
         ctx.shadowColor = shape.shadow ?? 'transparent';
         ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * dpr;
@@ -3708,6 +3791,44 @@
           ctx.lineWidth = SHAPE_OUTLINE_WIDTH;
           ctx.stroke();
         }
+      }
+      ctx.restore();
+    }
+    // The compass's two stars, on their 68-unit grid: a small diagonal one
+    // behind the four-pointed one.
+    const COMPASS_BACK = new Path2D('M16.8 19.0556C15.7339 17.5691 17.5691 15.7339 19.0556 16.8L32.9991 26.7996C33.5622 27.2035 34.3201 27.2035 34.8832 26.7996L48.8266 16.8C50.3132 15.7339 52.1484 17.5691 51.0823 19.0556L41.0826 32.9991C40.6788 33.5622 40.6788 34.3201 41.0826 34.8832L51.0823 48.8266C52.1484 50.3132 50.3132 52.1484 48.8266 51.0823L34.8832 41.0826C34.3201 40.6788 33.5622 40.6788 32.9991 41.0826L19.0556 51.0823C17.5691 52.1484 15.7339 50.3132 16.8 48.8266L26.7996 34.8832C27.2035 34.3201 27.2035 33.5622 26.7996 32.9991L16.8 19.0556Z');
+    const COMPASS_FRONT = new Path2D('M31.8734 3.74614C32.2698 1.33946 35.7302 1.33946 36.1266 3.74614L39.8449 26.3199C39.9951 27.2315 40.7096 27.9461 41.6212 28.0962L64.195 31.8145C66.6017 32.2109 66.6017 35.6714 64.195 36.0678L41.6212 39.786C40.7096 39.9362 39.9951 40.6507 39.8449 41.5624L36.1266 64.1361C35.7302 66.5428 32.2698 66.5428 31.8734 64.1361L28.1551 41.5624C28.0049 40.6507 27.2904 39.9362 26.3788 39.786L3.80501 36.0678C1.39833 35.6714 1.39833 32.2109 3.80501 31.8145L26.3788 28.0962C27.2904 27.9461 28.0049 27.2315 28.1551 26.3199L31.8734 3.74614Z');
+    // The back star is a lighter shade of the compass's color, as in the
+    // original artwork's grey behind black.
+    const COMPASS_BACK_ALPHA = 0.67;
+    // Direction letters sit this far outside the stars, as a share of their size.
+    const COMPASS_LETTER_GAP = 0.3;
+    function drawCompass(shape) {
+      const c = shapeCentre(shape);
+      const side = Math.min(shape.w, shape.h);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(shape.rotation ?? 0);
+      ctx.fillStyle = shape.color;
+      ctx.save();
+      ctx.scale(side / 68, side / 68);
+      ctx.translate(-34, -34);
+      ctx.globalAlpha *= COMPASS_BACK_ALPHA;
+      ctx.fill(COMPASS_BACK);
+      ctx.globalAlpha /= COMPASS_BACK_ALPHA;
+      ctx.fill(COMPASS_FRONT);
+      ctx.restore();
+      const letters = shape.directions === 'all' ? ['N', 'E', 'S', 'W'] : shape.directions === 'north' ? ['N'] : [];
+      if (letters.length) {
+        loadFont(shape.font, shape.weight);
+        ctx.font = `${shape.weight} ${shape.size}px "${shape.font}", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const reach = side / 2 + shape.size * (0.5 + COMPASS_LETTER_GAP);
+        letters.forEach((letter, i) => {
+          const angle = (i * Math.PI) / 2;
+          ctx.fillText(letter, Math.sin(angle) * reach, -Math.cos(angle) * reach);
+        });
       }
       ctx.restore();
     }
@@ -3815,7 +3936,7 @@
         const dx = (q.x - shape.x - shape.w / 2) / (shape.w / 2);
         const dy = (q.y - shape.y - shape.h / 2) / (shape.h / 2);
         const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
-          : shape.kind === 'square' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
+          : shape.kind === 'square' || shape.kind === 'compass' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
           : insidePolygon(shapeCorners(shape), q);
         if (inside) return shape;
       }
@@ -3868,6 +3989,16 @@
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
       if (backgroundTool === 'segments') {
         drawSketchPoint(sketchTarget(s));
+        return;
+      }
+      if (backgroundTool === 'compass') {
+        // A click places one compass there and hands back to the cursor tool.
+        recordUndo();
+        const compass = { kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', directions: 'north', font: 'Roboto', weight: 600, size: 24 };
+        shapes.push(compass);
+        selectedShapes = [compass];
+        sketchSelected = null;
+        setBackgroundTool('select');
         return;
       }
       if (backgroundTool === 'shapes') {
@@ -3946,7 +4077,9 @@
         const { frame } = drag;
         const local = (q) => rotate({ x: q.x - frame.x, y: q.y - frame.y }, -frame.angle);
         const from = { x: -frame.w / 2, y: -frame.h / 2, w: frame.w, h: frame.h };
-        const to = resizedBox(from, drag.handle, local(p), e.shiftKey);
+        // Compasses keep their proportions.
+        const keepRatio = e.shiftKey || drag.originals.every(({ shape }) => shape.kind === 'compass');
+        const to = resizedBox(from, drag.handle, local(p), keepRatio);
         const sx = from.w ? to.w / from.w : 1;
         const sy = from.h ? to.h / from.h : 1;
         for (const { shape, x, y, w, h } of drag.originals) {
@@ -4574,7 +4707,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = labelCursor();
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor() : shapeHandleCursor();
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor() : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
       else canvas.style.cursor = addTarget() ? addCursor() : '';
     }
 

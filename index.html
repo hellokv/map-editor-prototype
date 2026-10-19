@@ -881,6 +881,13 @@
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
             <label class="row">
+              Corners
+              <select id="style-corners">
+                <option value="round">Rounded</option>
+                <option value="chamfer">Chamfered</option>
+              </select>
+            </label>
+            <label class="row">
               Border radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
             </label>
@@ -2342,7 +2349,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -2499,6 +2506,7 @@
         paddingY: Math.max(0, Number(styleInputs['padding-y'].value) || 0),
         paddingX: Math.max(0, Number(styleInputs['padding-x'].value) || 0),
         background: styleInputs['background-on'].checked ? colorOf(styleInputs.background) : null,
+        corners: styleInputs.corners.value,
         radius: Math.max(0, Number(styleInputs.radius.value) || 0),
       };
     }
@@ -2528,6 +2536,7 @@
       styleInputs['padding-x'].value = values.paddingX;
       styleInputs['background-on'].checked = !!values.background;
       showColor(styleInputs.background, values.background ?? '#ffffff');
+      styleInputs.corners.value = values.corners;
       styleInputs.radius.value = values.radius;
       styleBrowser.hidden = true;
       styleForm.hidden = false;
@@ -3147,13 +3156,14 @@
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, caps, color, outline,
-    // outlineWidth, shadow, paddingY, paddingX, background, radius }; lineHeight
+    // outlineWidth, shadow, paddingY, paddingX, background, corners, radius }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
-    // is how thick the outline looks. outline, shadow and
+    // is how thick the outline looks. corners is 'round' or 'chamfer', and
+    // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, radius: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -3522,8 +3532,10 @@
       // A rounded corner is cut away from the box's true corner, so the line
       // starts at the corner's centre of curvature, inside the box where the
       // box drawn over it hides the join, and its visible part is measured
-      // from the curved edge. Sides have no curve, so this changes nothing there.
-      const inset = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+      // from the curved edge. A chamfer's diagonal edge is half as far in.
+      // Sides have no curve, so this changes nothing there.
+      const radius = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+      const inset = style.corners === 'chamfer' ? radius / 2 : radius;
       const startX = cornerX - dx * inset;
       const startY = cornerY - dy * inset;
       const endX = startX + (dx / unit) * (inset + length);
@@ -3549,8 +3561,22 @@
       if (style.background) {
         // With a background, the outline and shadow belong to the box, not the text.
         const box = labelBox(label);
+        const radius = Math.min(style.radius, box.w / 2, box.h / 2);
         c.beginPath();
-        c.roundRect(box.x, box.y, box.w, box.h, Math.min(style.radius, box.w / 2, box.h / 2));
+        if (style.corners === 'chamfer') {
+          const { x, y, w, h } = box;
+          c.moveTo(x + radius, y);
+          c.lineTo(x + w - radius, y);
+          c.lineTo(x + w, y + radius);
+          c.lineTo(x + w, y + h - radius);
+          c.lineTo(x + w - radius, y + h);
+          c.lineTo(x + radius, y + h);
+          c.lineTo(x, y + h - radius);
+          c.lineTo(x, y + radius);
+          c.closePath();
+        } else {
+          c.roundRect(box.x, box.y, box.w, box.h, radius);
+        }
         c.fillStyle = style.background;
         c.fill();
         c.shadowColor = 'transparent';

@@ -539,6 +539,14 @@
     }
     .style-menu {
       position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .style-edit {
+      visibility: hidden;
+    }
+    .style-card:hover .style-edit {
+      visibility: visible;
     }
     #panel .style-menu > button {
       display: flex;
@@ -2546,7 +2554,9 @@
       for (const items of document.querySelectorAll('.style-menu [role="menu"]')) items.hidden = true;
     }
     // A style's ⋮ menu. A clone made while labels are selected is given to them.
-    function styleMenu(style, { deletable = false } = {}) {
+    // With editButton, Edit is an icon beside the menu, shown while the card
+    // is hovered, rather than an item in it.
+    function styleMenu(style, { deletable = false, editButton = false } = {}) {
       const menu = document.createElement('span');
       menu.className = 'style-menu';
       const toggle = document.createElement('button');
@@ -2556,9 +2566,16 @@
       const items = document.createElement('div');
       items.setAttribute('role', 'menu');
       items.hidden = true;
-      const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
+      const edit = Object.assign(document.createElement('button'), { type: 'button' });
+      if (editButton) {
+        edit.className = 'style-edit';
+        edit.setAttribute('aria-label', 'Edit');
+        edit.innerHTML = '<span class="material-symbols-rounded">edit</span>';
+      } else {
+        edit.textContent = 'Edit';
+      }
       const clone = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Clone' });
-      items.append(edit, clone);
+      items.append(...(editButton ? [] : [edit]), clone);
       if (deletable) {
         const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
         remove.addEventListener('click', () => {
@@ -2569,7 +2586,7 @@
         });
         items.append(remove);
       }
-      menu.append(toggle, items);
+      menu.append(...(editButton ? [edit] : []), toggle, items);
       // Inside a picker option's label, a click would otherwise also pick the style.
       menu.addEventListener('click', (e) => e.preventDefault());
       toggle.addEventListener('click', () => {
@@ -2821,7 +2838,8 @@
     function renderStylePicker(source) {
       const { text } = source;
       // The picker has no width yet the first time, while it's empty.
-      const room = (labelStylePicker.clientWidth || 284) - 142;
+      // Less room than the main list: each card here also has an edit icon.
+      const room = (labelStylePicker.clientWidth || 284) - 170;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
@@ -2831,7 +2849,7 @@
           pick.blur();
           draw();
         });
-        return styleCard(option, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style));
+        return styleCard(option, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true }));
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
       create.addEventListener('click', newLabelStyle);

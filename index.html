@@ -3009,7 +3009,9 @@
         labelStylePicker.replaceChildren('Style', ...(style ? [card(document.createElement('div'), style, '')] : []), change);
         return;
       }
-      labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
+      // The labels' own style leads the list.
+      const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];
+      labelStylePicker.replaceChildren('Style', ...ordered.map((style) => {
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
         pick.addEventListener('change', () => {
           recordUndo();

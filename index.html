@@ -895,6 +895,10 @@
               Border radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
             </label>
+            <label class="row">
+              Arrow length
+              <input id="style-pointer-length" type="number" min="0" max="500" step="1">
+            </label>
           </div>
         </form>
       </div>
@@ -2353,7 +2357,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -2513,6 +2517,7 @@
         background: styleInputs['background-on'].checked ? colorOf(styleInputs.background) : null,
         corners: styleInputs.corners.value,
         radius: Math.max(0, Number(styleInputs.radius.value) || 0),
+        pointerLength: Math.max(0, Number(styleInputs['pointer-length'].value) || 0),
       };
     }
 
@@ -2545,6 +2550,7 @@
       showColor(styleInputs.background, values.background ?? '#ffffff');
       styleInputs.corners.value = values.corners;
       styleInputs.radius.value = values.radius;
+      styleInputs['pointer-length'].value = values.pointerLength;
       styleBrowser.hidden = true;
       styleForm.hidden = false;
       styleInputs.name.focus();
@@ -3169,14 +3175,14 @@
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, letterSpacing, caps, color, outline,
-    // outlineWidth, shadow, paddingY, paddingX, background, corners, radius }; lineHeight
+    // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
     // is how thick the outline looks. corners is 'round' or 'chamfer', and
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -3542,7 +3548,7 @@
       const box = labelBox(label);
       const cornerX = label.x + (dx * box.w) / 2;
       const cornerY = label.y + (dy * box.h) / 2;
-      const length = style.size * 0.75;
+      const length = style.pointerLength;
       const unit = Math.hypot(dx, dy);
       // A rounded corner is cut away from the box's true corner, so the line
       // starts at the corner's centre of curvature, inside the box where the

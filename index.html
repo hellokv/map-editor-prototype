@@ -4592,7 +4592,6 @@
     // The segments and points themselves only show in background mode.
     function drawSketch() {
       const px = 1 / view.scale;
-      const highlight = colorOf(pathColor);
       ctx.save();
       ctx.lineCap = 'round';
       const selectedFigure = figureOf(sketchSelected);
@@ -4624,22 +4623,21 @@
         ctx.lineTo(origin.x + dx * length, origin.y + dy * length);
         ctx.stroke();
       }
+      // The segment being drawn is blue until it's placed.
       if (target && sketchActive) {
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = SELECTED_COLOR;
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
         ctx.moveTo(sketchActive.x, sketchActive.y);
         ctx.lineTo(target.at.x, target.at.y);
         ctx.stroke();
-        ctx.globalAlpha = 1;
       }
       // Where the next click lands, when it snaps to a point or a segment.
       const snapped = target && !target.add ? [target.at] : [];
       for (const point of [...shownSketchPoints(), ...snapped]) {
-        const marked = point === sketchActive || snapped.includes(point);
+        const blue = point === sketchSelected?.point || snapped.includes(point);
         ctx.globalAlpha = selectedFigure?.has(point) ? fade : 1;
-        ctx.fillStyle = point === sketchSelected?.point ? SELECTED_COLOR : marked ? highlight : '#fff';
+        ctx.fillStyle = blue ? SELECTED_COLOR : '#fff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.lineWidth = px;
         ctx.beginPath();
@@ -5045,7 +5043,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = labelCursor();
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor() : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? iconCursor('add_circle', SELECTED_COLOR, 'crosshair') : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
       else canvas.style.cursor = addTarget() ? addCursor() : '';
     }
 

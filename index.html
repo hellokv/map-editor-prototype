@@ -959,6 +959,9 @@
             </div>
           </div>
           <label class="row compass-text-field">
+            <span><input id="compass-upright" type="checkbox"> Keep letters upright</span>
+          </label>
+          <label class="row compass-text-field">
             Font
             <input id="compass-font" type="text" list="compass-fonts" autocomplete="off">
             <datalist id="compass-fonts"></datalist>
@@ -2864,6 +2867,7 @@
         if (allCompasses) {
           const compass = compasses[0];
           for (const button of compassDirectionButtons) button.setAttribute('aria-pressed', button.dataset.directions === compass.directions);
+          compassUprightToggle.checked = !!compass.upright;
           if (document.activeElement !== compassFontInput) compassFontInput.value = compass.font;
           if (document.activeElement !== compassWeightInput) compassWeightInput.value = compass.weight;
           if (document.activeElement !== compassSizeInput) compassSizeInput.value = compass.size;
@@ -3708,6 +3712,16 @@
         draw();
       });
     }
+    const compassUprightToggle = document.getElementById('compass-upright');
+    compassUprightToggle.addEventListener('change', () => {
+      recordUndo();
+      for (const shape of selectedShapes) {
+        if (compassUprightToggle.checked) shape.upright = true;
+        else delete shape.upright;
+      }
+      compassUprightToggle.blur();
+      draw();
+    });
     const compassFontInput = document.getElementById('compass-font');
     document.getElementById('compass-fonts').replaceChildren(...GOOGLE_FONTS.map((font) => Object.assign(document.createElement('option'), { value: font })));
     // Only a real Google font is taken; anything else waits for more typing.
@@ -3849,7 +3863,12 @@
         const reach = side / 2 + shape.size * (0.5 + COMPASS_LETTER_GAP);
         letters.forEach((letter, i) => {
           const angle = (i * Math.PI) / 2;
-          ctx.fillText(letter, Math.sin(angle) * reach, -Math.cos(angle) * reach);
+          ctx.save();
+          ctx.translate(Math.sin(angle) * reach, -Math.cos(angle) * reach);
+          // Upright letters stay where the compass puts them but don't turn with it.
+          if (shape.upright) ctx.rotate(-(shape.rotation ?? 0));
+          ctx.fillText(letter, 0, 0);
+          ctx.restore();
         });
       }
       ctx.restore();

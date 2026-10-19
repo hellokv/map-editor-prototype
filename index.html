@@ -15,6 +15,7 @@
     }
     body {
       display: flex;
+      overflow: hidden;
     }
     .material-symbols-rounded {
       font-variation-settings: 'wght' 300;
@@ -309,6 +310,14 @@
       box-sizing: border-box;
       background: #f2f2f2;
       font: 13px system-ui, sans-serif;
+      transition: margin-right 0.25s ease, visibility 0s;
+    }
+    /* Slides off the right edge as the canvas widens into its place; it
+       becomes invisible only once it's out of sight. */
+    #panel.closed {
+      margin-right: -300px;
+      visibility: hidden;
+      transition: margin-right 0.25s ease, visibility 0s 0.25s;
     }
     .group {
       padding: 6px 0;
@@ -5385,7 +5394,7 @@
     const panel = document.getElementById('panel');
     const panelOpenButton = document.getElementById('panel-open');
     function setPanelOpen(open) {
-      panel.hidden = !open;
+      panel.classList.toggle('closed', !open);
       panelOpenButton.hidden = open;
     }
     document.getElementById('panel-close').addEventListener('click', () => setPanelOpen(false));

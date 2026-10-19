@@ -3485,7 +3485,7 @@
       const startY = cornerY - dy * inset;
       const endX = startX + (dx / unit) * (inset + length);
       const endY = startY + (dy / unit) * (inset + length);
-      const lineWidth = style.size * 0.1;
+      const lineWidth = style.outlineWidth;
       // The round cap and the line's sides would bulge past the box's edges
       // where it leaves the box, so with a box the line reaches deeper inside.
       const hidden = style.background ? lineWidth / 2 : 0;

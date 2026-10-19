@@ -5,11 +5,6 @@
   <title>Map Editor Prototype</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,300,0,0">
   <style>
-    :root {
-      --neutral: #ebe8d5;
-      --neutral-dark: #dcd8c0;
-      --neutral-line: #d6d1b8;
-    }
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
       display: none !important;
@@ -52,7 +47,7 @@
       cursor: pointer;
     }
     #place-suggestions div[aria-selected="true"] {
-      background: var(--neutral);
+      background: #eee;
     }
     #label-input {
       position: absolute;
@@ -101,7 +96,7 @@
     }
     #icon-options div[aria-selected="true"],
     .font-options div[aria-selected="true"] {
-      background: var(--neutral);
+      background: #ddd;
     }
     #crossing-dialog {
       position: absolute;
@@ -137,7 +132,7 @@
       cursor: pointer;
     }
     #panel #panel-close:hover {
-      background: var(--neutral-dark);
+      background: #e4e4e4;
     }
     #panel-open {
       position: absolute;
@@ -147,7 +142,7 @@
       border: 1px solid #ccc;
     }
     #panel-open:hover {
-      background: var(--neutral);
+      background: #eee;
     }
     #tooltip {
       position: fixed;
@@ -187,7 +182,7 @@
     }
     #view-menu button:hover,
     #layers-close:hover {
-      background: var(--neutral);
+      background: #eee;
     }
     #view-menu .percent-field input,
     .zoom-field input {
@@ -211,7 +206,7 @@
     #layers-modal [role="dialog"] {
       position: relative;
       padding: 28px 24px 24px;
-      background: var(--neutral);
+      background: #e3e6ee;
       border-radius: 8px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       font: 15px system-ui, sans-serif;
@@ -300,7 +295,7 @@
     }
     #mode-menu button[aria-pressed="true"],
     #shape-menu button[aria-pressed="true"] {
-      background: var(--neutral);
+      background: #ddd;
     }
     #mode-menu hr {
       margin: 2px 4px;
@@ -312,14 +307,14 @@
       width: 300px;
       padding: 4px 8px;
       box-sizing: border-box;
-      background: var(--neutral);
+      background: #f2f2f2;
       font: 13px system-ui, sans-serif;
     }
     .group {
       padding: 6px 0;
     }
     .group:not(:first-child) {
-      border-top: 1px solid var(--neutral-line);
+      border-top: 1px solid #ddd;
     }
     .group:not(:has(> :not([hidden]))) {
       display: none;
@@ -444,7 +439,7 @@
       cursor: pointer;
     }
     #panel button:hover {
-      background: var(--neutral);
+      background: #f8f8f8;
     }
     .group > button {
       display: block;
@@ -460,7 +455,7 @@
     }
     #panel #style-back:hover,
     #panel #image-delete:hover {
-      background: var(--neutral-dark);
+      background: #e4e4e4;
     }
     #panel #image-delete {
       position: absolute;
@@ -489,7 +484,7 @@
       padding: 3px 8px;
     }
     #panel .toggle-group button[aria-pressed="true"] {
-      background: var(--neutral-dark);
+      background: #ddd;
     }
     #label-layers {
       display: flex;
@@ -499,7 +494,7 @@
       padding: 3px 8px;
     }
     #panel #label-layers button[aria-pressed="true"] {
-      background: var(--neutral-dark);
+      background: #ddd;
     }
     #label-icon-side {
       display: flex;
@@ -512,7 +507,7 @@
     #label-pointer button[aria-pressed="true"],
     #label-icon-side button[aria-pressed="true"],
     #panel #add-pin[aria-pressed="true"] {
-      background: var(--neutral-dark);
+      background: #ddd;
     }
     #image-upload {
       max-width: 100%;
@@ -543,7 +538,7 @@
       background: none;
     }
     #panel .style-menu > button:hover {
-      background: var(--neutral-dark);
+      background: #e4e4e4;
     }
     .style-menu [role="menu"] {
       position: absolute;
@@ -566,7 +561,7 @@
       text-align: left;
     }
     #panel .style-menu [role="menu"] button:hover {
-      background: var(--neutral);
+      background: #eee;
     }
     #label-style-list .style-menu {
       margin-left: auto;

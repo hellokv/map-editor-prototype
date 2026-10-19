@@ -4258,39 +4258,26 @@
       }
       return cursorCache.get(id);
     }
-    // The add path cursor, in the path color.
-    let addIconLoaded = false;
+    // A tool's menu icon as its cursor, once the icon font can draw it.
+    let iconFontLoaded = false;
     document.fonts.load('300 24px "Material Symbols Rounded"', 'add_circle').then(() => {
-      addIconLoaded = true;
+      iconFontLoaded = true;
       updateCursor();
     });
-    const addCursor = () => (addIconLoaded ? coloredCursor('add', colorOf(pathColor), (c, color) => {
+    const iconCursor = (icon, color, fallback) => (iconFontLoaded ? coloredCursor(icon, color, (c) => {
       c.font = '300 24px "Material Symbols Rounded"';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.fillStyle = color;
-      c.fillText('add_circle', 12, 12);
-    }, 'crosshair') : 'crosshair');
-    // The new label cursor: a text cursor in the current style's outline,
-    // else background, else text color.
+      c.fillText(icon, 12, 12);
+    }, fallback) : fallback);
+    // The add path cursor, in the path color.
+    const addCursor = () => iconCursor('add_circle', colorOf(pathColor), 'crosshair');
+    // The new label cursor, in the current style's outline, else background,
+    // else text color.
     const labelCursor = () => {
       const style = currentStyle();
-      return coloredCursor('label', style.outline ?? style.background ?? style.color, (c, color) => {
-        const beam = () => {
-          c.beginPath();
-          c.moveTo(12, 4);
-          c.lineTo(12, 20);
-          c.moveTo(8, 4);
-          c.lineTo(16, 4);
-          c.moveTo(8, 20);
-          c.lineTo(16, 20);
-        };
-        c.lineCap = 'round';
-        c.strokeStyle = color;
-        c.lineWidth = 2;
-        beam();
-        c.stroke();
-      }, 'text');
+      return iconCursor('new_label', style.outline ?? style.background ?? style.color, 'text');
     };
 
     // The pin cursor's hotspot is the tip of the pin.

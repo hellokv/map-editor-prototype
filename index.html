@@ -838,6 +838,10 @@
               <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
             </label>
             <label class="row">
+              Letter spacing
+              <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
+            </label>
+            <label class="row">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
@@ -2349,7 +2353,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -2496,6 +2500,7 @@
         weight: Number(styleInputs.weight.value),
         size: Math.max(4, Number(styleInputs.size.value) || 24),
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
+        letterSpacing: Number(styleInputs['letter-spacing'].value) || 0,
         iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
@@ -2523,6 +2528,7 @@
       styleInputs.weight.value = values.weight;
       styleInputs.size.value = values.size;
       styleInputs['line-height'].value = values.lineHeight;
+      styleInputs['letter-spacing'].value = values.letterSpacing;
       styleInputs['icon-size'].value = values.iconSize;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
@@ -3162,7 +3168,7 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, weight, size, lineHeight, caps, color, outline,
+    // { id, name, font, weight, size, lineHeight, letterSpacing, caps, color, outline,
     // outlineWidth, shadow, paddingY, paddingX, background, corners, radius }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
@@ -3170,7 +3176,7 @@
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -3366,7 +3372,9 @@
       const texts = hidden ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
-      const widths = texts.map((text) => ctx.measureText(text).width);
+      ctx.letterSpacing = `${style.letterSpacing}px`;
+      // Canvas spacing also follows the last letter; that trailing gap isn't the text's.
+      const widths = texts.map((text) => ctx.measureText(text).width - style.letterSpacing);
       ctx.restore();
       const tw = Math.max(0, ...widths);
       const th = texts.length ? style.size + (texts.length - 1) * step : 0;
@@ -3602,7 +3610,10 @@
           c.restore();
         }
       }
-      const { lines, textX, iconX, iconY } = labelLayout(label);
+      const { lines, iconX, iconY } = labelLayout(label);
+      // Centred text would be pulled left by the trailing gap after its last letter.
+      const textX = labelLayout(label).textX + style.letterSpacing / 2;
+      c.letterSpacing = `${style.letterSpacing}px`;
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
         // Half of a stroke falls inside the glyphs, under the fill.
@@ -3628,10 +3639,14 @@
         return;
       }
       const textFont = c.font;
+      const textSpacing = c.letterSpacing;
       c.font = font;
+      // Spacing would break the icon name's ligature into letters.
+      c.letterSpacing = '0px';
       const glyph = c.measureText(label.icon);
       c[method](label.icon, x, y + (glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
       c.font = textFont;
+      c.letterSpacing = textSpacing;
     }
     function drawLabels() {
       const dpr = window.devicePixelRatio || 1;

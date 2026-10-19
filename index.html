@@ -1833,7 +1833,7 @@
       if (!path.points.includes(point)) path.points.push(point);
       const halves = segmentHalves(segment, t, point);
       path.segments.splice(path.segments.indexOf(segment), 1, ...halves);
-      if (drawnChain.delete(segment)) for (const half of halves) drawnChain.add(half);
+      if (lastDrawn === segment) lastDrawn = halves[1];
       const group = groupOf(segment);
       if (group) {
         group.segments.delete(segment);
@@ -1946,9 +1946,10 @@
       return best;
     }
 
-    // The segments drawn since the add tool last started from nothing, kept
-    // through splits, for Enter to select.
-    const drawnChain = new Set();
+    // The segment the add tool drew last, for Enter to select. A drawn
+    // segment runs from the old point to the new, so when it's split the half
+    // reaching the new point stands in for it.
+    let lastDrawn = null;
 
     // Returns the segment drawn to the new point, if any.
     function addPoint(point) {
@@ -2217,14 +2218,14 @@
         // Stops a focused toolbar button from being pressed.
         e.preventDefault();
         // Finishes what the add tool drew: back to the cursor with it selected.
-        const drawnNow = paths.flatMap((path) => path.segments.filter((segment) => drawnChain.has(segment)).map((segment) => ({ path, segment })));
-        if (tool === 'add' && drawnNow.length) {
+        const path = lastDrawn && paths.find((each) => each.segments.includes(lastDrawn));
+        if (tool === 'add' && path) {
           setTool('select');
-          setSelectionItems(drawnNow);
+          setSelectionItems([{ path, segment: lastDrawn }]);
         } else {
           selected = null;
         }
-        drawnChain.clear();
+        lastDrawn = null;
         draw();
         updateCursor();
       }
@@ -5802,7 +5803,6 @@
         const s = canvasPoint(e);
         const target = addTarget(s);
         if (target) recordUndo();
-        if (target && !selected?.point) drawnChain.clear();
         let drawn = null;
         if (target?.connect) {
           drawn = connectTo(target.connect);
@@ -5816,7 +5816,7 @@
           if (selected?.point) drawn = connectTo({ path, point });
           else selected = { path, point };
         }
-        if (drawn) drawnChain.add(drawn);
+        if (drawn) lastDrawn = drawn;
         if (target) {
           const crossing = drawn && findCrossings(drawn)[0];
           if (crossing) askAboutCrossings(drawn, crossing.point);

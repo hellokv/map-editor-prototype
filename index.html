@@ -842,6 +842,10 @@
               <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
             </label>
             <label class="row">
+              Scale factor
+              <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="style-zoom-scale" type="number" min="0" step="1"></span></span>
+            </label>
+            <label class="row">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
@@ -2369,7 +2373,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -2517,6 +2521,7 @@
         size: Math.max(4, Number(styleInputs.size.value) || 24),
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
         letterSpacing: Number(styleInputs['letter-spacing'].value) || 0,
+        zoomScale: Math.max(0, Number(styleInputs['zoom-scale'].value) || 0),
         iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
@@ -2548,6 +2553,8 @@
       styleInputs.size.value = values.size;
       styleInputs['line-height'].value = values.lineHeight;
       styleInputs['letter-spacing'].value = values.letterSpacing;
+      styleInputs['zoom-scale'].value = values.zoomScale;
+      zoomScaleSlider.value = values.zoomScale;
       styleInputs['icon-size'].value = values.iconSize;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
@@ -2621,6 +2628,11 @@
       labelsSetAside = [];
       draw();
     });
+    // The slider and the field move each other; the field can go past 100%.
+    const zoomScaleSlider = styleInputs['zoom-scale'].closest('.slider').querySelector('input[type="range"]');
+    zoomScaleSlider.addEventListener('input', () => { styleInputs['zoom-scale'].value = zoomScaleSlider.value; });
+    zoomScaleSlider.addEventListener('change', () => zoomScaleSlider.blur());
+    styleInputs['zoom-scale'].addEventListener('input', () => { zoomScaleSlider.value = styleInputs['zoom-scale'].value; });
     function showToggledFields() {
       styleInputs.outline.parentElement.hidden = !styleInputs['outline-on'].checked;
       styleInputs['outline-width'].closest('.row').hidden = !styleInputs['outline-on'].checked;
@@ -3190,7 +3202,7 @@
     // property comes from the label's style; sizes are in background pixels
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
-    // { id, name, font, weight, size, lineHeight, letterSpacing, caps, color, outline,
+    // { id, name, font, weight, size, lineHeight, letterSpacing, zoomScale, caps, color, outline,
     // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength, pointerWidth, pointerEnd }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
@@ -3198,7 +3210,7 @@
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 2, pointerEnd: 'round' };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 2, pointerEnd: 'round' };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -3279,7 +3291,8 @@
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
       if (!placeSuggestions.hidden) {
-        const box = labelBox({ x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: currentStyle().id });
+        const typed = { x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: currentStyle().id };
+        const box = zoomedRect(typed, labelBox(typed));
         placeSuggestions.style.left = `${box.x * view.scale + view.x}px`;
         placeSuggestions.style.top = `${(box.y + box.h) * view.scale + view.y + 8}px`;
       }
@@ -3440,8 +3453,25 @@
 
     // A label's box in background pixels, centred on its spot, padding included.
     const labelBox = (label) => labelLayout(label).box;
-    // The box plus an icon outside it: what can be clicked and selected.
+    // The box plus an icon outside it.
     const labelBounds = (label) => labelLayout(label).bounds;
+    // Layouts are in the style's own sizes. On the map a label is drawn
+    // larger or smaller about its spot so that it follows zoomScale percent
+    // of the map's zoom: at 100 it scales with the map, at 0 it keeps one
+    // on-screen size.
+    const labelZoom = (label) => view.scale ** (styleOf(label).zoomScale / 100 - 1);
+    function zoomedRect(label, r) {
+      const k = labelZoom(label);
+      return { x: label.x + (r.x - label.x) * k, y: label.y + (r.y - label.y) * k, w: r.w * k, h: r.h * k };
+    }
+    function zoomAboutLabel(c, label) {
+      const k = labelZoom(label);
+      c.translate(label.x, label.y);
+      c.scale(k, k);
+      c.translate(-label.x, -label.y);
+    }
+    // What can be clicked and selected on the map.
+    const labelArea = (label) => zoomedRect(label, labelBounds(label));
 
     // The canvas only shows labels on the layers picked in the bottom menu:
     // one layer, all of them, or under Automatic, every layer whose zoom
@@ -3545,7 +3575,7 @@
     function labelAt(p) {
       for (let i = labels.length - 1; i >= 0; i--) {
         if (!labelShown(labels[i])) continue;
-        const box = labelBounds(labels[i]);
+        const box = labelArea(labels[i]);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return labels[i];
       }
       return null;
@@ -3694,12 +3724,16 @@
         const style = styleOf(label);
         loadFont(style.font, style.weight);
         ctx.font = fontOf(style);
-        // Canvas shadows are in device pixels, so scale them with the map.
+        // Canvas shadows are in device pixels, so scale them with the label.
+        const k = labelZoom(label);
         ctx.shadowColor = style.shadow ?? 'transparent';
-        ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
-        ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
+        ctx.shadowBlur = style.size * 0.25 * view.scale * k * dpr;
+        ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
+        ctx.save();
+        zoomAboutLabel(ctx, label);
         if (label.pointer) drawPointer(label, style);
         paintLabel(ctx, label, style);
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
       ctx.shadowColor = 'transparent';
@@ -3707,9 +3741,12 @@
       if (typing && caretShown()) {
         const { lines, textX } = labelLayout(typing);
         const last = lines.at(-1);
-        const caretX = textX + last.width / 2 + 2 / view.scale;
+        const px = 1 / (view.scale * labelZoom(typing));
+        ctx.save();
+        zoomAboutLabel(ctx, typing);
         ctx.fillStyle = typingStyle.color;
-        ctx.fillRect(caretX, last.y - typingStyle.size / 2, 2 / view.scale, typingStyle.size);
+        ctx.fillRect(textX + last.width / 2 + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
+        ctx.restore();
       }
       // Same white-with-shadow look as other selections, a few pixels clear of the text.
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -3720,7 +3757,7 @@
       const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
       if (typing && !editingLabel.label) boxed.push(typing);
       for (const label of boxed) {
-        const box = labelBounds(label);
+        const box = labelArea(label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
       ctx.restore();
@@ -5005,7 +5042,7 @@
     // Labels lying wholly inside the box (in screen pixels).
     function labelsInBox(box) {
       return labels.filter(labelShown).filter((label) => {
-        const b = labelBounds(label);
+        const b = labelArea(label);
         const x = b.x * view.scale + view.x;
         const y = b.y * view.scale + view.y;
         return x >= box.x && y >= box.y && x + b.w * view.scale <= box.x + box.w && y + b.h * view.scale <= box.y + box.h;

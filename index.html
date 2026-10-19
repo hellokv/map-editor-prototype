@@ -1544,6 +1544,8 @@
       const kept = items.filter((other) => !members.some((member) => sameItem(other, member)));
       setSelectionItems(kept.length === items.length ? [...items, ...members] : kept);
     }
+    // What every selected thing on the canvas is marked with.
+    const SELECTED_COLOR = '#008FF0';
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
     // Intersection dots are drawn this much bigger.
@@ -2249,14 +2251,14 @@
       ghostAreas.forEach(fillArea);
       ctx.restore();
 
-      // The selected area gets a white border just inside its edges: a wide
+      // The selected area gets a border just inside its edges: a wide
       // stroke clipped to the area, whose inner rim the edge lines then cover.
       if (selectedArea) {
         ctx.save();
         ctx.beginPath();
         traceArea(selectedArea);
         ctx.clip();
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = SELECTED_COLOR;
         ctx.lineWidth = 6 * px;
         ctx.lineJoin = 'round';
         ctx.stroke();
@@ -2281,7 +2283,7 @@
         ctx.save();
         ctx.lineCap = 'round';
         shadow();
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = SELECTED_COLOR;
         ctx.lineWidth = 7 * px;
         ctx.beginPath();
         for (const segment of selectedSegments) traceSegment(segment);
@@ -2331,19 +2333,19 @@
         }
       }
 
-      const emphasise = (point, outlineAlpha) => {
+      const emphasise = (point, outline) => {
         ctx.save();
         shadow();
         ctx.beginPath();
         ctx.arc(point.x, point.y, SELECTED_DOT_RADIUS * dotScale(point) * px, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-        ctx.strokeStyle = `rgba(255, 255, 255, ${outlineAlpha})`;
+        ctx.strokeStyle = outline;
         ctx.lineWidth = 2 * px;
         ctx.stroke();
       };
-      if (hovered) emphasise(hovered, 0.7);
-      for (const point of selectedPoints) emphasise(point, 1);
+      if (hovered) emphasise(hovered, 'rgba(255, 255, 255, 0.7)');
+      for (const point of selectedPoints) emphasise(point, SELECTED_COLOR);
 
       const ghost = target?.insert?.point ?? target?.split?.point ?? bendGhost();
       if (ghost) {
@@ -3798,10 +3800,10 @@
         ctx.fillRect(textX + last.width / 2 + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
         ctx.restore();
       }
-      // Same white-with-shadow look as other selections, a few pixels clear of the text.
+      // Same look as other selections, a few pixels clear of the text.
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
       ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-      ctx.strokeStyle = '#fff';
+      ctx.strokeStyle = SELECTED_COLOR;
       ctx.lineWidth = 2 / view.scale;
       const pad = 4 / view.scale;
       const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
@@ -3857,7 +3859,7 @@
       ctx.globalAlpha = 1;
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
       ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-      ctx.strokeStyle = '#fff';
+      ctx.strokeStyle = SELECTED_COLOR;
       ctx.lineWidth = 2 / view.scale;
       const pad = 2 / view.scale;
       for (const pin of selectedPins) {
@@ -4157,7 +4159,7 @@
       ctx.globalAlpha = selectionAlpha();
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
       ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-      ctx.strokeStyle = '#fff';
+      ctx.strokeStyle = SELECTED_COLOR;
       ctx.lineWidth = 2 / view.scale;
       for (const shape of selectedShapes) {
         traceShape(shape);
@@ -4169,7 +4171,7 @@
       ctx.lineWidth = 1 / view.scale;
       ctx.strokeRect(-frame.w / 2, -frame.h / 2, frame.w, frame.h);
       const size = HANDLE_SIZE / view.scale;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = SELECTED_COLOR;
       for (const [fx, fy] of Object.values(SHAPE_HANDLES)) {
         ctx.fillRect((fx - 0.5) * frame.w - size / 2, (fy - 0.5) * frame.h - size / 2, size, size);
       }
@@ -4596,7 +4598,7 @@
         ctx.globalAlpha = fade;
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = SELECTED_COLOR;
         ctx.lineWidth = 3 * px;
         ctx.beginPath();
         for (const [a, b] of sketch.segments) {
@@ -4615,7 +4617,7 @@
         const [a, b] = segment;
         if (!editing.has(a) && styled.some((fill) => fill.has(a) && fill.has(b))) continue;
         ctx.globalAlpha = selectedFigure?.has(a) ? fade : 1;
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = selectedFigure?.has(a) ? SELECTED_COLOR : '#fff';
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -4647,9 +4649,9 @@
       // Where the next click lands, when it snaps to a point or a segment.
       const snapped = target && !target.add ? [target.at] : [];
       for (const point of [...shownSketchPoints(), ...snapped]) {
-        const marked = point === sketchActive || point === sketchSelected?.point || snapped.includes(point);
+        const marked = point === sketchActive || snapped.includes(point);
         ctx.globalAlpha = selectedFigure?.has(point) ? fade : 1;
-        ctx.fillStyle = marked ? highlight : '#fff';
+        ctx.fillStyle = point === sketchSelected?.point ? SELECTED_COLOR : marked ? highlight : '#fff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.lineWidth = px;
         ctx.beginPath();

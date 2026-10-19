@@ -587,6 +587,9 @@
       background: #fff;
       border-radius: 6px;
     }
+    .style-card:hover {
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
+    }
     .style-card.dark {
       background: #4a4a4a;
       color: #eee;
@@ -602,11 +605,17 @@
     }
     .style-option-body {
       display: flex;
-      flex-direction: column;
-      gap: 0;
+      align-items: center;
+      gap: 8px;
       min-width: 0;
     }
+    /* One width for every name, so the previews beside them line up. */
     .style-option-name {
+      flex: none;
+      width: 64px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-size: 11px;
       color: #666;
     }
@@ -2503,7 +2512,7 @@
     function renderLabelStyles() {
       styleListKey = currentStyleListKey();
       // Before the list is first laid out it has no width to fit previews to.
-      const room = (labelStyleList.clientWidth || 280) - 70;
+      const room = (labelStyleList.clientWidth || 280) - 142;
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
         row.className = 'row';
@@ -2699,7 +2708,7 @@
     // Previews show the style's own values, not the label's overrides or offset.
     const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
-    // A style's card: its radio, its name above its preview, and its menu.
+    // A style's card: its radio, its name beside its preview, and its menu.
     // It sits on white, or on dark grey when the style's most prominent
     // color (its outline, else background, else text) is light.
     function styleCard(card, style, pick, preview, menu) {
@@ -2722,7 +2731,7 @@
     function renderStylePicker(source) {
       const { text } = source;
       // The picker has no width yet the first time, while it's empty.
-      const room = (labelStylePicker.clientWidth || 284) - 70;
+      const room = (labelStylePicker.clientWidth || 284) - 142;
       labelStylePicker.replaceChildren('Style', ...labelStyles.map((style) => {
         const option = document.createElement('label');
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });

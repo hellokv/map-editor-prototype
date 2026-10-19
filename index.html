@@ -636,6 +636,10 @@
             <span><input id="label-hide-text" type="checkbox"> Hide text</span>
           </label>
           <label class="row">
+            Place
+            <select id="label-place"></select>
+          </label>
+          <label class="row">
             X
             <input id="label-x" type="number" min="0" max="1500" step="1">
           </label>
@@ -2831,6 +2835,7 @@
         const textHidden = textIsHidden(selectedLabel);
         document.getElementById('label-hide-text-field').hidden = !selectedLabel.icon;
         labelHideTextToggle.checked = textHidden;
+        if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
         labelIconToggle.disabled = textHidden;
@@ -2866,6 +2871,23 @@
       }
     }
 
+    // Stand-ins for the places labels will belong to; a label's place is one
+    // of these names, absent when it has none.
+    const PLACES = ['African Elephant', 'Giraffe', 'Lion', 'Red Panda', 'Gorilla', 'Zebra', 'Snow Leopard', 'Penguin', 'Komodo Dragon', 'Hippopotamus', 'Meerkat', 'Polar Bear', 'Orangutan', 'Flamingo', 'Sea Lion'];
+    const labelPlaceSelect = document.getElementById('label-place');
+    labelPlaceSelect.replaceChildren(
+      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
+      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: place })),
+    );
+    labelPlaceSelect.addEventListener('change', () => {
+      const label = soleLabel();
+      if (!label) return;
+      recordUndo();
+      if (labelPlaceSelect.value) label.place = labelPlaceSelect.value;
+      else delete label.place;
+      labelPlaceSelect.blur();
+      draw();
+    });
     const textIsHidden = (label) => !!(label.hideText && label.icon);
     const labelHideTextToggle = document.getElementById('label-hide-text');
     labelHideTextToggle.addEventListener('change', () => {

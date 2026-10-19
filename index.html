@@ -1048,8 +1048,12 @@
           </button>
         </div>
         <label class="row">
-          Background
+          Background outside
           <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
+        </label>
+        <label class="row">
+          Background inside
+          <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
         </label>
         <label class="row">
           Width
@@ -2288,9 +2292,12 @@
       });
       input.addEventListener('change', () => input.blur());
     }
+    // Outside the box is the canvas color; inside, the box's own, under the image.
+    const boardColor = document.getElementById('board-color');
     canvasColor.addEventListener('input', () => draw());
-    const showPreviewColor = () => { document.getElementById('image-preview').style.background = colorOf(canvasColor); };
-    canvasColor.addEventListener('input', showPreviewColor);
+    boardColor.addEventListener('input', () => draw());
+    const showPreviewColor = () => { document.getElementById('image-preview').style.background = colorOf(boardColor); };
+    boardColor.addEventListener('input', showPreviewColor);
     showPreviewColor();
 
     const view = { scale: 1, x: 0, y: 0 };
@@ -2371,18 +2378,18 @@
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
+      // The box's fill casts its shadow. Canvas shadows are in device
+      // pixels, so they're scaled with the map.
+      ctx.save();
       if (board.shadow) {
-        // The box is filled in the background color only to cast its shadow.
-        // Canvas shadows are in device pixels, so they're scaled with the map.
-        ctx.save();
         ctx.shadowColor = board.shadow;
         ctx.shadowOffsetX = board.shadowX * view.scale * dpr;
         ctx.shadowOffsetY = board.shadowY * view.scale * dpr;
         ctx.shadowBlur = board.shadowBlur * view.scale * dpr;
-        ctx.fillStyle = colorOf(canvasColor);
-        ctx.fill(boardShape());
-        ctx.restore();
       }
+      ctx.fillStyle = colorOf(boardColor);
+      ctx.fill(boardShape());
+      ctx.restore();
       if (backgroundImage) {
         // As large as fits inside the padded box, centred, never stretched,
         // and cut to the box's rounded corners.

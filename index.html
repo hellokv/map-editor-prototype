@@ -1063,7 +1063,7 @@
           <input id="board-padding" type="number" min="0" step="1" value="0">
         </label>
         <label class="row">
-          <span><input id="board-outline-on" type="checkbox" checked> Outline</span>
+          <span><input id="board-outline-on" type="checkbox"> Outline</span>
           <span class="color-field"><input id="board-outline" type="color" value="#c8c8c8"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <label id="board-outline-width-field" class="row">
@@ -2222,7 +2222,7 @@
     // sits wholly outside its edge. corners is 'round' or 'chamfer', reaching
     // radius along each side. shadow is null when off.
     const board = {
-      w: 1500, h: 1500, padding: 0, outline: '#c8c8c8', outlineWidth: 1, corners: 'round', radius: 0,
+      w: 1500, h: 1500, padding: 0, outline: null, outlineWidth: 1, corners: 'round', radius: 0,
       shadow: null, shadowX: 0, shadowY: 8, shadowBlur: 24,
     };
     function boardShape() {

@@ -1064,9 +1064,34 @@
           <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
         </label>
         <label class="row">
+          Corners
+          <select id="board-corners">
+            <option value="round">Rounded</option>
+            <option value="chamfer">Chamfered</option>
+          </select>
+        </label>
+        <label class="row">
           Border radius
           <input id="board-radius" type="number" min="0" step="1" value="0">
         </label>
+        <label class="row">
+          <span><input id="board-shadow-on" type="checkbox"> Shadow</span>
+          <span class="color-field"><input id="board-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
+        </label>
+        <div id="board-shadow-fields">
+          <label class="row">
+            Shadow X
+            <input id="board-shadow-x" type="number" step="1" value="0">
+          </label>
+          <label class="row">
+            Shadow Y
+            <input id="board-shadow-y" type="number" step="1" value="8">
+          </label>
+          <label class="row">
+            Shadow blur
+            <input id="board-shadow-blur" type="number" min="0" step="1" value="24">
+          </label>
+        </div>
       </div>
       <div id="shape-properties" class="group" hidden>
         <label class="row">
@@ -2187,11 +2212,29 @@
 
     // The map's bounding box, in background pixels from its top left. The
     // image fits inside it, inset by padding; its outline (null when off)
-    // sits wholly outside its edge.
-    const board = { w: 1500, h: 1500, padding: 0, outline: '#c8c8c8', outlineWidth: 1, radius: 0 };
+    // sits wholly outside its edge. corners is 'round' or 'chamfer', reaching
+    // radius along each side. shadow is null when off.
+    const board = {
+      w: 1500, h: 1500, padding: 0, outline: '#c8c8c8', outlineWidth: 1, corners: 'round', radius: 0,
+      shadow: null, shadowX: 0, shadowY: 8, shadowBlur: 24,
+    };
     function boardShape() {
       const shape = new Path2D();
-      shape.roundRect(0, 0, board.w, board.h, Math.min(board.radius, board.w / 2, board.h / 2));
+      const { w, h } = board;
+      const r = Math.min(board.radius, w / 2, h / 2);
+      if (board.corners === 'chamfer') {
+        shape.moveTo(r, 0);
+        shape.lineTo(w - r, 0);
+        shape.lineTo(w, r);
+        shape.lineTo(w, h - r);
+        shape.lineTo(w - r, h);
+        shape.lineTo(r, h);
+        shape.lineTo(0, h - r);
+        shape.lineTo(0, r);
+        shape.closePath();
+      } else {
+        shape.roundRect(0, 0, w, h, r);
+      }
       return shape;
     }
     const MIN_SCALE = 0.1;
@@ -2203,6 +2246,9 @@
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
     const boardOutlineInput = document.getElementById('board-outline');
+    const boardShadowToggle = document.getElementById('board-shadow-on');
+    const boardShadowInput = document.getElementById('board-shadow');
+    const boardNumber = (id, fallback) => Number(document.getElementById(id).value) || fallback;
     const boardFields = [
       ['board-width', () => { board.w = Math.max(100, Number(document.getElementById('board-width').value) || board.w); }],
       ['board-height', () => { board.h = Math.max(100, Number(document.getElementById('board-height').value) || board.h); }],
@@ -2210,14 +2256,26 @@
       ['board-outline-on', () => { board.outline = boardOutlineToggle.checked ? colorOf(boardOutlineInput) : null; }],
       ['board-outline', () => { if (board.outline) board.outline = colorOf(boardOutlineInput); }],
       ['board-outline-width', () => { board.outlineWidth = Math.max(0, Number(document.getElementById('board-outline-width').value) || 0); }],
+      ['board-corners', () => { board.corners = document.getElementById('board-corners').value; }],
       ['board-radius', () => { board.radius = Math.max(0, Number(document.getElementById('board-radius').value) || 0); }],
+      ['board-shadow-on', () => { board.shadow = boardShadowToggle.checked ? colorOf(boardShadowInput) : null; }],
+      ['board-shadow', () => { if (board.shadow) board.shadow = colorOf(boardShadowInput); }],
+      ['board-shadow-x', () => { board.shadowX = boardNumber('board-shadow-x', 0); }],
+      ['board-shadow-y', () => { board.shadowY = boardNumber('board-shadow-y', 0); }],
+      ['board-shadow-blur', () => { board.shadowBlur = Math.max(0, boardNumber('board-shadow-blur', 0)); }],
     ];
+    function showBoardToggles() {
+      boardOutlineInput.parentElement.hidden = !board.outline;
+      document.getElementById('board-outline-width-field').hidden = !board.outline;
+      boardShadowInput.parentElement.hidden = !board.shadow;
+      document.getElementById('board-shadow-fields').hidden = !board.shadow;
+    }
+    showBoardToggles();
     for (const [id, apply] of boardFields) {
       const input = document.getElementById(id);
       input.addEventListener('input', () => {
         apply();
-        boardOutlineInput.parentElement.hidden = !board.outline;
-        document.getElementById('board-outline-width-field').hidden = !board.outline;
+        showBoardToggles();
         draw();
       });
       input.addEventListener('change', () => input.blur());
@@ -2305,6 +2363,18 @@
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
+      if (board.shadow) {
+        // The box is filled in the background color only to cast its shadow.
+        // Canvas shadows are in device pixels, so they're scaled with the map.
+        ctx.save();
+        ctx.shadowColor = board.shadow;
+        ctx.shadowOffsetX = board.shadowX * view.scale * dpr;
+        ctx.shadowOffsetY = board.shadowY * view.scale * dpr;
+        ctx.shadowBlur = board.shadowBlur * view.scale * dpr;
+        ctx.fillStyle = colorOf(canvasColor);
+        ctx.fill(boardShape());
+        ctx.restore();
+      }
       if (backgroundImage) {
         // As large as fits inside the padded box, centred, never stretched,
         // and cut to the box's rounded corners.

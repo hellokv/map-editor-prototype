@@ -956,14 +956,6 @@
           <span class="slider"><input type="range" min="10" max="600" step="1" value="100" aria-label="Zoom"><span class="percent-field"><input id="preview-zoom" type="number" step="1" value="100"></span></span>
         </label>
         <label class="row">
-          Horizontal offset
-          <span class="slider"><input type="range" min="-100" max="100" step="1" value="0" aria-label="Horizontal offset"><span class="percent-field"><input id="preview-offset-x" type="number" step="1" value="0"></span></span>
-        </label>
-        <label class="row">
-          Vertical offset
-          <span class="slider"><input type="range" min="-100" max="100" step="1" value="0" aria-label="Vertical offset"><span class="percent-field"><input id="preview-offset-y" type="number" step="1" value="0"></span></span>
-        </label>
-        <label class="row">
           Blur
           <span class="slider"><input type="range" min="0" max="40" step="1" value="5" aria-label="Blur"><span class="percent-field px"><input id="preview-blur" type="number" min="0" step="1" value="5"></span></span>
         </label>
@@ -1366,6 +1358,7 @@
       pick.addEventListener('change', () => {
         previewDevice = device;
         pick.blur();
+        centerPreview();
         draw();
       });
       const name = document.createElement('span');
@@ -1388,35 +1381,40 @@
       const h = previewDevice.h * k;
       return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
     }
-    // In preview, the fields set the view: the default zoom relative to the
-    // map filling the screen's shorter side, so each device shows the same part of
-    // the map at its own resolution; and offsets from -100% to 100% that
-    // slide the map until its edge meets the screen's edge.
-    const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y', 'preview-blur'].map((id) => document.getElementById(id));
-    const [previewZoomInput, previewOffsetXInput, previewOffsetYInput, previewBlurInput] = previewInputs;
+    // Preview's zoom is relative to the map filling the screen's shorter
+    // side, so each device shows the same part of the map at its own
+    // resolution. The field sets it, and follows the canvas's own zooming.
+    const previewInputs = ['preview-zoom', 'preview-blur'].map((id) => document.getElementById(id));
+    const [previewZoomInput, previewBlurInput] = previewInputs;
+    const previewSlider = (field) => field.closest('.slider').querySelector('input[type="range"]');
     for (const field of previewInputs) {
-      const slider = field.closest('.slider').querySelector('input[type="range"]');
+      const slider = previewSlider(field);
       slider.addEventListener('input', () => {
         field.value = slider.value;
-        draw();
+        field.dispatchEvent(new Event('input'));
       });
       slider.addEventListener('change', () => slider.blur());
       field.addEventListener('input', () => {
         slider.value = field.value;
-        draw();
+        if (field === previewZoomInput) zoomTo(previewScale(previewZoom()));
+        else draw();
       });
       field.addEventListener('change', () => field.blur());
     }
     const previewZoom = () => Math.min(600, Math.max(10, Number(previewZoomInput.value) || 100));
-    function applyPreviewView() {
+    const previewScale = (percent) => ((percent / 100) * Math.min(previewFrame().w, previewFrame().h)) / BACKGROUND;
+    function showPreviewZoom() {
       const frame = previewFrame();
-      view.scale = ((previewZoom() / 100) * Math.min(frame.w, frame.h)) / BACKGROUND;
-      const size = BACKGROUND * view.scale;
-      const offset = (input) => Math.min(100, Math.max(-100, Number(input.value) || 0)) / 100;
-      // At 100% the map's right (or bottom) edge sits on the screen's,
-      // whether the map is bigger or smaller than the screen.
-      view.x = frame.x + frame.w / 2 - size / 2 - (offset(previewOffsetXInput) * (size - frame.w)) / 2;
-      view.y = frame.y + frame.h / 2 - size / 2 - (offset(previewOffsetYInput) * (size - frame.h)) / 2;
+      const percent = Math.round((view.scale * BACKGROUND * 100) / Math.min(frame.w, frame.h));
+      if (document.activeElement !== previewZoomInput) previewZoomInput.value = percent;
+      if (document.activeElement !== previewSlider(previewZoomInput)) previewSlider(previewZoomInput).value = percent;
+    }
+    // The map at the field's zoom, centred on the screen.
+    function centerPreview() {
+      const frame = previewFrame();
+      view.scale = previewScale(previewZoom());
+      view.x = frame.x + frame.w / 2 - (BACKGROUND * view.scale) / 2;
+      view.y = frame.y + frame.h / 2 - (BACKGROUND * view.scale) / 2;
     }
     // The device drawn as a phone around its screen.
     function drawDeviceFrame() {
@@ -1512,6 +1510,7 @@
       if (mode === 'preview' && !inPreview()) {
         beforePreview = { view: { ...view }, layer: layerSelect.value };
         layerSelect.value = 'Automatic';
+        centerPreview();
       } else if (mode !== 'preview' && inPreview()) {
         Object.assign(view, beforePreview.view);
         layerSelect.value = beforePreview.layer;
@@ -2231,7 +2230,7 @@
     }
 
     function draw() {
-      if (inPreview()) applyPreviewView();
+      if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       // Under Automatic, names the layers the current zoom shows.
       autoLayers.hidden = layerSelect.value !== 'Automatic';
@@ -4955,8 +4954,6 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      // Preview's zoom comes only from its field.
-      if (inPreview()) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -5337,8 +5334,8 @@
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      // Preview's view comes only from its fields.
-      if (e.button !== 0 || inPreview()) return;
+      // Preview has nothing to edit; it only pans.
+      if (e.button !== 0 || (inPreview() && !spaceHeld)) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       if (spaceHeld) {

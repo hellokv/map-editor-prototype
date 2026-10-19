@@ -1301,7 +1301,7 @@
       return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
     }
     // In preview, the fields set the view: the default zoom relative to the
-    // map filling the screen's width, so each device shows the same part of
+    // map filling the screen's shorter side, so each device shows the same part of
     // the map at its own resolution; and offsets from -100% to 100% that
     // slide the map until its edge meets the screen's edge.
     const previewInputs = ['preview-zoom', 'preview-offset-x', 'preview-offset-y', 'preview-blur'].map((id) => document.getElementById(id));
@@ -1322,7 +1322,7 @@
     const previewZoom = () => Math.min(600, Math.max(10, Number(previewZoomInput.value) || 100));
     function applyPreviewView() {
       const frame = previewFrame();
-      view.scale = ((previewZoom() / 100) * frame.w) / BACKGROUND;
+      view.scale = ((previewZoom() / 100) * Math.min(frame.w, frame.h)) / BACKGROUND;
       const size = BACKGROUND * view.scale;
       const offset = (input) => Math.min(100, Math.max(-100, Number(input.value) || 0)) / 100;
       // At 100% the map's right (or bottom) edge sits on the screen's,
@@ -2514,7 +2514,7 @@
       // Before the list is first laid out it has no width to fit previews to.
       const room = (labelStyleList.clientWidth || 280) - 142;
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
-        const row = document.createElement('div');
+        const row = document.createElement('label');
         row.className = 'row';
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',

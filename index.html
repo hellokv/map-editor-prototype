@@ -4850,6 +4850,12 @@
         recordUndo();
         for (const shape of selectedShapes) shapes.splice(shapes.indexOf(shape), 1);
         selectedShapes = [];
+      } else if (e.key === 'Enter' && backgroundTool === 'segments' && (sketchActive || sketchSelected)) {
+        // Finishes the shape: back to the cursor with what was just drawn selected.
+        e.preventDefault();
+        const figure = sketchActive ? sketchFigure(sketchActive) : figureOf(sketchSelected);
+        setBackgroundTool('select');
+        sketchSelected = { figure };
       } else if ((e.key === 'Escape' || e.key === 'Enter') && sketchActive) {
         // Ends the chain of segments being drawn.
         e.preventDefault();

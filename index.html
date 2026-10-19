@@ -3201,7 +3201,7 @@
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
-        document.getElementById('label-icon-gap-field').hidden = !iconOn;
+        document.getElementById('label-icon-gap-field').hidden = !iconOn || textHidden;
         document.getElementById('label-icon-outside-field').hidden = !iconOn;
         // The offset only applies to an icon outside the label.
         document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;

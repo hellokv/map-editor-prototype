@@ -4246,8 +4246,7 @@
       return Math.min(BACKGROUND, Math.max(0, v));
     }
 
-    // Cursors drawn in a color, made once per color. A white halo keeps
-    // each visible over dark background images.
+    // Cursors drawn in a color, made once per color.
     const cursorCache = new Map();
     function coloredCursor(key, color, paint, fallback) {
       const id = `${key} ${color}`;
@@ -4269,9 +4268,6 @@
       c.font = '300 24px "Material Symbols Rounded"';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      c.strokeStyle = '#fff';
-      c.lineWidth = 3;
-      c.strokeText('add_circle', 12, 12);
       c.fillStyle = color;
       c.fillText('add_circle', 12, 12);
     }, 'crosshair') : 'crosshair');
@@ -4290,10 +4286,6 @@
           c.lineTo(16, 20);
         };
         c.lineCap = 'round';
-        c.strokeStyle = '#fff';
-        c.lineWidth = 4;
-        beam();
-        c.stroke();
         c.strokeStyle = color;
         c.lineWidth = 2;
         beam();

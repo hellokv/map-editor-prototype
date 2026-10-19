@@ -1140,6 +1140,18 @@
           Fill color
           <span class="color-field"><input id="sketch-fill-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
+        <label class="row">
+          <span><input id="sketch-outline-on" type="checkbox"> Outline</span>
+          <span class="color-field"><input id="sketch-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <label id="sketch-outline-width-field" class="row">
+          Outline weight
+          <input id="sketch-outline-width" type="number" min="0" max="50" step="0.5">
+        </label>
+        <label class="row">
+          Border radius
+          <input id="sketch-radius" type="number" min="0" step="1">
+        </label>
       </div>
     </div>
   </div>
@@ -1209,8 +1221,9 @@
     let selectedShapes = [];
     // What the Pen tool draws: one path of straight segments, kept apart
     // from the paths in path mode. Each set of joined segments is a figure,
-    // selected and moved as one. The loops it closes are filled; each fill
-    // is a Set of its loop's points carrying a color.
+    // selected and moved as one. Each loop it closes has a Set of its
+    // points carrying the loop's look: color (its fill, null when off),
+    // outline (null when off), outlineWidth and radius.
     const sketch = { points: [], segments: [] };
     const sketchFills = [];
     // The point the next segment starts from while drawing.
@@ -2982,10 +2995,18 @@
       const sketchFigureSelected = sketchSelected?.figure;
       sketchAreaFields.hidden = !sketchFigureSelected || !figureAreas(sketchFigureSelected).length;
       if (!sketchAreaFields.hidden) {
-        const fill = figureAreas(sketchFigureSelected).map((area) => sketchFillOf(area.points)).find(Boolean);
-        sketchFillToggle.checked = !!fill;
-        document.getElementById('sketch-fill-color-field').hidden = !fill;
-        if (fill && document.activeElement !== sketchFillColor) showColor(sketchFillColor, fill.color);
+        const looks = figureAreas(sketchFigureSelected).map((area) => sketchFillOf(area.points) ?? LOOP_LOOK);
+        const filled = looks.find((look) => look.color);
+        const outlined = looks.find((look) => look.outline);
+        sketchFillToggle.checked = !!filled;
+        document.getElementById('sketch-fill-color-field').hidden = !filled;
+        if (filled && document.activeElement !== sketchFillColor) showColor(sketchFillColor, filled.color);
+        sketchOutlineToggle.checked = !!outlined;
+        sketchOutline.parentElement.hidden = !outlined;
+        document.getElementById('sketch-outline-width-field').hidden = !outlined;
+        if (outlined && document.activeElement !== sketchOutline) showColor(sketchOutline, outlined.outline);
+        if (document.activeElement !== sketchOutlineWidth) sketchOutlineWidth.value = (outlined ?? looks[0]).outlineWidth;
+        if (document.activeElement !== sketchRadius) sketchRadius.value = looks[0].radius;
       }
       shapeProperties.hidden = !selectedShapes.length;
       if (selectedShapes.length) {
@@ -3997,20 +4018,22 @@
       } else if (shape.kind === 'square') {
         ctx.roundRect(shape.x, shape.y, shape.w, shape.h, Math.min(radius, shape.w / 2, shape.h / 2));
       } else {
-        // Each corner is rounded with an arc that meets both its edges,
-        // starting from the middle of the last edge.
-        const corners = shapeCorners(shape);
-        const last = corners.at(-1);
-        ctx.moveTo((last.x + corners[0].x) / 2, (last.y + corners[0].y) / 2);
-        corners.forEach((p, i) => {
-          const next = corners[(i + 1) % corners.length];
-          const prev = corners.at(i - 1);
-          const room = Math.min(Math.hypot(next.x - p.x, next.y - p.y), Math.hypot(prev.x - p.x, prev.y - p.y)) / 2;
-          ctx.arcTo(p.x, p.y, next.x, next.y, Math.min(radius, room));
-        });
-        ctx.closePath();
+        traceRoundedPolygon(shapeCorners(shape), radius);
       }
       ctx.restore();
+    }
+    // Each corner is rounded with an arc that meets both its edges,
+    // starting from the middle of the last edge.
+    function traceRoundedPolygon(corners, radius) {
+      const last = corners.at(-1);
+      ctx.moveTo((last.x + corners[0].x) / 2, (last.y + corners[0].y) / 2);
+      corners.forEach((p, i) => {
+        const next = corners[(i + 1) % corners.length];
+        const prev = corners.at(i - 1);
+        const room = Math.min(Math.hypot(next.x - p.x, next.y - p.y), Math.hypot(prev.x - p.x, prev.y - p.y)) / 2;
+        ctx.arcTo(p.x, p.y, next.x, next.y, Math.min(radius, room));
+      });
+      ctx.closePath();
     }
     function drawShapes() {
       const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
@@ -4385,6 +4408,9 @@
     const SKETCH_POINT_RADIUS = 4;
     const SKETCH_HIT_DISTANCE = 8;
     const sketchFillOf = (points) => sketchFills.find((fill) => samePoints(fill, points));
+    const LOOP_LOOK = { color: null, outline: null, outlineWidth: SHAPE_OUTLINE_WIDTH, radius: 0 };
+    const lookOf = (fill) => Object.fromEntries(Object.keys(LOOP_LOOK).map((key) => [key, fill[key]]));
+    const newLoop = (points, look) => Object.assign(new Set(points), LOOP_LOOK, look);
     // Every point joined to this one through segments.
     function sketchFigure(start) {
       const figure = new Set([start]);
@@ -4410,7 +4436,7 @@
       const copies = new Map(sketch.points.map((point) => [point, { ...point }]));
       return {
         sketch: { points: [...copies.values()], segments: sketch.segments.map(([a, b]) => [copies.get(a), copies.get(b)]) },
-        sketchFills: sketchFills.map((fill) => Object.assign(new Set([...fill].map((point) => copies.get(point))), { color: fill.color })),
+        sketchFills: sketchFills.map((fill) => newLoop([...fill].map((point) => copies.get(point)), lookOf(fill))),
       };
     }
     const toScreen = (p) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
@@ -4492,11 +4518,11 @@
       sketch.segments.push(segment);
       const closed = computeAreas([sketch]).filter((area) => area.loop.some((edge) => edge.segment === segment));
       if (closed.length) {
-        // A loop cut from a filled one keeps that fill's color.
+        // A loop cut from another keeps its look; a new one is filled.
         const cut = sketchFills.find((fill) => fill.has(segment[0]) && fill.has(segment[1]));
-        const color = cut?.color ?? colorOf(sketchFillColor);
+        const look = cut ? lookOf(cut) : { color: colorOf(sketchFillColor) };
         for (const area of closed) {
-          if (!sketchFillOf(area.points)) sketchFills.push(Object.assign(new Set(area.points), { color }));
+          if (!sketchFillOf(area.points)) sketchFills.push(newLoop(area.points, look));
         }
         sketchSelected = { figure: sketchFigure(point) };
         sketchActive = null;
@@ -4516,13 +4542,24 @@
       sketchSelected = null;
     }
     function drawSketchFills() {
+      ctx.save();
+      ctx.lineJoin = 'round';
       for (const area of computeAreas([sketch])) {
         const fill = sketchFillOf(area.points);
         if (!fill) continue;
-        ctx.fillStyle = fill.color;
-        traceArea(area);
-        ctx.fill();
+        ctx.beginPath();
+        traceRoundedPolygon(area.polygon, fill.radius);
+        if (fill.color) {
+          ctx.fillStyle = fill.color;
+          ctx.fill();
+        }
+        if (fill.outline) {
+          ctx.strokeStyle = fill.outline;
+          ctx.lineWidth = fill.outlineWidth;
+          ctx.stroke();
+        }
       }
+      ctx.restore();
     }
     // The segments and points themselves only show in background mode.
     function drawSketch() {
@@ -4545,8 +4582,13 @@
         ctx.stroke();
         ctx.shadowColor = 'transparent';
       }
+      // A loop drawn with a fill or outline shows as that, except on the
+      // figure being edited; other segments show as plain lines.
+      const editing = new Set(shownSketchPoints());
+      const styled = computeAreas([sketch]).map((area) => sketchFillOf(area.points)).filter((fill) => fill && (fill.color || fill.outline));
       for (const segment of sketch.segments) {
         const [a, b] = segment;
+        if (!editing.has(a) && styled.some((fill) => fill.has(a) && fill.has(b))) continue;
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
@@ -4591,32 +4633,41 @@
     }
     const sketchAreaFields = document.getElementById('sketch-area-fields');
     const sketchFillToggle = document.getElementById('sketch-fill');
-    // Fill and its color apply to every loop in the selected figure.
-    sketchFillToggle.addEventListener('change', () => {
-      const figure = sketchSelected?.figure;
-      if (!figure) return;
-      recordUndo();
-      for (const fill of figureFills(figure)) sketchFills.splice(sketchFills.indexOf(fill), 1);
-      if (sketchFillToggle.checked) {
-        for (const area of figureAreas(figure)) sketchFills.push(Object.assign(new Set(area.points), { color: colorOf(sketchFillColor) }));
-      }
-      sketchFillToggle.blur();
-      draw();
-    });
+    // The selected figure's loops, each given a look if it has none yet.
+    function figureLoops(figure) {
+      return figureAreas(figure).map((area) => {
+        let fill = sketchFillOf(area.points);
+        if (!fill) sketchFills.push(fill = newLoop(area.points));
+        return fill;
+      });
+    }
+    // Applies an input to every loop of the selected figure as it changes, as one undo step.
+    function bindFigureInput(input, apply) {
+      let before = null;
+      input.addEventListener('input', () => {
+        if (!sketchSelected?.figure) return;
+        before ??= snapshot();
+        for (const fill of figureLoops(sketchSelected.figure)) apply(fill);
+        draw();
+      });
+      input.addEventListener('change', () => {
+        if (before) recordUndo(before);
+        before = null;
+        input.blur();
+        draw();
+      });
+    }
     const sketchFillColor = document.getElementById('sketch-fill-color');
-    let sketchColorBefore = null;
-    sketchFillColor.addEventListener('input', () => {
-      const filled = sketchSelected?.figure ? figureFills(sketchSelected.figure) : [];
-      if (!filled.length) return;
-      sketchColorBefore ??= snapshot();
-      for (const fill of filled) fill.color = colorOf(sketchFillColor);
-      draw();
-    });
-    sketchFillColor.addEventListener('change', () => {
-      if (sketchColorBefore) recordUndo(sketchColorBefore);
-      sketchColorBefore = null;
-      sketchFillColor.blur();
-    });
+    const sketchOutlineToggle = document.getElementById('sketch-outline-on');
+    const sketchOutline = document.getElementById('sketch-outline');
+    const sketchOutlineWidth = document.getElementById('sketch-outline-width');
+    const sketchRadius = document.getElementById('sketch-radius');
+    bindFigureInput(sketchFillToggle, (fill) => { fill.color = sketchFillToggle.checked ? colorOf(sketchFillColor) : null; });
+    bindFigureInput(sketchFillColor, (fill) => { if (fill.color) fill.color = colorOf(sketchFillColor); });
+    bindFigureInput(sketchOutlineToggle, (fill) => { fill.outline = sketchOutlineToggle.checked ? colorOf(sketchOutline) : null; });
+    bindFigureInput(sketchOutline, (fill) => { if (fill.outline) fill.outline = colorOf(sketchOutline); });
+    bindFigureInput(sketchOutlineWidth, (fill) => { fill.outlineWidth = Math.max(0, Number(sketchOutlineWidth.value) || 0); });
+    bindFigureInput(sketchRadius, (fill) => { fill.radius = Math.max(0, Number(sketchRadius.value) || 0); });
 
     let copiedShapes = [];
     let shapePasteCount = 0;

@@ -1051,6 +1051,22 @@
           Height
           <input id="board-height" type="number" min="100" step="1" value="1500">
         </label>
+        <label class="row">
+          Padding
+          <input id="board-padding" type="number" min="0" step="1" value="0">
+        </label>
+        <label class="row">
+          <span><input id="board-outline-on" type="checkbox" checked> Outline</span>
+          <span class="color-field"><input id="board-outline" type="color" value="#c8c8c8"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <label id="board-outline-width-field" class="row">
+          Outline weight
+          <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
+        </label>
+        <label class="row">
+          Border radius
+          <input id="board-radius" type="number" min="0" step="1" value="0">
+        </label>
       </div>
       <div id="shape-properties" class="group" hidden>
         <label class="row">
@@ -2169,8 +2185,15 @@
       }
     });
 
-    // The map's bounding box, in background pixels from its top left.
-    const board = { w: 1500, h: 1500 };
+    // The map's bounding box, in background pixels from its top left. The
+    // image fits inside it, inset by padding; its outline (null when off)
+    // sits wholly outside its edge.
+    const board = { w: 1500, h: 1500, padding: 0, outline: '#c8c8c8', outlineWidth: 1, radius: 0 };
+    function boardShape() {
+      const shape = new Path2D();
+      shape.roundRect(0, 0, board.w, board.h, Math.min(board.radius, board.w / 2, board.h / 2));
+      return shape;
+    }
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
 
@@ -2178,10 +2201,23 @@
     const ctx = canvas.getContext('2d');
 
     const canvasColor = document.getElementById('canvas-color');
-    for (const [id, key] of [['board-width', 'w'], ['board-height', 'h']]) {
+    const boardOutlineToggle = document.getElementById('board-outline-on');
+    const boardOutlineInput = document.getElementById('board-outline');
+    const boardFields = [
+      ['board-width', () => { board.w = Math.max(100, Number(document.getElementById('board-width').value) || board.w); }],
+      ['board-height', () => { board.h = Math.max(100, Number(document.getElementById('board-height').value) || board.h); }],
+      ['board-padding', () => { board.padding = Math.max(0, Number(document.getElementById('board-padding').value) || 0); }],
+      ['board-outline-on', () => { board.outline = boardOutlineToggle.checked ? colorOf(boardOutlineInput) : null; }],
+      ['board-outline', () => { if (board.outline) board.outline = colorOf(boardOutlineInput); }],
+      ['board-outline-width', () => { board.outlineWidth = Math.max(0, Number(document.getElementById('board-outline-width').value) || 0); }],
+      ['board-radius', () => { board.radius = Math.max(0, Number(document.getElementById('board-radius').value) || 0); }],
+    ];
+    for (const [id, apply] of boardFields) {
       const input = document.getElementById(id);
       input.addEventListener('input', () => {
-        board[key] = Math.max(100, Number(input.value) || board[key]);
+        apply();
+        boardOutlineInput.parentElement.hidden = !board.outline;
+        document.getElementById('board-outline-width-field').hidden = !board.outline;
         draw();
       });
       input.addEventListener('change', () => input.blur());
@@ -2270,18 +2306,32 @@
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
       if (backgroundImage) {
-        // As large as fits inside the box, centred, never stretched.
-        const s = Math.min(board.w / backgroundImage.naturalWidth, board.h / backgroundImage.naturalHeight);
+        // As large as fits inside the padded box, centred, never stretched,
+        // and cut to the box's rounded corners.
+        const roomW = Math.max(0, board.w - 2 * board.padding);
+        const roomH = Math.max(0, board.h - 2 * board.padding);
+        const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
         const w = backgroundImage.naturalWidth * s;
         const h = backgroundImage.naturalHeight * s;
+        ctx.save();
+        ctx.clip(boardShape());
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
+        ctx.restore();
       }
       drawShapes();
       drawSketchFills();
-      if (!inPreview()) {
-        ctx.strokeStyle = '#c8c8c8';
-        ctx.lineWidth = 1 / view.scale;
-        ctx.strokeRect(0, 0, board.w, board.h);
+      if (board.outline) {
+        // A stroke twice as wide, clipped to everything but the box.
+        const width = board.outlineWidth;
+        const outside = new Path2D();
+        outside.rect(-2 * width, -2 * width, board.w + 4 * width, board.h + 4 * width);
+        outside.addPath(boardShape());
+        ctx.save();
+        ctx.clip(outside, 'evenodd');
+        ctx.strokeStyle = board.outline;
+        ctx.lineWidth = width * 2;
+        ctx.stroke(boardShape());
+        ctx.restore();
       }
       if (pathTools.hidden) {
         for (const area of computeAreas()) {

@@ -497,10 +497,10 @@
     #label-style-list .style-menu {
       margin-left: auto;
     }
-    #label-style-picker .style-menu {
+    .style-card .style-menu {
       margin-left: auto;
     }
-    #label-style-picker label {
+    .style-card {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -509,17 +509,17 @@
       background: #fff;
       border-radius: 6px;
     }
-    #label-style-picker label.dark {
+    .style-card.dark {
       background: #4a4a4a;
       color: #eee;
     }
-    #label-style-picker label.dark .style-option-name {
+    .style-card.dark .style-option-name {
       color: #ccc;
     }
-    #panel #label-style-picker label.dark .style-menu > button {
+    #panel .style-card.dark .style-menu > button {
       color: #eee;
     }
-    #panel #label-style-picker label.dark .style-menu > button:hover {
+    #panel .style-card.dark .style-menu > button:hover {
       background: rgba(255, 255, 255, 0.15);
     }
     .style-option-body {
@@ -2327,7 +2327,7 @@
     function renderLabelStyles() {
       styleListKey = currentStyleListKey();
       // Before the list is first laid out it has no width to fit previews to.
-      const room = (labelStyleList.clientWidth || 280) - 60;
+      const room = (labelStyleList.clientWidth || 280) - 70;
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('div');
         row.className = 'row';
@@ -2342,8 +2342,7 @@
           updateCursor();
           pick.blur();
         });
-        row.append(pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0 }));
-        return row;
+        return styleCard(row, style, pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0 }));
       }));
     }
 
@@ -2499,6 +2498,18 @@
     // Previews show the style's own values, not the label's overrides or offset.
     const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
+    // A style's card: its radio, its name above its preview, and its menu.
+    // It sits on white, or on dark grey when the style's most prominent
+    // color (its outline, else background, else text) is light.
+    function styleCard(card, style, pick, preview, menu) {
+      card.classList.add('style-card');
+      if (isLight(style.outline ?? style.background ?? style.color)) card.classList.add('dark');
+      const body = document.createElement('span');
+      body.className = 'style-option-body';
+      body.append(Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), preview);
+      card.append(pick, body, menu);
+      return card;
+    }
     // Whether a #rrggbb(aa) color is light, by its relative luminance.
     function isLight(color) {
       const [r, g, b] = [1, 3, 5].map((i) => {
@@ -2507,8 +2518,6 @@
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
     }
-    // Each option sits on white, or on dark grey when the style's most
-    // prominent color (its outline, else background, else text) is light.
     function renderStylePicker(source) {
       const { text } = source;
       // The picker has no width yet the first time, while it's empty.
@@ -2522,12 +2531,7 @@
           pick.blur();
           draw();
         });
-        if (isLight(style.outline ?? style.background ?? style.color)) option.classList.add('dark');
-        const body = document.createElement('span');
-        body.className = 'style-option-body';
-        body.append(Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), stylePreview(style, text, room, iconSettingsOf(source)));
-        option.append(pick, body, styleMenu(style));
-        return option;
+        return styleCard(option, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style));
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
       create.addEventListener('click', newLabelStyle);

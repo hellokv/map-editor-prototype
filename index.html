@@ -1374,7 +1374,10 @@
       draw();
     });
     const pathColor = document.getElementById('path-color');
-    pathColor.addEventListener('input', () => draw());
+    pathColor.addEventListener('input', () => {
+      draw();
+      updateCursor();
+    });
 
     // Distances are in screen pixels so they feel the same at any zoom.
     function nearestPoint(sx, sy, maxDistance, exclude) {
@@ -2336,6 +2339,7 @@
         });
         pick.addEventListener('change', () => {
           currentStyleId = style.id;
+          updateCursor();
           pick.blur();
         });
         row.append(pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0 }));
@@ -4242,22 +4246,60 @@
       return Math.min(BACKGROUND, Math.max(0, v));
     }
 
-    let addCursor = 'crosshair';
+    // Cursors drawn in a color, made once per color. A white halo keeps
+    // each visible over dark background images.
+    const cursorCache = new Map();
+    function coloredCursor(key, color, paint, fallback) {
+      const id = `${key} ${color}`;
+      if (!cursorCache.has(id)) {
+        const icon = document.createElement('canvas');
+        icon.width = icon.height = 24;
+        paint(icon.getContext('2d'), color);
+        cursorCache.set(id, `url(${icon.toDataURL()}) 12 12, ${fallback}`);
+      }
+      return cursorCache.get(id);
+    }
+    // The add path cursor, in the path color.
+    let addIconLoaded = false;
     document.fonts.load('300 24px "Material Symbols Rounded"', 'add_circle').then(() => {
-      const icon = document.createElement('canvas');
-      icon.width = icon.height = 24;
-      const c = icon.getContext('2d');
+      addIconLoaded = true;
+      updateCursor();
+    });
+    const addCursor = () => (addIconLoaded ? coloredCursor('add', colorOf(pathColor), (c, color) => {
       c.font = '300 24px "Material Symbols Rounded"';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      // A white halo keeps the icon visible over dark background images.
       c.strokeStyle = '#fff';
       c.lineWidth = 3;
       c.strokeText('add_circle', 12, 12);
+      c.fillStyle = color;
       c.fillText('add_circle', 12, 12);
-      addCursor = `url(${icon.toDataURL()}) 12 12, crosshair`;
-      updateCursor();
-    });
+    }, 'crosshair') : 'crosshair');
+    // The new label cursor: a text cursor in the current style's outline,
+    // else background, else text color.
+    const labelCursor = () => {
+      const style = currentStyle();
+      return coloredCursor('label', style.outline ?? style.background ?? style.color, (c, color) => {
+        const beam = () => {
+          c.beginPath();
+          c.moveTo(12, 4);
+          c.lineTo(12, 20);
+          c.moveTo(8, 4);
+          c.lineTo(16, 4);
+          c.moveTo(8, 20);
+          c.lineTo(16, 20);
+        };
+        c.lineCap = 'round';
+        c.strokeStyle = '#fff';
+        c.lineWidth = 4;
+        beam();
+        c.stroke();
+        c.strokeStyle = color;
+        c.lineWidth = 2;
+        beam();
+        c.stroke();
+      }, 'text');
+    };
 
     // The pin cursor's hotspot is the tip of the pin.
     let pinCursor = 'crosshair';
@@ -4430,10 +4472,10 @@
 
     function updateCursor() {
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
-      else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'text';
+      else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = labelCursor();
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor : shapeHandleCursor();
-      else canvas.style.cursor = addTarget() ? addCursor : '';
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? addCursor() : shapeHandleCursor();
+      else canvas.style.cursor = addTarget() ? addCursor() : '';
     }
 
     // Holding space turns every press on the canvas into a pan.

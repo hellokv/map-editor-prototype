@@ -661,7 +661,7 @@
         <button type="button" data-background-tool="shapes" aria-label="Shapes" aria-pressed="false">
           <span class="material-symbols-rounded">shapes</span>
         </button>
-        <button type="button" data-background-tool="segments" aria-label="Segments" aria-pressed="false">
+        <button type="button" data-background-tool="segments" aria-label="Pen" aria-pressed="false">
           <span class="material-symbols-rounded">polyline</span>
         </button>
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
@@ -1207,14 +1207,15 @@
     // circle is an ellipse unless the box is square.
     const shapes = [];
     let selectedShapes = [];
-    // What the Segments tool draws: one path of straight segments, kept apart
-    // from the paths in path mode. The loops it closes can be filled; each
-    // fill is a Set of its loop's points carrying a color.
+    // What the Pen tool draws: one path of straight segments, kept apart
+    // from the paths in path mode. Each set of joined segments is a figure,
+    // selected and moved as one. The loops it closes are filled; each fill
+    // is a Set of its loop's points carrying a color.
     const sketch = { points: [], segments: [] };
     const sketchFills = [];
     // The point the next segment starts from while drawing.
     let sketchActive = null;
-    // { point } | { segment } | { area: Set of points }
+    // { figure: Set of points } | { point }, a node of a selected figure.
     let sketchSelected = null;
     let backgroundTool = 'select';
     let shapeKind = 'circle';
@@ -2978,10 +2979,10 @@
       fillVisibleToggle.checked = !!fill?.visible;
       fillColorField.hidden = !fill?.visible;
       if (fill) showColor(fillColorInput, fill.color);
-      const sketchArea = sketchSelected?.area;
-      sketchAreaFields.hidden = !sketchArea;
-      if (sketchArea) {
-        const fill = sketchFillOf(sketchArea);
+      const sketchFigureSelected = sketchSelected?.figure;
+      sketchAreaFields.hidden = !sketchFigureSelected || !figureAreas(sketchFigureSelected).length;
+      if (!sketchAreaFields.hidden) {
+        const fill = figureAreas(sketchFigureSelected).map((area) => sketchFillOf(area.points)).find(Boolean);
         sketchFillToggle.checked = !!fill;
         document.getElementById('sketch-fill-color-field').hidden = !fill;
         if (fill && document.activeElement !== sketchFillColor) showColor(sketchFillColor, fill.color);
@@ -4265,7 +4266,8 @@
         }
         return;
       }
-      const sketchPoint = sketchPointAt(s);
+      // Only the nodes on show can be picked out of their figure.
+      const sketchPoint = sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
       const sketchSegment = sketchPoint ? null : sketchSegmentAt(s);
       const pressed = sketchPoint || sketchSegment ? null : shapeAt(p);
       const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]), s.x, s.y);
@@ -4274,11 +4276,10 @@
         if (sketchPoint) {
           sketchSelected = { point: sketchPoint };
           drag = { ...base, sketchPoints: [sketchPoint], last: p };
-        } else if (sketchSegment) {
-          sketchSelected = { segment: sketchSegment };
         } else {
-          sketchSelected = { area: sketchArea.points };
-          drag = { ...base, sketchPoints: [...sketchArea.points], last: p };
+          const figure = sketchFigure(sketchSegment ? sketchSegment[0] : [...sketchArea.points][0]);
+          sketchSelected = { figure };
+          drag = { ...base, sketchPoints: [...figure], last: p };
         }
         return;
       }
@@ -4384,6 +4385,27 @@
     const SKETCH_POINT_RADIUS = 4;
     const SKETCH_HIT_DISTANCE = 8;
     const sketchFillOf = (points) => sketchFills.find((fill) => samePoints(fill, points));
+    // Every point joined to this one through segments.
+    function sketchFigure(start) {
+      const figure = new Set([start]);
+      for (const point of figure) {
+        for (const [a, b] of sketch.segments) {
+          if (a === point) figure.add(b);
+          if (b === point) figure.add(a);
+        }
+      }
+      return figure;
+    }
+    const figureOf = (selection) => selection && (selection.figure ?? sketchFigure(selection.point));
+    // The loops of a figure, and the fills on them.
+    const figureAreas = (figure) => computeAreas([sketch]).filter((area) => [...area.points].every((point) => figure.has(point)));
+    const figureFills = (figure) => sketchFills.filter((fill) => [...fill].every((point) => figure.has(point)));
+    // Nodes show on the selected figure and on the one being drawn.
+    function shownSketchPoints() {
+      const shown = new Set(figureOf(sketchSelected));
+      if (sketchActive) for (const point of sketchFigure(sketchActive)) shown.add(point);
+      return [...shown];
+    }
     function copySketch() {
       const copies = new Map(sketch.points.map((point) => [point, { ...point }]));
       return {
@@ -4393,9 +4415,9 @@
     }
     const toScreen = (p) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
     // The nearest point within reach of a screen point, in screen pixels.
-    function sketchPointAt(s, reach = SKETCH_HIT_DISTANCE, exclude = null) {
+    function sketchPointAt(s, reach = SKETCH_HIT_DISTANCE, exclude = null, among = sketch.points) {
       let best = null;
-      for (const point of sketch.points) {
+      for (const point of among) {
         const q = toScreen(point);
         const d = Math.hypot(q.x - s.x, q.y - s.y);
         if (point !== exclude && d <= reach && (!best || d < best.d)) best = { point, d };
@@ -4417,7 +4439,7 @@
       return best;
     }
     const sketchSegmentAt = (s) => sketchSegmentHit(s)?.segment ?? null;
-    // Where a click with the Segments tool would land, snapping as the path
+    // Where a click with the Pen tool would land, snapping as the path
     // tool does: Shift locks to 45° from the point being drawn from, then it
     // snaps to a point, else onto a segment, within snap distance.
     function sketchTarget(s) {
@@ -4440,7 +4462,7 @@
       return inBackground(at) ? { add: at, at, guide } : null;
     }
     // Each click adds a point joined to the last. Joining onto an existing
-    // point or segment ends the chain; closing a loop selects it for filling.
+    // point or segment ends the chain; closing a loop fills it and selects its figure.
     function drawSketchPoint(target) {
       if (!target) return;
       const joins = (point) => sketchActive && sketchActive !== point
@@ -4470,31 +4492,26 @@
       sketch.segments.push(segment);
       const closed = computeAreas([sketch]).filter((area) => area.loop.some((edge) => edge.segment === segment));
       if (closed.length) {
-        const smallest = closed.reduce((a, b) => (b.area < a.area ? b : a));
-        sketchSelected = { area: smallest.points };
+        // A loop cut from a filled one keeps that fill's color.
+        const cut = sketchFills.find((fill) => fill.has(segment[0]) && fill.has(segment[1]));
+        const color = cut?.color ?? colorOf(sketchFillColor);
+        for (const area of closed) {
+          if (!sketchFillOf(area.points)) sketchFills.push(Object.assign(new Set(area.points), { color }));
+        }
+        sketchSelected = { figure: sketchFigure(point) };
         sketchActive = null;
       } else {
         sketchActive = target.point || target.split ? null : point;
       }
     }
     function deleteSketchSelection() {
-      const { point, segment, area } = sketchSelected;
-      if (area) {
-        // On an area, Delete only ever removes its fill.
-        const fill = sketchFillOf(area);
-        if (!fill) return;
-        recordUndo();
-        sketchFills.splice(sketchFills.indexOf(fill), 1);
-        return;
-      }
+      const { point, figure } = sketchSelected;
       recordUndo();
-      if (point) {
-        sketch.points.splice(sketch.points.indexOf(point), 1);
-        for (let i = sketch.segments.length - 1; i >= 0; i--) {
-          if (sketch.segments[i].includes(point)) sketch.segments.splice(i, 1);
-        }
-      } else {
-        sketch.segments.splice(sketch.segments.indexOf(segment), 1);
+      const gone = figure ?? new Set([point]);
+      for (const fill of figure ? figureFills(figure) : []) sketchFills.splice(sketchFills.indexOf(fill), 1);
+      for (const each of gone) sketch.points.splice(sketch.points.indexOf(each), 1);
+      for (let i = sketch.segments.length - 1; i >= 0; i--) {
+        if (sketch.segments[i].some((each) => gone.has(each))) sketch.segments.splice(i, 1);
       }
       sketchSelected = null;
     }
@@ -4513,21 +4530,24 @@
       const highlight = colorOf(pathColor);
       ctx.save();
       ctx.lineCap = 'round';
-      if (sketchSelected?.area) {
-        const area = computeAreas([sketch]).find((a) => samePoints(a.points, sketchSelected.area));
-        if (area) {
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-          ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 3 * px;
-          traceArea(area);
-          ctx.stroke();
-          ctx.shadowColor = 'transparent';
+      const selectedFigure = figureOf(sketchSelected);
+      if (selectedFigure) {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 4 * (window.devicePixelRatio || 1);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3 * px;
+        ctx.beginPath();
+        for (const [a, b] of sketch.segments) {
+          if (!selectedFigure.has(a)) continue;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
         }
+        ctx.stroke();
+        ctx.shadowColor = 'transparent';
       }
       for (const segment of sketch.segments) {
         const [a, b] = segment;
-        ctx.strokeStyle = segment === sketchSelected?.segment ? highlight : '#fff';
+        ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2 * px;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -4557,7 +4577,7 @@
       }
       // Where the next click lands, when it snaps to a point or a segment.
       const snapped = target && !target.add ? [target.at] : [];
-      for (const point of [...sketch.points, ...snapped]) {
+      for (const point of [...shownSketchPoints(), ...snapped]) {
         const marked = point === sketchActive || point === sketchSelected?.point || snapped.includes(point);
         ctx.fillStyle = marked ? highlight : '#fff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
@@ -4571,23 +4591,25 @@
     }
     const sketchAreaFields = document.getElementById('sketch-area-fields');
     const sketchFillToggle = document.getElementById('sketch-fill');
+    // Fill and its color apply to every loop in the selected figure.
     sketchFillToggle.addEventListener('change', () => {
-      const area = sketchSelected?.area;
-      if (!area) return;
+      const figure = sketchSelected?.figure;
+      if (!figure) return;
       recordUndo();
-      const fill = sketchFillOf(area);
-      if (fill) sketchFills.splice(sketchFills.indexOf(fill), 1);
-      else sketchFills.push(Object.assign(new Set(area), { color: colorOf(sketchFillColor) }));
+      for (const fill of figureFills(figure)) sketchFills.splice(sketchFills.indexOf(fill), 1);
+      if (sketchFillToggle.checked) {
+        for (const area of figureAreas(figure)) sketchFills.push(Object.assign(new Set(area.points), { color: colorOf(sketchFillColor) }));
+      }
       sketchFillToggle.blur();
       draw();
     });
     const sketchFillColor = document.getElementById('sketch-fill-color');
     let sketchColorBefore = null;
     sketchFillColor.addEventListener('input', () => {
-      const fill = sketchSelected?.area && sketchFillOf(sketchSelected.area);
-      if (!fill) return;
+      const filled = sketchSelected?.figure ? figureFills(sketchSelected.figure) : [];
+      if (!filled.length) return;
       sketchColorBefore ??= snapshot();
-      fill.color = colorOf(sketchFillColor);
+      for (const fill of filled) fill.color = colorOf(sketchFillColor);
       draw();
     });
     sketchFillColor.addEventListener('change', () => {
@@ -5431,8 +5453,7 @@
         if (selectedShapes.length > 1) return 'Shapes';
         if (selectedShapes.length) return SHAPE_NAMES[selectedShapes[0].kind];
         if (sketchSelected?.point) return 'Point';
-        if (sketchSelected?.segment) return 'Segment';
-        if (sketchSelected?.area) return 'Area';
+        if (sketchSelected?.figure) return 'Shape';
         return 'Background';
       }
       if (selected?.area) return 'Area';

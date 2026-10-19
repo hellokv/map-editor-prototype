@@ -651,9 +651,6 @@
       <button id="crossing-no" type="button">No</button>
     </div>
     <div id="mode-menu">
-      <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
-        <span class="material-symbols-rounded">responsive_layout</span>
-      </button>
       <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
         <span class="material-symbols-rounded">label</span>
       </button>
@@ -662,6 +659,9 @@
       </button>
       <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
+      </button>
+      <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
+        <span class="material-symbols-rounded">responsive_layout</span>
       </button>
       <div id="label-tools" hidden>
         <hr>
@@ -5811,7 +5811,7 @@
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
 
-    function setBackgroundImage(src) {
+    function setBackgroundImage(src, onError) {
       const img = new Image();
       img.onload = () => {
         backgroundImage = img;
@@ -5820,6 +5820,7 @@
         preview.hidden = false;
         draw();
       };
+      if (onError) img.onerror = onError;
       img.src = src;
     }
 
@@ -5828,7 +5829,10 @@
       if (file) setBackgroundImage(URL.createObjectURL(file));
     });
 
-    setBackgroundImage('demo-park.svg');
+    // The editor opens on labelling a map that has a background, and on
+    // making one when it hasn't.
+    const START_IMAGE = 'demo-park.svg';
+    if (START_IMAGE) setBackgroundImage(START_IMAGE, () => setMode('background'));
 
     document.getElementById('image-delete').addEventListener('click', () => {
       if (backgroundImage.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
@@ -5876,6 +5880,7 @@
       return 'Paths';
     }
     new ResizeObserver(resize).observe(canvas);
+    setMode(START_IMAGE ? 'labels' : 'background');
   </script>
 </body>
 </html>

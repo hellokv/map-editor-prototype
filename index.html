@@ -1043,6 +1043,14 @@
           Background
           <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
         </label>
+        <label class="row">
+          Width
+          <input id="board-width" type="number" min="100" step="1" value="1500">
+        </label>
+        <label class="row">
+          Height
+          <input id="board-height" type="number" min="100" step="1" value="1500">
+        </label>
       </div>
       <div id="shape-properties" class="group" hidden>
         <label class="row">
@@ -1387,9 +1395,9 @@
       const h = previewDevice.h * k;
       return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
     }
-    // Preview's zoom is relative to the map filling the screen's shorter
-    // side, so each device shows the same part of the map at its own
-    // resolution. The field sets it, and follows the canvas's own zooming.
+    // Preview's zoom is relative to the whole map just fitting the screen,
+    // so each device shows the same part of the map at its own resolution.
+    // The field sets it, and follows the canvas's own zooming.
     const previewInputs = ['preview-zoom', 'preview-blur'].map((id) => document.getElementById(id));
     const [previewZoomInput, previewBlurInput] = previewInputs;
     const previewSlider = (field) => field.closest('.slider').querySelector('input[type="range"]');
@@ -1408,10 +1416,10 @@
       field.addEventListener('change', () => field.blur());
     }
     const previewZoom = () => Math.min(600, Math.max(10, Number(previewZoomInput.value) || 100));
-    const previewScale = (percent) => ((percent / 100) * Math.min(previewFrame().w, previewFrame().h)) / BACKGROUND;
+    const fitScale = (frame) => Math.min(frame.w / board.w, frame.h / board.h);
+    const previewScale = (percent) => (percent / 100) * fitScale(previewFrame());
     function showPreviewZoom() {
-      const frame = previewFrame();
-      const percent = Math.round((view.scale * BACKGROUND * 100) / Math.min(frame.w, frame.h));
+      const percent = Math.round((view.scale * 100) / fitScale(previewFrame()));
       if (document.activeElement !== previewZoomInput) previewZoomInput.value = percent;
       if (document.activeElement !== previewSlider(previewZoomInput)) previewSlider(previewZoomInput).value = percent;
     }
@@ -1419,8 +1427,8 @@
     function centerPreview() {
       const frame = previewFrame();
       view.scale = previewScale(previewZoom());
-      view.x = frame.x + frame.w / 2 - (BACKGROUND * view.scale) / 2;
-      view.y = frame.y + frame.h / 2 - (BACKGROUND * view.scale) / 2;
+      view.x = frame.x + frame.w / 2 - (board.w * view.scale) / 2;
+      view.y = frame.y + frame.h / 2 - (board.h * view.scale) / 2;
     }
     // The device drawn as a phone around its screen.
     function drawDeviceFrame() {
@@ -2161,7 +2169,8 @@
       }
     });
 
-    const BACKGROUND = 1500;
+    // The map's bounding box, in background pixels from its top left.
+    const board = { w: 1500, h: 1500 };
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
 
@@ -2169,6 +2178,14 @@
     const ctx = canvas.getContext('2d');
 
     const canvasColor = document.getElementById('canvas-color');
+    for (const [id, key] of [['board-width', 'w'], ['board-height', 'h']]) {
+      const input = document.getElementById(id);
+      input.addEventListener('input', () => {
+        board[key] = Math.max(100, Number(input.value) || board[key]);
+        draw();
+      });
+      input.addEventListener('change', () => input.blur());
+    }
     canvasColor.addEventListener('input', () => draw());
     const showPreviewColor = () => { document.getElementById('image-preview').style.background = colorOf(canvasColor); };
     canvasColor.addEventListener('input', showPreviewColor);
@@ -2211,9 +2228,9 @@
     });
 
     function centerBackground(w, h) {
-      view.scale = Math.min(w, h) / BACKGROUND * 0.9;
-      view.x = (w - BACKGROUND * view.scale) / 2;
-      view.y = (h - BACKGROUND * view.scale) / 2;
+      view.scale = Math.min(w / board.w, h / board.h) * 0.9;
+      view.x = (w - board.w * view.scale) / 2;
+      view.y = (h - board.h * view.scale) / 2;
     }
 
     function resize() {
@@ -2253,18 +2270,18 @@
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
       if (backgroundImage) {
-        // Cover the background, centred, and draw the overflow too.
-        const s = Math.max(BACKGROUND / backgroundImage.naturalWidth, BACKGROUND / backgroundImage.naturalHeight);
+        // As large as fits inside the box, centred, never stretched.
+        const s = Math.min(board.w / backgroundImage.naturalWidth, board.h / backgroundImage.naturalHeight);
         const w = backgroundImage.naturalWidth * s;
         const h = backgroundImage.naturalHeight * s;
-        ctx.drawImage(backgroundImage, (BACKGROUND - w) / 2, (BACKGROUND - h) / 2, w, h);
+        ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
       }
       drawShapes();
       drawSketchFills();
       if (!inPreview()) {
         ctx.strokeStyle = '#c8c8c8';
         ctx.lineWidth = 1 / view.scale;
-        ctx.strokeRect(0, 0, BACKGROUND, BACKGROUND);
+        ctx.strokeRect(0, 0, board.w, board.h);
       }
       if (pathTools.hidden) {
         for (const area of computeAreas()) {
@@ -2386,7 +2403,7 @@
 
       const guides = drag?.guides ?? target?.guides;
       if (guides?.length) {
-        const length = 4 * BACKGROUND;
+        const length = 4 * Math.max(board.w, board.h);
         ctx.save();
         ctx.strokeStyle = 'red';
         ctx.lineWidth = px;
@@ -2923,8 +2940,8 @@
       field.addEventListener('input', () => { if (field.value !== '') slider.value = field.value; });
       return slider;
     });
-    const labelXInput = liveField('label-x', 'x', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
-    const labelYInput = liveField('label-y', 'y', (input) => clampToBackground(Number(input.value) || 0), soleLabel);
+    const labelXInput = liveField('label-x', 'x', (input) => clampX(Number(input.value) || 0), soleLabel);
+    const labelYInput = liveField('label-y', 'y', (input) => clampY(Number(input.value) || 0), soleLabel);
     const pointerButtons = document.querySelectorAll('[data-pointer]');
     for (const button of pointerButtons) {
       button.addEventListener('click', () => {
@@ -4772,7 +4789,7 @@
       const target = backgroundTool === 'segments' && !spaceHeld ? sketchTarget(pointer) : null;
       if (target?.guide) {
         const { origin, dx, dy } = target.guide;
-        const length = 4 * BACKGROUND;
+        const length = 4 * Math.max(board.w, board.h);
         ctx.strokeStyle = 'red';
         ctx.lineWidth = px;
         ctx.beginPath();
@@ -4939,8 +4956,8 @@
         pasteCount++;
         const pasted = copiedLabels.map((label) => ({
           ...label,
-          x: clampToBackground(label.x + PASTE_OFFSET * pasteCount),
-          y: clampToBackground(label.y + PASTE_OFFSET * pasteCount),
+          x: clampX(label.x + PASTE_OFFSET * pasteCount),
+          y: clampY(label.y + PASTE_OFFSET * pasteCount),
           pins: [],
         }));
         labels.push(...pasted);
@@ -5001,12 +5018,11 @@
     }
 
     function inBackground(p) {
-      return p.x >= 0 && p.x <= BACKGROUND && p.y >= 0 && p.y <= BACKGROUND;
+      return p.x >= 0 && p.x <= board.w && p.y >= 0 && p.y <= board.h;
     }
 
-    function clampToBackground(v) {
-      return Math.min(BACKGROUND, Math.max(0, v));
-    }
+    const clampX = (v) => Math.min(board.w, Math.max(0, v));
+    const clampY = (v) => Math.min(board.h, Math.max(0, v));
 
     // Cursors drawn in a color, made once per color.
     const cursorCache = new Map();
@@ -5264,8 +5280,8 @@
       const moving = movingPoints();
       const xs = [...moving].map((p) => p.x);
       const ys = [...moving].map((p) => p.y);
-      dx = Math.min(BACKGROUND - Math.max(...xs), Math.max(-Math.min(...xs), dx));
-      dy = Math.min(BACKGROUND - Math.max(...ys), Math.max(-Math.min(...ys), dy));
+      dx = Math.min(board.w - Math.max(...xs), Math.max(-Math.min(...xs), dx));
+      dy = Math.min(board.h - Math.max(...ys), Math.max(-Math.min(...ys), dy));
       keepingBends(moving, () => {
         for (const p of moving) {
           p.x += dx;
@@ -5484,8 +5500,8 @@
         drag.snapTo = nearestPoint(target.x * view.scale + view.x, target.y * view.scale + view.y, reach, drag.point);
         if (drag.snapTo) target = { x: drag.snapTo.point.x, y: drag.snapTo.point.y };
         keepingBends(new Set([drag.point]), () => {
-          drag.point.x = clampToBackground(target.x);
-          drag.point.y = clampToBackground(target.y);
+          drag.point.x = clampX(target.x);
+          drag.point.y = clampY(target.y);
         });
       } else if (drag?.bend) {
         // Ignore jitter so a plain click doesn't bend a straight segment.
@@ -5507,8 +5523,8 @@
         }
         const p = toBackground(pointer.x, pointer.y);
         for (const pin of drag.pins) {
-          pin.x = clampToBackground(pin.x + p.x - drag.last.x);
-          pin.y = clampToBackground(pin.y + p.y - drag.last.y);
+          pin.x = clampX(pin.x + p.x - drag.last.x);
+          pin.y = clampY(pin.y + p.y - drag.last.y);
         }
         drag.last = p;
       } else if (drag?.labels) {
@@ -5519,8 +5535,8 @@
         }
         const p = toBackground(pointer.x, pointer.y);
         for (const label of drag.labels) {
-          label.x = clampToBackground(label.x + p.x - drag.last.x);
-          label.y = clampToBackground(label.y + p.y - drag.last.y);
+          label.x = clampX(label.x + p.x - drag.last.x);
+          label.y = clampY(label.y + p.y - drag.last.y);
         }
         drag.last = p;
       } else if (drag?.group) {

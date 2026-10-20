@@ -524,14 +524,14 @@
     #panel .toggle-group button[aria-pressed="true"] {
       background: #ddd;
     }
-    #label-layers {
+    .layer-toggles {
       display: flex;
       gap: 2px;
     }
-    #panel #label-layers button {
+    #panel .layer-toggles button {
       padding: 3px 8px;
     }
-    #panel #label-layers button[aria-pressed="true"] {
+    #panel .layer-toggles button[aria-pressed="true"] {
       background: #ddd;
     }
     #label-icon-side {
@@ -712,6 +712,10 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
+        <button type="button" data-background-tool="image" aria-label="Image" aria-pressed="false">
+          <span class="material-symbols-rounded">add_photo_alternate</span>
+        </button>
+        <input id="place-image" type="file" accept="image/*" hidden>
       </div>
       <div id="path-tools">
         <hr>
@@ -847,7 +851,7 @@
         <div class="group">
           <div class="row">
             Layers
-            <div id="label-layers">
+            <div id="label-layers" class="layer-toggles">
               <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
               <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
               <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
@@ -1255,8 +1259,18 @@
           </label>
         </div>
       </div>
+      <div id="background-layers" class="group" hidden>
+        <div class="row">
+          Layers
+          <div class="layer-toggles">
+            <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
+            <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
+            <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
+          </div>
+        </div>
+      </div>
       <div id="shape-properties" class="group" hidden>
-        <label class="row">
+        <label id="shape-color-field" class="row">
           <span id="shape-color-name">Fill color</span>
           <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
@@ -1529,7 +1543,15 @@
       updateCursor();
     }
     for (const button of backgroundToolButtons) {
-      button.addEventListener('click', () => setBackgroundTool(button.dataset.backgroundTool));
+      button.addEventListener('click', () => {
+        if (button.dataset.backgroundTool === 'image') {
+          setBackgroundTool('select');
+          button.blur();
+          placeImageInput.click();
+          return;
+        }
+        setBackgroundTool(button.dataset.backgroundTool);
+      });
     }
     for (const button of shapeButtons) {
       button.addEventListener('click', () => {
@@ -3388,24 +3410,32 @@
         draw();
       });
     }
-    // A label's layers: true for each of sky, canopy and ground it's on. It
-    // stays on at least one. A layer button shows pressed when every selected
-    // label is on that layer; pressing it then takes them all off it, except
-    // labels it's the last layer of, and otherwise puts them all on it.
+    // Layers: true for each of sky, canopy and ground something's on. It
+    // stays on at least one. A layer button shows pressed when everything
+    // selected is on that layer; pressing it then takes them all off it,
+    // except those it's the last layer of, and otherwise puts them all on it.
     const layerButtons = document.querySelectorAll('[data-layer]');
+    // What the layer buttons act on: selected labels, or in background mode
+    // selected shapes and every point of a selected pen shape.
+    function layerItems() {
+      if (!labelTools.hidden) return selectedLabels;
+      return [...selectedShapes, ...(figureOf(sketchSelected) ?? [])];
+    }
     for (const button of layerButtons) {
       button.addEventListener('click', () => {
         const layer = button.dataset.layer;
-        const removing = selectedLabels.every((label) => label.layers?.[layer]);
-        const changing = selectedLabels.filter((label) => (removing ? Object.keys(label.layers).length > 1 : !label.layers?.[layer]));
+        const items = layerItems();
+        for (const item of items) item.layers ??= Object.fromEntries(LAYERS.map((each) => [each, true]));
+        const removing = items.every((item) => item.layers[layer]);
+        const changing = items.filter((item) => (removing ? Object.keys(item.layers).length > 1 : !item.layers[layer]));
         button.blur();
         if (!changing.length) return;
         recordUndo();
-        for (const label of changing) {
-          const layers = { ...label.layers };
+        for (const item of changing) {
+          const layers = { ...item.layers };
           if (removing) delete layers[layer];
           else layers[layer] = true;
-          label.layers = layers;
+          item.layers = layers;
         }
         draw();
       });
@@ -3788,20 +3818,32 @@
         if (document.activeElement !== sketchRadius) sketchRadius.value = looks[0].radius;
         sketchStripeFields.show(looks.find((look) => look.stripes)?.stripes);
       }
+      const backgroundLayers = document.getElementById('background-layers');
+      backgroundLayers.hidden = !selectedShapes.length && !sketchSelected;
+      if (!backgroundLayers.hidden) {
+        const items = layerItems();
+        for (const button of backgroundLayers.querySelectorAll('[data-layer]')) {
+          button.setAttribute('aria-pressed', items.every((item) => !item.layers || item.layers[button.dataset.layer]));
+        }
+      }
       shapeProperties.hidden = !selectedShapes.length;
       if (selectedShapes.length) {
         const first = selectedShapes[0];
-        if (document.activeElement !== shapeColorInput) showColor(shapeColorInput, first.color);
+        const colored = selectedShapes.find((shape) => shape.color);
+        if (colored && document.activeElement !== shapeColorInput) showColor(shapeColorInput, colored.color);
         // A compass has a color, directions and letters, and none of the
         // other shapes' radius, outline or shadow.
         const compasses = selectedShapes.filter((shape) => shape.kind === 'compass');
         const allCompasses = compasses.length === selectedShapes.length;
+        // An image has none of the fill, radius, outline, stripes or shadow.
+        const plain = selectedShapes.filter((shape) => shape.kind !== 'compass' && shape.kind !== 'image');
+        document.getElementById('shape-color-field').hidden = selectedShapes.every((shape) => shape.kind === 'image');
         document.getElementById('shape-color-name').textContent = allCompasses ? 'Main star' : 'Fill color';
-        document.getElementById('shape-radius-field').hidden = selectedShapes.every((shape) => shape.kind === 'circle' || shape.kind === 'compass');
-        document.getElementById('shape-outline-field').hidden = allCompasses;
-        document.getElementById('shape-stripes').hidden = allCompasses;
+        document.getElementById('shape-radius-field').hidden = plain.every((shape) => shape.kind === 'circle');
+        document.getElementById('shape-outline-field').hidden = !plain.length;
+        document.getElementById('shape-stripes').hidden = !plain.length;
         shapeStripeFields.show(selectedShapes.find((shape) => shape.stripes)?.stripes);
-        document.getElementById('shape-shadow-field').hidden = allCompasses;
+        document.getElementById('shape-shadow-field').hidden = !plain.length;
         document.getElementById('compass-fields').hidden = !allCompasses;
         if (allCompasses) {
           const compass = compasses[0];
@@ -3846,7 +3888,7 @@
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
-        for (const button of layerButtons) {
+        for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
         }
         if (selectedLabels.length !== stylePickerFor.length || selectedLabels.some((label, i) => label !== stylePickerFor[i])) {
@@ -4121,9 +4163,7 @@
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
         if (editingLabel.place) created.place = editingLabel.place;
-        // A new label goes on the layers being shown, so it stays in view.
-        const layers = shownLayers().length ? shownLayers() : LAYERS;
-        created.layers = Object.fromEntries(layers.map((layer) => [layer, true]));
+        created.layers = newLayers();
         labels.push(created);
       }
       editingLabel = null;
@@ -4365,7 +4405,15 @@
       }
       return [layerSelect.value.toLowerCase()];
     }
-    const labelShown = (label) => layerSelect.value === 'All' || shownLayers().some((layer) => label.layers?.[layer]);
+    // Labels, background shapes and pen points each carry layers (a pen
+    // shape's points all share theirs). Anything without is on every layer.
+    const onShownLayer = (item) => !item.layers || layerSelect.value === 'All' || shownLayers().some((layer) => item.layers[layer]);
+    const labelShown = onShownLayer;
+    // Something new goes on the layers being shown, so it stays in view.
+    function newLayers() {
+      const layers = shownLayers().length ? shownLayers() : LAYERS;
+      return Object.fromEntries(layers.map((layer) => [layer, true]));
+    }
     // The zoom range form. Sky starts at the furthest zoom out and ground
     // ends at the furthest zoom in, so those two ends are fixed, though they
     // can still be previewed.
@@ -4418,12 +4466,15 @@
 
     layerSelect.addEventListener('change', () => {
       selectedLabels = selectedLabels.filter(labelShown);
+      selectedShapes = selectedShapes.filter(onShownLayer);
+      if (sketchSelected && !onShownLayer(sketchSelected.point ?? [...sketchSelected.figure][0])) sketchSelected = null;
       layerSelect.blur();
       draw();
     });
 
-    // Labels fade in and out over LABEL_FADE_MS as they come into and go out
-    // of view. A label's fade starts settled, so new labels just appear.
+    // Labels, shapes and pen points fade in and out over LABEL_FADE_MS as
+    // they come into and go out of view. A fade starts settled, so new
+    // things just appear.
     const LABEL_FADE_MS = 200;
     const labelFades = new WeakMap();
     let fadeFrame = null;
@@ -4923,7 +4974,7 @@
       const radius = shape.radius ?? 0;
       if (shape.kind === 'circle' || shape.kind === 'compass') {
         ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
-      } else if (shape.kind === 'square') {
+      } else if (shape.kind === 'square' || shape.kind === 'image') {
         ctx.roundRect(shape.x, shape.y, shape.w, shape.h, Math.min(radius, shape.w / 2, shape.h / 2));
       } else {
         traceRoundedPolygon(shapeCorners(shape), radius);
@@ -4959,14 +5010,52 @@
       });
       ctx.closePath();
     }
+    // An uploaded image placed on the map: a shape of kind 'image' holding
+    // the loaded <img>, stretched to its box and turned with it.
+    function drawImageShape(shape) {
+      const c = shapeCentre(shape);
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      ctx.translate(c.x, c.y);
+      ctx.rotate(shape.rotation ?? 0);
+      ctx.drawImage(shape.image, -shape.w / 2, -shape.h / 2, shape.w, shape.h);
+      ctx.restore();
+    }
+    const placeImageInput = document.getElementById('place-image');
+    // The Image tool asks for a file, and the image lands in the middle of
+    // the view, a third of its width across, then is selected.
+    placeImageInput.addEventListener('change', () => {
+      const file = placeImageInput.files[0];
+      placeImageInput.value = '';
+      if (!file) return;
+      const image = new Image();
+      image.onload = () => {
+        const middle = toBackground(canvas.clientWidth / 2, canvas.clientHeight / 2);
+        const w = Math.min(image.naturalWidth, canvas.clientWidth / 3 / view.scale);
+        const h = (w * image.naturalHeight) / image.naturalWidth;
+        recordUndo();
+        const shape = { kind: 'image', image, x: middle.x - w / 2, y: middle.y - h / 2, w, h, layers: newLayers() };
+        shapes.push(shape);
+        selectedShapes = [shape];
+        sketchSelected = null;
+        draw();
+      };
+      image.src = URL.createObjectURL(file);
+    });
     function drawShapes() {
       const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
       ctx.lineJoin = 'round';
       for (const shape of [...shapes, ...drawing]) {
+        ctx.globalAlpha = labelAlpha(shape);
+        if (!ctx.globalAlpha) continue;
         if (shape.kind === 'compass') {
           drawCompass(shape);
+          continue;
+        }
+        if (shape.kind === 'image') {
+          drawImageShape(shape);
           continue;
         }
         // Canvas shadows are in device pixels, so they're scaled with the map.
@@ -5135,11 +5224,12 @@
     function shapeAt(p) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
+        if (!onShownLayer(shape)) continue;
         const q = unrotated(shape, p);
         const dx = (q.x - shape.x - shape.w / 2) / (shape.w / 2);
         const dy = (q.y - shape.y - shape.h / 2) / (shape.h / 2);
         const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
-          : shape.kind === 'square' || shape.kind === 'compass' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
+          : shape.kind === 'square' || shape.kind === 'compass' || shape.kind === 'image' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
           : insidePolygon(shapeCorners(shape), q);
         if (inside) return shape;
       }
@@ -5147,7 +5237,7 @@
     }
     // Shapes lying wholly inside the box (in screen pixels).
     function shapesInBox(box) {
-      return shapes.filter((shape) => boxCorners(shape).map(toScreen).every((q) =>
+      return shapes.filter(onShownLayer).filter((shape) => boxCorners(shape).map(toScreen).every((q) =>
         q.x >= box.x && q.y >= box.y && q.x <= box.x + box.w && q.y <= box.y + box.h));
     }
     // The box after dragging one of its handles to p. Keeping the ratio
@@ -5197,7 +5287,7 @@
       if (backgroundTool === 'compass') {
         // A click places one compass there and hands back to the cursor tool.
         recordUndo();
-        const compass = { kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', backColor: COMPASS_BACK_COLOR, textColor: '#000000', directions: 'north', font: 'National Park', weight: 600, size: 24 };
+        const compass = { layers: newLayers(), kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', backColor: COMPASS_BACK_COLOR, textColor: '#000000', directions: 'north', font: 'National Park', weight: 600, size: 24 };
         shapes.push(compass);
         selectedShapes = [compass];
         sketchSelected = null;
@@ -5205,7 +5295,7 @@
         return;
       }
       if (backgroundTool === 'shapes') {
-        const drawing = { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput) };
+        const drawing = { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput), layers: newLayers() };
         if (shapeKind === 'polygon') drawing.sides = POLYGON_SIDES;
         drag = { ...base, anchor: p, drawing };
         return;
@@ -5225,7 +5315,7 @@
       const sketchPoint = sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
       const sketchSegment = sketchPoint ? null : sketchSegmentAt(s);
       const pressed = sketchPoint || sketchSegment ? null : shapeAt(p);
-      const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]), s.x, s.y);
+      const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]).filter((area) => onShownLayer([...area.points][0])), s.x, s.y);
       if (sketchPoint || sketchSegment || sketchArea) {
         selectedShapes = [];
         if (sketchPoint) {
@@ -5385,6 +5475,7 @@
     function sketchPointAt(s, reach = SKETCH_HIT_DISTANCE, exclude = null, among = sketch.points) {
       let best = null;
       for (const point of among) {
+        if (!onShownLayer(point)) continue;
         const q = toScreen(point);
         const d = Math.hypot(q.x - s.x, q.y - s.y);
         if (point !== exclude && d <= reach && (!best || d < best.d)) best = { point, d };
@@ -5395,7 +5486,7 @@
     function sketchSegmentHit(s, reach = SKETCH_HIT_DISTANCE, exclude = null) {
       let best = null;
       for (const segment of sketch.segments) {
-        if (exclude && segment.includes(exclude)) continue;
+        if ((exclude && segment.includes(exclude)) || !onShownLayer(segment[0])) continue;
         const { t, distance } = closestOnSegment(segment, toBackground(s.x, s.y));
         const d = distance * view.scale;
         if (d <= reach && (!best || d < best.d)) best = { segment, t, d };
@@ -5447,12 +5538,12 @@
       let point = target.point;
       if (target.split) {
         const [a, b] = target.split.segment;
-        point = { ...target.at };
+        point = { ...target.at, layers: a.layers };
         sketch.segments.splice(sketch.segments.indexOf(target.split.segment), 1, ...segmentHalves(target.split.segment, target.split.t, point));
         // A loop through the split segment now runs through the new point too.
         for (const fill of sketchFills) if (fill.has(a) && fill.has(b)) fill.add(point);
       } else if (target.add) {
-        point = { ...target.at };
+        point = { ...target.at, layers: sketchActive?.layers ?? newLayers() };
       }
       if (!target.point) sketch.points.push(point);
       if (!joins(point)) {
@@ -5461,6 +5552,8 @@
       }
       const segment = [sketchActive, point];
       sketch.segments.push(segment);
+      // Joined, two pen shapes are one, on the layers of the one being drawn.
+      for (const each of sketchFigure(point)) each.layers = sketchActive.layers;
       const closed = computeAreas([sketch]).filter((area) => area.loop.some((edge) => edge.segment === segment));
       if (closed.length) {
         // A loop cut from another keeps its look; a new one is filled.
@@ -5491,7 +5584,8 @@
       ctx.lineJoin = 'round';
       for (const area of computeAreas([sketch])) {
         const fill = sketchFillOf(area.points);
-        if (!fill) continue;
+        ctx.globalAlpha = fill ? labelAlpha([...area.points][0]) : 0;
+        if (!ctx.globalAlpha) continue;
         ctx.beginPath();
         traceRoundedPolygon(area.polygon, fill.radius);
         if (fill.color) {
@@ -5525,7 +5619,7 @@
       const styled = computeAreas([sketch]).map((area) => sketchFillOf(area.points)).filter((fill) => fill && (fill.color || fill.outline));
       for (const segment of sketch.segments) {
         const [a, b] = segment;
-        if (!editing.has(a) && styled.some((fill) => fill.has(a) && fill.has(b))) continue;
+        if (!onShownLayer(a) || (!editing.has(a) && styled.some((fill) => fill.has(a) && fill.has(b)))) continue;
         ctx.globalAlpha = selectedFigure?.has(a) ? fade : 1;
         ctx.strokeStyle = selectedFigure?.has(a) ? SELECTED_COLOR : '#fff';
         ctx.lineWidth = (selectedFigure?.has(a) ? SELECTED_LINE : 2) * px;
@@ -6492,7 +6586,7 @@
     document.getElementById('panel-close').addEventListener('click', () => setPanelOpen(false));
     panelOpenButton.addEventListener('click', () => setPanelOpen(true));
     // The panel's heading: what's selected, else the mode.
-    const SHAPE_NAMES = { circle: 'Circle', square: 'Square', triangle: 'Triangle', polygon: 'Polygon', compass: 'Compass' };
+    const SHAPE_NAMES = { circle: 'Circle', square: 'Square', triangle: 'Triangle', polygon: 'Polygon', compass: 'Compass', image: 'Image' };
     function panelTitle() {
       if (inPreview()) return 'Preview';
       if (!labelTools.hidden) {

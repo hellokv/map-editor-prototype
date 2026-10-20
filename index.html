@@ -682,7 +682,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      min-height: 32px;
+      min-height: 40px;
       padding: 0 12px;
       background: #fff;
       border-radius: 6px;
@@ -717,7 +717,7 @@
     #panel .field textarea {
       flex: 1;
       width: auto;
-      padding: 7px 0 5px;
+      padding: 11px 0 9px;
       resize: none;
     }
     #panel .field-pair input[type="number"] {
@@ -772,8 +772,8 @@
     /* A checkbox shown as Material's toggle icon, toggle_on when checked. */
     input.switch {
       flex: none;
-      width: 24px;
-      height: 24px;
+      width: 32px;
+      height: 32px;
       margin: 0;
       appearance: none;
       cursor: pointer;
@@ -781,8 +781,8 @@
     input.switch::after,
     #panel #label-layers button::after {
       content: 'toggle_off';
-      font: 24px/1 'Material Symbols Rounded';
-      font-variation-settings: 'wght' 300, 'opsz' 24;
+      font: 32px/1 'Material Symbols Rounded';
+      font-variation-settings: 'wght' 300, 'opsz' 32;
       color: #9a9a9a;
     }
     input.switch:checked::after,
@@ -792,11 +792,11 @@
     }
     .icon-buttons {
       display: flex;
-      gap: 10px;
+      gap: 12px;
     }
     #panel .icon-buttons button {
       display: flex;
-      padding: 2px;
+      padding: 6px;
       border: none;
       border-radius: 4px;
       background: none;
@@ -839,7 +839,7 @@
       position: relative;
       display: flex;
       align-items: center;
-      height: 32px;
+      height: 40px;
       padding: 0 12px;
       border: none;
       border-radius: 6px;
@@ -908,7 +908,7 @@
     }
     #panel.label-look .style-card {
       margin-top: 0;
-      min-height: 32px;
+      min-height: 40px;
       padding: 0 4px 0 12px;
     }
     #panel.label-look .style-option-name {
@@ -917,7 +917,7 @@
     }
     #panel.label-look .label-section > button {
       align-self: flex-start;
-      min-height: 32px;
+      min-height: 40px;
       padding: 0 12px;
       border: none;
       border-radius: 6px;
@@ -1086,8 +1086,8 @@
           <div id="label-icon-placement-field" class="field">
             Placement
             <div id="label-icon-placement" class="icon-buttons">
-              <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">arrows_input</span></button>
-              <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">arrows_output</span></button>
+              <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">collapse_content</span></button>
+              <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">expand_content</span></button>
             </div>
           </div>
           <div id="label-icon-side-field" class="field">

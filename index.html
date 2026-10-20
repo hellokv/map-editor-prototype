@@ -4443,7 +4443,7 @@
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
       const { lines, iconX, iconY } = labelLayout(label);
-      if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, label, style, iconX, iconY);
+      if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY);
       // Centred text would be pulled left by the trailing gap after its last letter.
       const textX = labelLayout(label).textX + style.letterSpacing / 2;
       c.letterSpacing = `${style.letterSpacing}px`;
@@ -4462,11 +4462,11 @@
     function iconPaddingOf(style) {
       return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
     }
-    // The style's box behind an icon centred on (x, y), as big as the icon
-    // is drawn plus its padding. Its shadow takes the blur and drop set up
-    // for the label's.
-    function paintIconBackdrop(c, label, style, x, y) {
-      const size = (label.iconSize ?? style.iconSize) + 2 * iconPaddingOf(style);
+    // The style's box behind an icon centred on (x, y): the style's icon
+    // size plus its padding, whatever size the label draws its icon at. Its
+    // shadow takes the blur and drop set up for the label's.
+    function paintIconBackdrop(c, style, x, y) {
+      const size = style.iconSize + 2 * iconPaddingOf(style);
       const box = { x: x - size / 2, y: y - size / 2, w: size, h: size };
       const shape = boxPath(box, style.iconRadius, 'round');
       c.save();

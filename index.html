@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,300,0,0">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..400,0,0">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=National+Park:wght@400;600;700&display=swap">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
@@ -839,9 +839,6 @@
       border-radius: 6px;
       background: #fff;
     }
-    #panel #label-pointer button .material-symbols-rounded {
-      font-size: 18px;
-    }
     #panel #label-pointer button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
@@ -878,6 +875,16 @@
     #panel #label-layers button[aria-pressed="true"]::after {
       border-color: var(--label-ink);
       background: radial-gradient(circle 4px at 18px 50%, var(--label-ink) 99%, transparent);
+    }
+    #panel.label-look .material-symbols-rounded {
+      font-size: 24px;
+      font-variation-settings: 'wght' 300, 'opsz' 24;
+    }
+    #panel.label-look .field .material-symbols-rounded,
+    #panel.label-look #label-pointer .material-symbols-rounded,
+    #panel.label-look .style-card .material-symbols-rounded {
+      font-size: 16px;
+      font-variation-settings: 'wght' 400, 'opsz' 20;
     }
     #panel.label-look .style-card {
       margin-top: 0;

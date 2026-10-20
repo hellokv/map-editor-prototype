@@ -827,6 +827,12 @@
       content: 'toggle_on';
       color: var(--label-ink, #000);
     }
+    input.switch:disabled {
+      cursor: default;
+    }
+    input.switch:disabled::after {
+      color: #c4c4c4;
+    }
     .icon-buttons {
       display: flex;
       gap: 12px;

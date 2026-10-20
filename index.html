@@ -115,7 +115,8 @@
     .list-item-row[aria-selected="true"] {
       box-shadow: 0 0 0 1.5px #008FF0;
     }
-    #crossing-dialog {
+    #crossing-dialog,
+    #list-dialog {
       position: absolute;
       display: flex;
       align-items: center;
@@ -666,6 +667,11 @@
       Add intersections?
       <button id="crossing-yes" type="button">Yes</button>
       <button id="crossing-no" type="button">No</button>
+    </div>
+    <div id="list-dialog" hidden>
+      Create list?
+      <button id="list-yes" type="button">Yes</button>
+      <button id="list-no" type="button">No</button>
     </div>
     <div id="mode-menu">
       <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
@@ -3360,6 +3366,43 @@
       crossingDialog.hidden = true;
     }
 
+    // Two or more labels selected offers to make a list of them, until it's
+    // answered No for that selection.
+    const listDialog = document.getElementById('list-dialog');
+    let listDeclinedFor = [];
+    const sameLabels = (a, b) => a.length === b.length && a.every((label, i) => label === b[i]);
+    function selectionArea() {
+      const areas = selectedLabels.map(labelArea);
+      const x = Math.min(...areas.map((a) => a.x));
+      const y = Math.min(...areas.map((a) => a.y));
+      return { x, y, w: Math.max(...areas.map((a) => a.x + a.w)) - x, h: Math.max(...areas.map((a) => a.y + a.h)) - y };
+    }
+    function placeListDialog() {
+      listDialog.hidden = labelTools.hidden || selectedLabels.length < 2 || !!drag || sameLabels(selectedLabels, listDeclinedFor);
+      if (listDialog.hidden) return;
+      const area = selectionArea();
+      listDialog.style.left = `${area.x * view.scale + view.x}px`;
+      listDialog.style.top = `${(area.y + area.h) * view.scale + view.y + 12}px`;
+    }
+    document.getElementById('list-yes').addEventListener('click', (e) => {
+      recordUndo();
+      const area = selectionArea();
+      const list = newList({ x: area.x + area.w + 40, y: area.y });
+      const ordered = [...selectedLabels].sort((a, b) => a.y - b.y);
+      list.items = ordered.map(({ text, icon, place }) => ({ text, ...(icon ? { icon } : {}), ...(place ? { place } : {}) }));
+      list.itemStyleId = styleOf(selectedLabels[0]).id;
+      lists.push(list);
+      selectedLabels = [];
+      selectedList = list;
+      e.currentTarget.blur();
+      draw();
+    });
+    document.getElementById('list-no').addEventListener('click', (e) => {
+      listDeclinedFor = [...selectedLabels];
+      e.currentTarget.blur();
+      draw();
+    });
+
     function placeCrossingDialog() {
       // Undo or a deletion may have taken the segment away.
       if (pendingCrossing && !pathOf(pendingCrossing.segment)) pendingCrossing = null;
@@ -3607,6 +3650,7 @@
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
       placeCrossingDialog();
+      placeListDialog();
       document.getElementById('panel-title').textContent = panelTitle();
       const selecting = hasSelection();
       document.getElementById('panel-back').hidden = !selecting && !(editingStyle && !labelTools.hidden);

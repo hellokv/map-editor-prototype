@@ -986,14 +986,6 @@
               <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="style-zoom-scale" type="number" min="0" step="1"></span></span>
             </label>
             <label class="row">
-              Icon size
-              <input id="style-icon-size" type="number" min="4" max="200" step="1">
-            </label>
-            <label class="row">
-              Icon gap
-              <input id="style-icon-gap" type="number" min="0" max="200" step="1">
-            </label>
-            <label class="row">
               <span><input id="style-caps" type="checkbox"> All caps</span>
             </label>
           </div>
@@ -1054,6 +1046,37 @@
                 <option value="square">Square</option>
                 <option value="circle">Circle</option>
               </select>
+            </label>
+          </div>
+          <div class="group">
+            Icon
+            <label class="row">
+              Icon size
+              <input id="style-icon-size" type="number" min="4" max="200" step="1">
+            </label>
+            <label class="row">
+              Icon gap
+              <input id="style-icon-gap" type="number" min="0" max="200" step="1">
+            </label>
+            <label class="row">
+              <span><input id="style-icon-background-on" type="checkbox"> Background color</span>
+              <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="row">
+              <span><input id="style-icon-outline-on" type="checkbox"> Outline</span>
+              <span class="color-field"><input id="style-icon-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="row">
+              Outline weight
+              <input id="style-icon-outline-width" type="number" min="0" max="50" step="0.5">
+            </label>
+            <label class="row">
+              <span><input id="style-icon-shadow-on" type="checkbox"> Shadow</span>
+              <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="row">
+              Border radius
+              <input id="style-icon-radius" type="number" min="0" max="200" step="1">
             </label>
           </div>
         </form>
@@ -2838,7 +2861,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-radius'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -3013,6 +3036,11 @@
         pointerLength: Math.max(0, Number(styleInputs['pointer-length'].value) || 0),
         pointerWidth: Math.max(0, Number(styleInputs['pointer-width'].value) || 0),
         pointerEnd: styleInputs['pointer-end'].value,
+        iconBackground: styleInputs['icon-background-on'].checked ? colorOf(styleInputs['icon-background']) : null,
+        iconOutline: styleInputs['icon-outline-on'].checked ? colorOf(styleInputs['icon-outline']) : null,
+        iconOutlineWidth: Math.max(0, Number(styleInputs['icon-outline-width'].value) || 0),
+        iconShadow: styleInputs['icon-shadow-on'].checked ? colorOf(styleInputs['icon-shadow']) : null,
+        iconRadius: Math.max(0, Number(styleInputs['icon-radius'].value) || 0),
       };
     }
 
@@ -3038,6 +3066,13 @@
       styleInputs['outline-on'].checked = !!values.outline;
       showColor(styleInputs.outline, values.outline ?? '#ffffff');
       styleInputs['outline-width'].value = values.outlineWidth;
+      for (const key of ['background', 'outline', 'shadow']) {
+        const value = values[`icon${key[0].toUpperCase()}${key.slice(1)}`];
+        styleInputs[`icon-${key}-on`].checked = !!value;
+        showColor(styleInputs[`icon-${key}`], value ?? (key === 'background' ? '#ffffff' : '#000000'));
+      }
+      styleInputs['icon-outline-width'].value = values.iconOutlineWidth;
+      styleInputs['icon-radius'].value = values.iconRadius;
       styleInputs['shadow-on'].checked = !!values.shadow;
       showColor(styleInputs.shadow, values.shadow ?? '#000000');
       showToggledFields();
@@ -3119,6 +3154,8 @@
       styleInputs.outline.parentElement.hidden = !styleInputs['outline-on'].checked;
       styleInputs['outline-width'].closest('.row').hidden = !styleInputs['outline-on'].checked;
       styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
+      for (const key of ['icon-background', 'icon-outline', 'icon-shadow']) styleInputs[key].parentElement.hidden = !styleInputs[`${key}-on`].checked;
+      styleInputs['icon-outline-width'].closest('.row').hidden = !styleInputs['icon-outline-on'].checked;
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -3960,14 +3997,15 @@
     // too, so labels scale with the map.
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, letterSpacing, zoomScale, caps, color, outline,
-    // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength, pointerWidth, pointerEnd }; lineHeight
+    // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength, pointerWidth, pointerEnd, iconBackground, iconOutline,
+    // iconOutlineWidth, iconShadow, iconRadius }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
     // is how thick the outline looks. corners is 'round' or 'chamfer', and
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round' };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconRadius: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -4398,6 +4436,7 @@
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
       const { lines, iconX, iconY } = labelLayout(label);
+      if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, label, style, iconX, iconY);
       // Centred text would be pulled left by the trailing gap after its last letter.
       const textX = labelLayout(label).textX + style.letterSpacing / 2;
       c.letterSpacing = `${style.letterSpacing}px`;
@@ -4412,6 +4451,22 @@
       c.fillStyle = style.color;
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
       if (label.icon) paintIcon(c, label, style, iconX, iconY, 'fillText');
+    }
+    // The style's box behind an icon centred on (x, y), as big as the icon
+    // is drawn. Its shadow takes the blur and drop set up for the label's.
+    function paintIconBackdrop(c, label, style, x, y) {
+      const size = label.iconSize ?? style.iconSize;
+      const box = { x: x - size / 2, y: y - size / 2, w: size, h: size };
+      const shape = boxPath(box, style.iconRadius, 'round');
+      c.save();
+      c.shadowColor = style.iconShadow ?? 'transparent';
+      if (style.iconBackground) {
+        c.fillStyle = style.iconBackground;
+        c.fill(shape);
+        c.shadowColor = 'transparent';
+      }
+      if (style.iconOutline) strokeOutside(c, shape, box, style.iconOutline, style.iconOutlineWidth);
+      c.restore();
     }
     // Draws a label's icon centred on (x, y), once its glyph has loaded.
     function paintIcon(c, label, style, x, y, method) {

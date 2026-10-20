@@ -938,10 +938,33 @@
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
     #panel.label-look .field .material-symbols-rounded,
-    #panel.label-look #label-pointer .material-symbols-rounded,
-    #panel.label-look .style-card .material-symbols-rounded {
+    #panel.label-look #label-pointer .material-symbols-rounded {
       font-size: 16px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
+    }
+    #panel .style-card .style-menu .material-symbols-rounded,
+    #panel button.new-style .material-symbols-rounded {
+      font-size: 24px;
+      font-variation-settings: 'wght' 300, 'opsz' 24;
+    }
+    /* A row like a field: its name on the left, a plus on the right. */
+    #panel button.new-style {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      align-self: stretch;
+      width: 100%;
+      min-height: 40px;
+      margin: 8px 0 0;
+      padding: 0 8px 0 12px;
+      border: none;
+      border-radius: 6px;
+      background: #fff;
+      color: #000;
+      font: 600 12px 'National Park', system-ui, sans-serif;
+    }
+    #panel.label-look .label-section > button.new-style {
+      margin: 0;
     }
     #panel.label-look .style-card {
       margin-top: 0;
@@ -1318,7 +1341,7 @@
       <div id="label-styles">
         <div id="label-style-browser" class="group">
           <div id="label-style-list"></div>
-          <button id="new-label-style" type="button">New label style</button>
+          <button id="new-label-style" class="new-style" type="button">New Label Style<span class="material-symbols-rounded">add</span></button>
         </div>
         <form id="label-style-form" hidden>
           <div class="label-section">
@@ -3772,7 +3795,7 @@
         });
         return card(document.createElement('label'), style, pick);
       }));
-      const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
+      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style', innerHTML: 'New Label Style<span class="material-symbols-rounded">add</span>' });
       create.addEventListener('click', () => newLabelStyle(adopt));
       container.append(create);
     }

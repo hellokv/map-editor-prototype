@@ -3134,6 +3134,13 @@
         recordUndo(styleBefore.snapshot);
         styleBefore.recorded = true;
       }
+      // Labels with their own icon size keep it in proportion to the style's.
+      const iconScale = values.iconSize / editingStyle.iconSize;
+      if (iconScale !== 1) {
+        for (const label of labels) {
+          if (label.styleId === editingStyle.id && label.iconSize !== undefined) label.iconSize *= iconScale;
+        }
+      }
       Object.assign(editingStyle, values);
       renderLabelStyles();
       draw();
@@ -4487,6 +4494,23 @@
     function iconPaddingOf(style) {
       return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
     }
+    // An oval fading from color at its middle to nothing at its rim, just
+    // under a pin's point at (x, y), narrower than its head of radius r.
+    function paintGroundShadow(c, color, x, y, headRadius) {
+      const r = headRadius * 0.7;
+      c.save();
+      c.translate(x, y + headRadius * 0.15);
+      c.scale(1, 0.25);
+      const fade = c.createRadialGradient(0, 0, 0, 0, 0, r);
+      fade.addColorStop(0, color);
+      fade.addColorStop(1, `${color.slice(0, 7)}00`);
+      c.fillStyle = fade;
+      c.shadowColor = 'transparent';
+      c.beginPath();
+      c.arc(0, 0, r, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
     // How far below the centre of a pin's round head its point reaches, in head radii.
     const PIN_REACH = 1.7;
     // The style's shape behind an icon centred on (x, y): a square, circle,
@@ -4520,7 +4544,11 @@
         shape = boxPath(box, style.iconRadius, style.iconCorners);
       }
       c.save();
-      c.shadowColor = style.iconShadow ?? 'transparent';
+      const pin = style.iconShape === 'pin';
+      // A pin stands on the map, so its shadow is a soft oval on the ground
+      // under its point rather than a drop shadow.
+      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH, r);
+      c.shadowColor = pin ? 'transparent' : style.iconShadow ?? 'transparent';
       if (style.iconBackground) {
         c.fillStyle = style.iconBackground;
         c.fill(shape);

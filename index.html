@@ -1869,7 +1869,7 @@
     const DOT_RADIUS = 5;
     const SELECTED_DOT_RADIUS = 7;
     // Intersection dots are drawn this much bigger.
-    const dotScale = (point) => (point.intersection ? 1.5 : 1);
+    const dotScale = (point) => (point.intersection ? 2 : 1);
     // Bending right at an end would swing the control points wildly, so a
     // bend is placed at least this far (as a fraction of the segment) from
     // either end.
@@ -2854,7 +2854,7 @@
         for (const point of path.points) {
           if (!point.intersection) continue;
           const big = selectedPoints.has(point) || point === hovered;
-          drawIntersectionIcon(path, point, (big ? SELECTED_DOT_RADIUS : DOT_RADIUS) * dotScale(point) * px, color);
+          drawIntersectionIcon(point, (big ? SELECTED_DOT_RADIUS : DOT_RADIUS) * dotScale(point) * px, color);
         }
       }
 
@@ -5901,43 +5901,21 @@
     });
 
     // The call_split icon over an intersection dot, in black or white to
-    // stand out from the dot. The icon's stem points down from its fork, so
-    // it's turned to point along the line the others fan out evenly around,
-    // straight opposite it: the foot of a T, the stem of a Y. A tie goes to
-    // the line furthest from its nearest neighbour.
-    function drawIntersectionIcon(path, point, radius, dotColor) {
+    // stand out from the dot, centred by its drawn shape rather than its
+    // font box, which sits it off-centre.
+    function drawIntersectionIcon(point, radius, dotColor) {
       const font = '300 24px "Material Symbols Rounded"';
       if (!document.fonts.check(font, 'call_split')) {
         document.fonts.load(font, 'call_split').then(draw);
         return;
       }
-      // Each line's direction leaving the point, along its curve if bent.
-      const angles = [];
-      for (const [a, b, c1, c2] of path.segments) {
-        if (a !== point && b !== point) continue;
-        const toward = a === point ? c1 ?? b : c2 ?? a;
-        angles.push(Math.atan2(toward.y - point.y, toward.x - point.x));
-      }
-      const turn = (s, t) => Math.atan2(Math.sin(s - t), Math.cos(s - t));
-      let stem = Math.PI / 2;
-      let best = null;
-      for (const angle of angles) {
-        const others = angles.filter((other) => other !== angle);
-        const lopsided = Math.abs(others.reduce((sum, other) => sum + turn(other, angle + Math.PI), 0));
-        const nearest = Math.min(...others.map((other) => Math.abs(turn(angle, other))));
-        if (!best || lopsided < best.lopsided - 1e-6 || (Math.abs(lopsided - best.lopsided) <= 1e-6 && nearest > best.nearest)) {
-          stem = angle;
-          best = { lopsided, nearest };
-        }
-      }
       ctx.save();
-      ctx.translate(point.x, point.y);
-      ctx.rotate(stem - Math.PI / 2);
-      ctx.font = `300 ${radius * 1.6}px "Material Symbols Rounded"`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.font = `300 ${radius * 1.5}px "Material Symbols Rounded"`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      const glyph = ctx.measureText('call_split');
       ctx.fillStyle = isLight(dotColor) ? '#000000' : '#ffffff';
-      ctx.fillText('call_split', 0, 0);
+      ctx.fillText('call_split', point.x - (glyph.actualBoundingBoxRight - glyph.actualBoundingBoxLeft) / 2, point.y + (glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
       ctx.restore();
     }
 

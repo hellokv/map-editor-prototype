@@ -4310,14 +4310,13 @@
     // on-screen size.
     const labelZoom = (label) => view.scale ** (styleOf(label).zoomScale / 100 - 1);
     // The point a label grows and shrinks about: its spot, except that a pin
-    // standing alone, its text hidden, keeps fixed on the map where it
-    // stands: the middle of its shadow, else its point.
+    // standing alone, its text hidden, keeps its point fixed on the map. Its
+    // shadow's gap is in map units, so the shadow stays put too.
     function zoomAnchor(label) {
       const style = styleOf(label);
       if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
-      const point = iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH;
-      return { x: iconX, y: style.iconShadow ? point + style.iconShadowGap : point };
+      return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
     }
     function zoomedRect(label, r) {
       const k = labelZoom(label);
@@ -4490,7 +4489,8 @@
     }
 
     // Expects c's font, alignment and shadow to be set up for the style.
-    function paintLabel(c, label, style) {
+    // zoom is how much larger the label is drawn than its style's sizes.
+    function paintLabel(c, label, style, zoom = 1) {
       const baseline = c.measureText('H').actualBoundingBoxAscent / 2;
       if (style.background) {
         // With a background, the outline and shadow belong to the box, not the text.
@@ -4502,7 +4502,7 @@
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
       const { lines, iconX, iconY } = labelLayout(label);
-      if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY);
+      if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY, zoom);
       // Centred text would be pulled left by the trailing gap after its last letter.
       const textX = labelLayout(label).textX + style.letterSpacing / 2;
       c.letterSpacing = `${style.letterSpacing}px`;
@@ -4543,7 +4543,7 @@
     // or pin whose head is the style's icon size plus its padding, whatever
     // size the label draws its icon at. A pin's point hangs below. Its
     // shadow takes the blur and drop set up for the label's.
-    function paintIconBackdrop(c, style, x, y) {
+    function paintIconBackdrop(c, style, x, y, zoom) {
       const size = style.iconSize + 2 * iconPaddingOf(style);
       const r = size / 2;
       let box = { x: x - r, y: y - r, w: size, h: size };
@@ -4573,7 +4573,8 @@
       const pin = style.iconShape === 'pin';
       // A pin stands on the map, so its shadow is a soft oval on the ground
       // under its point rather than a drop shadow.
-      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH + style.iconShadowGap, r * 0.7 * (style.iconShadowSize / 100));
+      // The shadow's gap scales with the map, not with the label.
+      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH + style.iconShadowGap / zoom, r * 0.7 * (style.iconShadowSize / 100));
       c.shadowColor = pin ? 'transparent' : style.iconShadow ?? 'transparent';
       if (style.iconBackground) {
         c.fillStyle = style.iconBackground;
@@ -4632,7 +4633,7 @@
         ctx.save();
         zoomAboutLabel(ctx, label);
         if (label.pointer) drawPointer(label, style);
-        paintLabel(ctx, label, style);
+        paintLabel(ctx, label, style, k);
         ctx.restore();
       }
       ctx.globalAlpha = 1;

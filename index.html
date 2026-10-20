@@ -697,6 +697,10 @@
         <button type="button" data-label-tool="list" aria-label="List" aria-pressed="false">
           <span class="material-symbols-rounded">list_alt_add</span>
         </button>
+        <button type="button" data-label-tool="image" aria-label="Image" aria-pressed="false">
+          <span class="material-symbols-rounded">add_photo_alternate</span>
+        </button>
+        <input id="place-image" type="file" accept="image/*" hidden>
       </div>
       <div id="background-tools" hidden>
         <hr>
@@ -712,10 +716,7 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
-        <button type="button" data-background-tool="image" aria-label="Image" aria-pressed="false">
-          <span class="material-symbols-rounded">add_photo_alternate</span>
-        </button>
-        <input id="place-image" type="file" accept="image/*" hidden>
+
       </div>
       <div id="path-tools">
         <hr>
@@ -938,6 +939,64 @@
           <label class="row">
             Y
             <input id="list-y" type="number" step="1">
+          </label>
+        </div>
+      </div>
+      <div id="image-properties" hidden>
+        <div class="group">
+          <label class="row">
+            Place
+            <select id="image-place"></select>
+          </label>
+          <button id="image-change" type="button">Change image</button>
+        </div>
+        <div class="group">
+          <div class="row">
+            Layers
+            <div class="layer-toggles">
+              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
+              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
+              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
+            </div>
+          </div>
+        </div>
+        <div class="group">
+          <label class="row">
+            Corners
+            <select id="image-corners">
+              <option value="round">Rounded</option>
+              <option value="chamfer">Chamfered</option>
+            </select>
+          </label>
+          <label class="row">
+            Corner radius
+            <input id="image-radius" type="number" min="0" step="1">
+          </label>
+          <label class="row">
+            Scale factor
+            <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span></span>
+          </label>
+        </div>
+        <div class="group">
+          <label class="row">
+            X
+            <input id="image-x" type="number" step="1">
+          </label>
+          <label class="row">
+            Y
+            <input id="image-y" type="number" step="1">
+          </label>
+          <label class="row">
+            Width
+            <input id="image-w" type="number" min="1" step="1">
+          </label>
+          <label class="row">
+            Height
+            <input id="image-h" type="number" min="1" step="1">
+          </label>
+          <label class="row">
+            Rotation
+            <input id="image-rotation" type="number" step="1">
           </label>
         </div>
       </div>
@@ -1321,13 +1380,6 @@
           </label>
         </div>
         <div id="shape-stripes" class="stripe-fields"></div>
-        <label id="shape-corners-field" class="row">
-          Corners
-          <select id="shape-corners">
-            <option value="round">Rounded</option>
-            <option value="chamfer">Chamfered</option>
-          </select>
-        </label>
         <label id="shape-radius-field" class="row">
           Corner radius
           <input id="shape-radius" type="number" min="0" step="1">
@@ -1340,10 +1392,7 @@
           <span><input id="shape-shadow-on" type="checkbox"> Shadow color</span>
           <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
-        <label id="shape-zoom-scale-field" class="row">
-          Scale factor
-          <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="shape-zoom-scale" type="number" min="0" step="1"></span></span>
-        </label>
+
         <div id="shape-single-fields">
           <label class="row">
             X
@@ -1509,7 +1558,16 @@
       addPinButton.blur();
     });
     for (const button of labelToolButtons) {
-      button.addEventListener('click', () => setLabelTool(button.dataset.labelTool));
+      button.addEventListener('click', () => {
+        // The Image tool asks for a file rather than waiting for a click on the map.
+        if (button.dataset.labelTool === 'image') {
+          setLabelTool('select');
+          button.blur();
+          placeImageInput.click();
+          return;
+        }
+        setLabelTool(button.dataset.labelTool);
+      });
     }
     const backgroundTools = document.getElementById('background-tools');
     const backgroundToolButtons = document.querySelectorAll('[data-background-tool]');
@@ -1554,15 +1612,7 @@
       updateCursor();
     }
     for (const button of backgroundToolButtons) {
-      button.addEventListener('click', () => {
-        if (button.dataset.backgroundTool === 'image') {
-          setBackgroundTool('select');
-          button.blur();
-          placeImageInput.click();
-          return;
-        }
-        setBackgroundTool(button.dataset.backgroundTool);
-      });
+      button.addEventListener('click', () => setBackgroundTool(button.dataset.backgroundTool));
     }
     for (const button of shapeButtons) {
       button.addEventListener('click', () => {
@@ -1788,6 +1838,7 @@
         finishLabel(false);
         selectedLabels = [];
         selectedList = null;
+        selectedShapes = [];
       }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
@@ -2705,7 +2756,10 @@
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
-        if (!labelTools.hidden) drawPins();
+        if (!labelTools.hidden) {
+          drawPins();
+          drawShapeSelection();
+        }
         if (!backgroundTools.hidden) {
           drawSketch();
           drawShapeSelection();
@@ -3436,10 +3490,10 @@
     // selected is on that layer; pressing it then takes them all off it,
     // except those it's the last layer of, and otherwise puts them all on it.
     const layerButtons = document.querySelectorAll('[data-layer]');
-    // What the layer buttons act on: selected labels, or in background mode
-    // selected shapes and every point of a selected pen shape.
+    // What the layer buttons act on: selected labels or images, or in
+    // background mode selected shapes and every point of a selected pen shape.
     function layerItems() {
-      if (!labelTools.hidden) return selectedLabels;
+      if (!labelTools.hidden) return selectedShapes.length ? selectedShapes : selectedLabels;
       return [...selectedShapes, ...(figureOf(sketchSelected) ?? [])];
     }
     for (const button of layerButtons) {
@@ -3602,7 +3656,7 @@
     // Whether anything is selected in the mode on show.
     function hasSelection() {
       if (inPreview()) return false;
-      if (!labelTools.hidden) return selectedLabels.length > 0 || selectedPins.length > 0 || !!selectedList;
+      if (!labelTools.hidden) return selectedLabels.length > 0 || selectedPins.length > 0 || !!selectedList || selectedShapes.length > 0;
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
     }
@@ -3627,6 +3681,69 @@
     // Stand-ins for the places labels and list items will belong to; a
     // place is one of these names, absent when there's none.
     const PLACES = ['African Elephant', 'Giraffe', 'Lion', 'Red Panda', 'Gorilla', 'Zebra', 'Snow Leopard', 'Penguin', 'Komodo Dragon', 'Hippopotamus', 'Meerkat', 'Polar Bear', 'Orangutan', 'Flamingo', 'Sea Lion'];
+
+    // A placed image's fields, in label mode, where images are selected.
+    const imageProperties = document.getElementById('image-properties');
+    const soleImage = () => (selectedShapes.length === 1 && selectedShapes[0].kind === 'image' ? selectedShapes[0] : null);
+    const imagePlace = document.getElementById('image-place');
+    imagePlace.replaceChildren(
+      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
+      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: place })),
+    );
+    imagePlace.addEventListener('change', () => {
+      const image = soleImage();
+      if (!image) return;
+      recordUndo();
+      if (imagePlace.value) image.place = imagePlace.value;
+      else delete image.place;
+      imagePlace.blur();
+      draw();
+    });
+    const imageInputs = {
+      corners: liveField('image-corners', 'corners', (input) => input.value, soleImage),
+      radius: liveField('image-radius', 'radius', (input) => Math.max(0, Number(input.value) || 0), soleImage),
+      zoomScale: liveField('image-zoom-scale', 'zoomScale', (input) => Math.max(0, Number(input.value) || 0), soleImage),
+      x: liveField('image-x', 'x', (input) => Number(input.value) || 0, soleImage),
+      y: liveField('image-y', 'y', (input) => Number(input.value) || 0, soleImage),
+      w: liveField('image-w', 'w', (input) => Math.max(1, Number(input.value) || 1), soleImage),
+      h: liveField('image-h', 'h', (input) => Math.max(1, Number(input.value) || 1), soleImage),
+      rotation: liveField('image-rotation', 'rotation', (input) => ((Number(input.value) || 0) * Math.PI) / 180, soleImage),
+    };
+    // The slider and the field move each other; the field can go past 100%.
+    const imageZoomSlider = imageInputs.zoomScale.closest('.slider').querySelector('input[type="range"]');
+    imageZoomSlider.addEventListener('input', () => {
+      imageInputs.zoomScale.value = imageZoomSlider.value;
+      imageInputs.zoomScale.dispatchEvent(new Event('input'));
+    });
+    imageZoomSlider.addEventListener('change', () => {
+      imageInputs.zoomScale.dispatchEvent(new Event('change'));
+      imageZoomSlider.blur();
+    });
+    imageInputs.zoomScale.addEventListener('input', () => { imageZoomSlider.value = imageInputs.zoomScale.value; });
+    // Change image swaps the picture, keeping its width and centre.
+    let replacingImage = null;
+    document.getElementById('image-change').addEventListener('click', (e) => {
+      replacingImage = soleImage();
+      e.currentTarget.blur();
+      if (replacingImage) placeImageInput.click();
+    });
+    function showImagePanel() {
+      const image = soleImage();
+      imageProperties.hidden = labelTools.hidden || !image;
+      if (imageProperties.hidden) return;
+      const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
+      show(imagePlace, image.place ?? '');
+      show(imageInputs.corners, image.corners ?? 'round');
+      show(imageInputs.radius, image.radius ?? 0);
+      show(imageInputs.zoomScale, image.zoomScale ?? 100);
+      show(imageZoomSlider, image.zoomScale ?? 100);
+      for (const key of ['x', 'y', 'w', 'h']) show(imageInputs[key], Math.round(image[key]));
+      const degrees = Math.round(((image.rotation ?? 0) * 180) / Math.PI);
+      show(imageInputs.rotation, ((degrees % 360) + 360) % 360);
+      for (const button of imageProperties.querySelectorAll('[data-layer]')) {
+        button.setAttribute('aria-pressed', !image.layers || !!image.layers[button.dataset.layer]);
+      }
+    }
 
     // The selected list's fields. Each applies as it changes and is one undo step.
     const listProperties = document.getElementById('list-properties');
@@ -3858,19 +3975,9 @@
         // other shapes' radius, outline or shadow.
         const compasses = selectedShapes.filter((shape) => shape.kind === 'compass');
         const allCompasses = compasses.length === selectedShapes.length;
-        // An image has none of the fill, radius, outline, stripes or shadow.
-        const plain = selectedShapes.filter((shape) => shape.kind !== 'compass' && shape.kind !== 'image');
-        document.getElementById('shape-color-field').hidden = selectedShapes.every((shape) => shape.kind === 'image');
+        const plain = selectedShapes.filter((shape) => shape.kind !== 'compass');
         document.getElementById('shape-color-name').textContent = allCompasses ? 'Main star' : 'Fill color';
-        const images = selectedShapes.filter((shape) => shape.kind === 'image');
-        document.getElementById('shape-radius-field').hidden = [...plain, ...images].every((shape) => shape.kind === 'circle');
-        document.getElementById('shape-corners-field').hidden = !images.length;
-        document.getElementById('shape-zoom-scale-field').hidden = !images.length;
-        if (images.length) {
-          if (document.activeElement !== shapeCornersInput) shapeCornersInput.value = images[0].corners ?? 'round';
-          if (document.activeElement !== shapeZoomScaleInput) shapeZoomScaleInput.value = images[0].zoomScale ?? 100;
-          if (document.activeElement !== shapeZoomScaleSlider) shapeZoomScaleSlider.value = images[0].zoomScale ?? 100;
-        }
+        document.getElementById('shape-radius-field').hidden = plain.every((shape) => shape.kind === 'circle');
         document.getElementById('shape-outline-field').hidden = !plain.length;
         document.getElementById('shape-stripes').hidden = !plain.length;
         shapeStripeFields.show(selectedShapes.find((shape) => shape.stripes)?.stripes);
@@ -3913,8 +4020,9 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      labelStylesSection.hidden = anyLabels || !!selectedList;
+      labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
+      showImagePanel();
       // Selecting a label swaps the style list and form for its properties.
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
@@ -4896,21 +5004,7 @@
     }
     const shapeRadiusInput = document.getElementById('shape-radius');
     bindShapeInput(shapeRadiusInput, (shape) => { shape.radius = Math.max(0, Number(shapeRadiusInput.value) || 0); });
-    const shapeCornersInput = document.getElementById('shape-corners');
-    bindShapeInput(shapeCornersInput, (shape) => { if (shape.kind === 'image') shape.corners = shapeCornersInput.value; });
-    const shapeZoomScaleInput = document.getElementById('shape-zoom-scale');
-    const shapeZoomScaleSlider = shapeZoomScaleInput.closest('.slider').querySelector('input[type="range"]');
-    bindShapeInput(shapeZoomScaleInput, (shape) => { if (shape.kind === 'image') shape.zoomScale = Math.max(0, Number(shapeZoomScaleInput.value) || 0); });
-    // The slider and the field move each other; the field can go past 100%.
-    shapeZoomScaleSlider.addEventListener('input', () => {
-      shapeZoomScaleInput.value = shapeZoomScaleSlider.value;
-      shapeZoomScaleInput.dispatchEvent(new Event('input'));
-    });
-    shapeZoomScaleSlider.addEventListener('change', () => {
-      shapeZoomScaleInput.dispatchEvent(new Event('change'));
-      shapeZoomScaleSlider.blur();
-    });
-    shapeZoomScaleInput.addEventListener('input', () => { shapeZoomScaleSlider.value = shapeZoomScaleInput.value; });
+
     shapeStripeFields.bindEach(bindShapeInput, (shape, stripes) => {
       if (shape.kind === 'compass') return;
       if (stripes) shape.stripes = stripes;
@@ -5083,14 +5177,25 @@
       ctx.restore();
     }
     const placeImageInput = document.getElementById('place-image');
-    // The Image tool asks for a file, and the image lands in the middle of
-    // the view, a third of its width across, then is selected.
+    // The Image tool, in label mode, asks for a file, and the image lands in
+    // the middle of the view, a third of its width across, then is selected.
     placeImageInput.addEventListener('change', () => {
       const file = placeImageInput.files[0];
+      const replacing = replacingImage;
+      replacingImage = null;
       placeImageInput.value = '';
       if (!file) return;
       const image = new Image();
       image.onload = () => {
+        if (replacing) {
+          recordUndo();
+          const c = shapeCentre(replacing);
+          replacing.image = image;
+          replacing.h = (replacing.w * image.naturalHeight) / image.naturalWidth;
+          replacing.y = c.y - replacing.h / 2;
+          draw();
+          return;
+        }
         const middle = toBackground(canvas.clientWidth / 2, canvas.clientHeight / 2);
         const w = Math.min(image.naturalWidth, canvas.clientWidth / 3 / view.scale);
         const h = (w * image.naturalHeight) / image.naturalWidth;
@@ -5098,7 +5203,9 @@
         const shape = { kind: 'image', image, x: middle.x - w / 2, y: middle.y - h / 2, w, h, radius: 0, corners: 'round', zoomScale: 100, layers: newLayers() };
         shapes.push(shape);
         selectedShapes = [shape];
-        sketchSelected = null;
+        selectedLabels = [];
+        selectedPins = [];
+        selectedList = null;
         draw();
       };
       image.src = URL.createObjectURL(file);
@@ -5286,10 +5393,12 @@
       rotateCursor = `url(${icon.toDataURL()}) 12 12, grab`;
       updateCursor();
     });
+    // Images are placed and edited in label mode, other shapes in background mode.
+    const editableShape = (shape) => (shape.kind === 'image') === !labelTools.hidden;
     function shapeAt(p) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
-        if (!onShownLayer(shape)) continue;
+        if (!onShownLayer(shape) || !editableShape(shape)) continue;
         const shown = shownBox(shape);
         const q = unrotated(shape, p);
         const dx = (q.x - shown.x - shown.w / 2) / (shown.w / 2);
@@ -5303,7 +5412,7 @@
     }
     // Shapes lying wholly inside the box (in screen pixels).
     function shapesInBox(box) {
-      return shapes.filter(onShownLayer).filter((shape) => boxCorners(shape).map(toScreen).every((q) =>
+      return shapes.filter(onShownLayer).filter(editableShape).filter((shape) => boxCorners(shape).map(toScreen).every((q) =>
         q.x >= box.x && q.y >= box.y && q.x <= box.x + box.w && q.y <= box.y + box.h));
     }
     // The box after dragging one of its handles to p. Keeping the ratio
@@ -5346,11 +5455,13 @@
     function shapePointerDown(e, s) {
       const p = toBackground(s.x, s.y);
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
-      if (backgroundTool === 'segments') {
+      // In label mode only images are pressed here, whatever background tool is set.
+      const inLabels = !labelTools.hidden;
+      if (!inLabels && backgroundTool === 'segments') {
         drawSketchPoint(sketchTarget(s));
         return;
       }
-      if (backgroundTool === 'compass') {
+      if (!inLabels && backgroundTool === 'compass') {
         // A click places one compass there and hands back to the cursor tool.
         recordUndo();
         const compass = { layers: newLayers(), kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', backColor: COMPASS_BACK_COLOR, textColor: '#000000', directions: 'north', font: 'National Park', weight: 600, size: 24 };
@@ -5360,7 +5471,7 @@
         setBackgroundTool('select');
         return;
       }
-      if (backgroundTool === 'shapes') {
+      if (!inLabels && backgroundTool === 'shapes') {
         const drawing = { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput), layers: newLayers() };
         if (shapeKind === 'polygon') drawing.sides = POLYGON_SIDES;
         drag = { ...base, anchor: p, drawing };
@@ -5378,10 +5489,10 @@
         return;
       }
       // Only the nodes on show can be picked out of their figure.
-      const sketchPoint = sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
-      const sketchSegment = sketchPoint ? null : sketchSegmentAt(s);
+      const sketchPoint = inLabels ? null : sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
+      const sketchSegment = inLabels || sketchPoint ? null : sketchSegmentAt(s);
       const pressed = sketchPoint || sketchSegment ? null : shapeAt(p);
-      const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]).filter((area) => onShownLayer([...area.points][0])), s.x, s.y);
+      const sketchArea = inLabels || sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]).filter((area) => onShownLayer([...area.points][0])), s.x, s.y);
       if (sketchPoint || sketchSegment || sketchArea) {
         selectedShapes = [];
         if (sketchPoint) {
@@ -5876,7 +5987,14 @@
         e.preventDefault();
         selectedLabels = [];
         selectedList = null;
+        selectedShapes = [];
         setLabelTool('select');
+        draw();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapes.length) {
+        e.preventDefault();
+        recordUndo();
+        for (const shape of selectedShapes) shapes.splice(shapes.indexOf(shape), 1);
+        selectedShapes = [];
         draw();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedList) {
         e.preventDefault();
@@ -6167,6 +6285,7 @@
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = iconCursor('list_alt_add', '#000000', 'crosshair');
       else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? iconCursor('add_circle', SELECTED_COLOR, 'crosshair') : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
+      else if (!labelTools.hidden) canvas.style.cursor = shapeHandleCursor();
       else canvas.style.cursor = addTarget() ? addCursor() : '';
     }
 
@@ -6332,6 +6451,18 @@
       }
       if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
+        // A selected image's handles, then any image not under a label, pin
+        // or list, are handled as shapes are.
+        if (handleAt(s) || (!pinAt(p) && !labelAt(p) && !listAt(p) && shapeAt(p))) {
+          selectedLabels = [];
+          selectedPins = [];
+          selectedList = null;
+          shapePointerDown(e, s);
+          draw();
+          updateCursor();
+          return;
+        }
+        selectedShapes = [];
         const pressedPin = pinAt(p);
         if (pressedPin) {
           selectedList = null;
@@ -6678,6 +6809,7 @@
         if (selectedPins.length) return selectedPins.length > 1 ? 'Pins' : 'Pin';
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';
         if (selectedList) return 'List';
+        if (selectedShapes.length) return selectedShapes.length > 1 ? 'Images' : 'Image';
         return editingStyle ? 'Label style' : 'Labels';
       }
       if (!backgroundTools.hidden) {

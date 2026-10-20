@@ -5106,7 +5106,7 @@
       if (shape.zoomScale === undefined) return shape;
       const k = view.scale ** (shape.zoomScale / 100 - 1);
       const c = shapeCentre(shape);
-      return { ...shape, x: c.x - (shape.w * k) / 2, y: c.y - (shape.h * k) / 2, w: shape.w * k, h: shape.h * k };
+      return { ...shape, x: c.x - (shape.w * k) / 2, y: c.y - (shape.h * k) / 2, w: shape.w * k, h: shape.h * k, radius: (shape.radius ?? 0) * k };
     }
     // A background point in the shape's own unrotated frame.
     function unrotated(shape, p) {

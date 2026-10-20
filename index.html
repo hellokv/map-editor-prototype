@@ -4249,7 +4249,9 @@
     // drawn size, from -200 to 200: down to up for left and right, left to
     // right for top and bottom. Hidden text is kept on the label for accessibility but takes
     // no room.
-    function labelLayout(label) {
+    // zoom is how much larger the label is drawn than its style's sizes,
+    // which matters only to a pin's shadow gap.
+    function labelLayout(label, zoom = 1) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
       const hidden = textIsHidden(label);
@@ -4271,13 +4273,23 @@
       const offset = outside ? label.iconOffset ?? 0 : 0;
       const reach = ((label.iconSize ?? style.iconSize) * offset) / 100;
       const pad = (r) => ({ x: r.x - style.paddingX, y: r.y - style.paddingY, w: r.w + 2 * style.paddingX, h: r.h + 2 * style.paddingY });
+      // A pin beside text takes the room of its whole height, head to point
+      // or shadow, and that height is what's centred on the text.
+      const pinBeside = s && across && !outside && texts.length && style.iconShape === 'pin' && (style.iconBackground || style.iconOutline);
+      const head = s / 2;
+      let below = head;
+      if (pinBeside) {
+        below = head * PIN_REACH;
+        if (style.iconShadow) below += style.iconShadowGap / zoom + head * 0.7 * (style.iconShadowSize / 100) * GROUND_SHADOW_SQUASH;
+      }
+      const iconRect = (icon) => ({ x: icon.x - head, y: icon.y - head, w: s, h: head + below });
       // Laid out around the text's centre at (0, 0), then moved onto the spot.
       const text = { x: -tw / 2, y: -th / 2, w: tw, h: th };
       // Where the icon goes beside a rect: past its side, then slid along it.
       const beside = (r) => {
         if (across) {
           const x = side === 'left' ? r.x - gap - s / 2 : r.x + r.w + gap + s / 2;
-          return { x, y: r.y + r.h / 2 - reach };
+          return { x, y: r.y + r.h / 2 - reach - (below - head) / 2 };
         }
         const y = side === 'top' ? r.y - gap - s / 2 : r.y + r.h + gap + s / 2;
         return { x: r.x + r.w / 2 + reach, y };
@@ -4289,7 +4301,7 @@
         icon = beside(box);
       } else {
         if (s) icon = beside(text);
-        box = pad(icon ? unionRect(text, { x: icon.x - s / 2, y: icon.y - s / 2, w: s, h: s }) : text);
+        box = pad(icon ? unionRect(text, iconRect(icon)) : text);
       }
       const dx = label.x - (box.x + box.w / 2);
       const dy = label.y - (box.y + box.h / 2);
@@ -4302,9 +4314,9 @@
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
-    const labelBox = (label) => labelLayout(label).box;
+    const labelBox = (label, zoom) => labelLayout(label, zoom).box;
     // The box plus an icon outside it.
-    const labelBounds = (label) => labelLayout(label).bounds;
+    const labelBounds = (label, zoom) => labelLayout(label, zoom).bounds;
     // Layouts are in the style's own sizes. On the map a label is drawn
     // larger or smaller about its spot so that it follows zoomScale percent
     // of the map's zoom: at 100 it scales with the map, at 0 it keeps one
@@ -4332,7 +4344,7 @@
       c.translate(-a.x, -a.y);
     }
     // What can be clicked and selected on the map.
-    const labelArea = (label) => zoomedRect(label, labelBounds(label));
+    const labelArea = (label) => zoomedRect(label, labelBounds(label, labelZoom(label)));
 
     // The canvas only shows labels on the layers picked in the bottom menu:
     // one layer, all of them, or under Automatic, every layer whose zoom
@@ -4450,9 +4462,9 @@
     // A short line out from the label's box in its pointer direction: from a
     // corner for diagonals, from the middle of a side otherwise. It takes the
     // box's outline color, else its background, else the text color.
-    function drawPointer(label, style) {
+    function drawPointer(label, style, zoom) {
       const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
-      const box = labelBox(label);
+      const box = labelBox(label, zoom);
       const cornerX = label.x + (dx * box.w) / 2;
       const cornerY = label.y + (dy * box.h) / 2;
       const length = style.pointerLength;
@@ -4495,17 +4507,17 @@
       const baseline = c.measureText('H').actualBoundingBoxAscent / 2;
       if (style.background) {
         // With a background, the outline and shadow belong to the box, not the text.
-        const box = labelBox(label);
+        const box = labelBox(label, zoom);
         const shape = boxPath(box, style.radius, style.corners);
         c.fillStyle = style.background;
         c.fill(shape);
         c.shadowColor = 'transparent';
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
-      const { lines, iconX, iconY } = labelLayout(label);
+      const { lines, iconX, iconY, textX: textMiddle } = labelLayout(label, zoom);
       if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY, zoom);
       // Centred text would be pulled left by the trailing gap after its last letter.
-      const textX = labelLayout(label).textX + style.letterSpacing / 2;
+      const textX = textMiddle + style.letterSpacing / 2;
       c.letterSpacing = `${style.letterSpacing}px`;
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
@@ -4522,12 +4534,14 @@
     function iconPaddingOf(style) {
       return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
     }
-    // An oval reaching r either side of (x, y) and a quarter as tall,
+    // How tall a pin's ground shadow is for its width.
+    const GROUND_SHADOW_SQUASH = 0.25;
+    // An oval reaching r either side of (x, y) and GROUND_SHADOW_SQUASH as tall,
     // fading from color at its middle to nothing at its rim.
     function paintGroundShadow(c, color, x, y, r) {
       c.save();
       c.translate(x, y);
-      c.scale(1, 0.25);
+      c.scale(1, GROUND_SHADOW_SQUASH);
       const fade = c.createRadialGradient(0, 0, 0, 0, 0, r);
       fade.addColorStop(0, color);
       fade.addColorStop(1, `${color.slice(0, 7)}00`);
@@ -4633,7 +4647,7 @@
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
         ctx.save();
         zoomAboutLabel(ctx, label);
-        if (label.pointer) drawPointer(label, style);
+        if (label.pointer) drawPointer(label, style, k);
         paintLabel(ctx, label, style, k);
         ctx.restore();
       }
@@ -4641,7 +4655,7 @@
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
       if (typing && caretShown()) {
-        const { lines, textX } = labelLayout(typing);
+        const { lines, textX } = labelLayout(typing, labelZoom(typing));
         const last = lines.at(-1);
         const px = 1 / (view.scale * labelZoom(typing));
         ctx.save();

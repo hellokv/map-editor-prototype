@@ -684,10 +684,47 @@
       gap: 12px;
       min-height: 40px;
       padding: 0 12px;
+      white-space: nowrap;
       background: #fff;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
+    }
+    #panel .field > input[type="text"],
+    #panel .field .font-picker {
+      flex: 1;
+      min-width: 0;
+    }
+    #panel .field .font-picker input {
+      width: 100%;
+    }
+    #panel .field > input[type="number"] {
+      width: 64px;
+    }
+    .field .font-options {
+      text-align: left;
+      font-weight: 400;
+    }
+    .field .color-field {
+      margin-left: auto;
+    }
+    #panel .field .color-field input[type="color"] {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+    }
+    #panel .field .opacity {
+      width: 30px;
+      padding: 0;
+    }
+    /* Arrow keys still step these; the spinner would push the value off the right edge. */
+    #panel .field input[type="number"] {
+      appearance: textfield;
+    }
+    #panel .field input[type="number"]::-webkit-inner-spin-button,
+    #panel .field input[type="number"]::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
     }
     .field-pair {
       display: grid;
@@ -855,9 +892,9 @@
     /* In a field, the number sits before its slider, a thin line with a pill handle. */
     /* Fixed columns, so every field's number and slider line up. */
     .field .slider {
-      flex: none;
+      flex: 0 1 auto;
       display: grid;
-      grid-template-columns: 44px 130px;
+      grid-template-columns: 44px minmax(60px, 130px);
       gap: 12px;
     }
     #panel .field .slider input[type="number"] {
@@ -1284,19 +1321,19 @@
           <button id="new-label-style" type="button">New label style</button>
         </div>
         <form id="label-style-form" hidden>
-          <div class="group">
-            <label class="row">
+          <div class="label-section">
+            <label class="field">
               Name
               <input id="style-name" type="text" required>
             </label>
-            <label class="row">
+            <label class="field">
               Font
               <span class="font-picker">
                 <input id="style-font" type="text" autocomplete="off" required>
                 <div id="font-options" class="font-options" hidden></div>
               </span>
             </label>
-            <label class="row">
+            <label class="field">
               Font weight
               <select id="style-weight">
                 <option value="100">Thin</option>
@@ -1310,77 +1347,81 @@
                 <option value="900">Black</option>
               </select>
             </label>
-            <label class="row">
+            <label class="field">
               Font size
               <input id="style-size" type="number" min="4" max="200" step="1" required>
             </label>
-            <label class="row">
+            <label class="field">
               Line height
               <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
             </label>
-            <label class="row">
+            <label class="field">
               Letter spacing
               <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
             </label>
-            <label class="row">
+            <label class="field">
               Scale factor
-              <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="style-zoom-scale" type="number" min="0" step="1"></span></span>
+              <span class="slider"><span class="percent-field"><input id="style-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
             </label>
-            <label class="row">
-              <span><input id="style-caps" type="checkbox"> All caps</span>
+            <label class="field">
+              All caps
+              <input id="style-caps" class="switch" type="checkbox">
             </label>
           </div>
-          <div class="group">
-            <label class="row">
+          <div class="label-section">
+            <label class="field">
               Color
               <span class="color-field"><input id="style-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
-            <label class="row">
-              <span><input id="style-outline-on" type="checkbox"> Outline</span>
+            <label class="field">
+              Outline
               <span class="color-field"><input id="style-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-outline-on" class="switch" type="checkbox">
             </label>
-            <label class="row">
+            <label class="field">
               Outline weight
               <input id="style-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
-            <label class="row">
-              <span><input id="style-shadow-on" type="checkbox"> Shadow</span>
+            <label class="field">
+              Shadow
               <span class="color-field"><input id="style-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-shadow-on" class="switch" type="checkbox">
             </label>
           </div>
-          <div class="group">
-            <label class="row">
+          <div class="label-section">
+            <label class="field">
               Padding top and bottom
               <input id="style-padding-y" type="number" min="0" max="200" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Padding sides
               <input id="style-padding-x" type="number" min="0" max="200" step="1">
             </label>
-            <label class="row">
-              <span><input id="style-background-on" type="checkbox"> Background color</span>
+            <label class="field">
+              Background color
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-background-on" class="switch" type="checkbox">
             </label>
-            <label class="row">
+            <label class="field">
               Corners
               <select id="style-corners">
                 <option value="round">Rounded</option>
                 <option value="chamfer">Chamfered</option>
               </select>
             </label>
-            <label class="row">
+            <label class="field">
               Corner radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Pointer length
               <input id="style-pointer-length" type="number" min="0" max="500" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Pointer weight
               <input id="style-pointer-width" type="number" min="0" max="50" step="0.5">
             </label>
-            <label class="row">
+            <label class="field">
               Pointer end
               <select id="style-pointer-end">
                 <option value="round">Rounded</option>
@@ -1389,17 +1430,17 @@
               </select>
             </label>
           </div>
-          <div class="group">
-            Icon
-            <label class="row">
+          <div class="label-section">
+            <div class="section-heading">Icon</div>
+            <label class="field">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Icon gap
               <input id="style-icon-gap" type="number" min="0" max="200" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Background shape
               <select id="style-icon-shape">
                 <option value="square">Square</option>
@@ -1407,42 +1448,45 @@
                 <option value="pin">Pin</option>
               </select>
             </label>
-            <label class="row">
-              <span><input id="style-icon-background-on" type="checkbox"> Background color</span>
+            <label class="field">
+              Background color
               <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-icon-background-on" class="switch" type="checkbox">
             </label>
-            <label class="row">
-              <span><input id="style-icon-outline-on" type="checkbox"> Outline</span>
+            <label class="field">
+              Outline
               <span class="color-field"><input id="style-icon-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-icon-outline-on" class="switch" type="checkbox">
             </label>
-            <label class="row">
+            <label class="field">
               Outline weight
               <input id="style-icon-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
-            <label class="row">
-              <span><input id="style-icon-shadow-on" type="checkbox"> Shadow</span>
+            <label class="field">
+              Shadow
               <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="style-icon-shadow-on" class="switch" type="checkbox">
             </label>
-            <label class="row">
+            <label class="field">
               Shadow gap
               <input id="style-icon-shadow-gap" type="number" step="0.5">
             </label>
-            <label class="row">
+            <label class="field">
               Shadow size
               <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
             </label>
-            <label class="row">
+            <label class="field">
               Corners
               <select id="style-icon-corners">
                 <option value="round">Rounded</option>
                 <option value="chamfer">Chamfered</option>
               </select>
             </label>
-            <label class="row">
+            <label class="field">
               Corner radius
               <input id="style-icon-radius" type="number" min="0" max="200" step="1">
             </label>
-            <label class="row">
+            <label class="field">
               Padding
               <input id="style-icon-padding" type="number" min="0" max="200" step="1">
             </label>
@@ -3603,16 +3647,16 @@
     styleInputs['zoom-scale'].addEventListener('input', () => { zoomScaleSlider.value = styleInputs['zoom-scale'].value; });
     function showToggledFields() {
       styleInputs.outline.parentElement.hidden = !styleInputs['outline-on'].checked;
-      styleInputs['outline-width'].closest('.row').hidden = !styleInputs['outline-on'].checked;
+      styleInputs['outline-width'].closest('.field').hidden = !styleInputs['outline-on'].checked;
       styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
       for (const key of ['icon-background', 'icon-outline', 'icon-shadow']) styleInputs[key].parentElement.hidden = !styleInputs[`${key}-on`].checked;
-      styleInputs['icon-outline-width'].closest('.row').hidden = !styleInputs['icon-outline-on'].checked;
+      styleInputs['icon-outline-width'].closest('.field').hidden = !styleInputs['icon-outline-on'].checked;
       // Only a square backdrop has corners to shape; a pin's radius rounds its point.
       const iconShape = styleInputs['icon-shape'].value;
-      styleInputs['icon-corners'].closest('.row').hidden = iconShape !== 'square';
-      styleInputs['icon-radius'].closest('.row').hidden = iconShape === 'circle';
+      styleInputs['icon-corners'].closest('.field').hidden = iconShape !== 'square';
+      styleInputs['icon-radius'].closest('.field').hidden = iconShape === 'circle';
       // A pin's shadow lies on the ground below it.
-      for (const key of ['icon-shadow-gap', 'icon-shadow-size']) styleInputs[key].closest('.row').hidden = iconShape !== 'pin' || !styleInputs['icon-shadow-on'].checked;
+      for (const key of ['icon-shadow-gap', 'icon-shadow-size']) styleInputs[key].closest('.field').hidden = iconShape !== 'pin' || !styleInputs['icon-shadow-on'].checked;
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -4356,9 +4400,10 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // The label panel has its own look, header included.
-      document.getElementById('panel').classList.toggle('label-look', anyLabels);
-      document.querySelector('#panel-back .material-symbols-rounded').textContent = anyLabels ? 'chevron_left' : 'arrow_back';
+      // The label panel and the label style form have their own look, header included.
+      const labelLook = anyLabels || (!!editingStyle && !labelTools.hidden);
+      document.getElementById('panel').classList.toggle('label-look', labelLook);
+      document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
       showImagePanel();

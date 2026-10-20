@@ -3436,9 +3436,10 @@
           checked: style === currentStyle(),
           title: 'Use for new labels',
         });
-        pick.addEventListener('change', () => {
+        // Picking a style, even the current one, is getting ready to add a label in it.
+        pick.addEventListener('click', () => {
           currentStyleId = style.id;
-          updateCursor();
+          setLabelTool('add');
           pick.blur();
         });
         return styleCard(row, style, pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0, editButton: true }));

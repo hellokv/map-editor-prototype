@@ -1053,6 +1053,10 @@
             Text
             <textarea id="label-text" rows="1"></textarea>
           </label>
+          <label id="label-hide-text-field" class="field">
+            Hide text
+            <input id="label-hide-text" class="switch" type="checkbox">
+          </label>
           <div class="field-pair">
             <label class="field">
               X
@@ -1105,10 +1109,6 @@
           <label id="label-icon-gap-field" class="field">
             Gap
             <span class="slider"><input id="label-icon-gap" type="number" min="0" max="200" step="1"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"></span>
-          </label>
-          <label id="label-hide-text-field" class="field">
-            Hide text
-            <input id="label-hide-text" class="switch" type="checkbox">
           </label>
         </div>
         <div class="label-section label-columns">
@@ -4487,8 +4487,7 @@
       if (labelIconToggle.checked) label.icon = '';
       else delete label.icon;
       draw();
-      if (labelIconToggle.checked) labelIconInput.focus();
-      else labelIconToggle.blur();
+      labelIconToggle.blur();
     });
     // Listing every icon at once makes the list slow to open.
     const MAX_ICON_OPTIONS = 300;

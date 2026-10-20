@@ -790,18 +790,18 @@
       content: 'toggle_on';
       color: var(--label-ink, #000);
     }
-    #label-icon-side {
+    .icon-buttons {
       display: flex;
       gap: 4px;
     }
-    #panel #label-icon-side button {
+    #panel .icon-buttons button {
       display: flex;
       padding: 2px;
       border: none;
       border-radius: 4px;
       background: none;
     }
-    #panel #label-icon-side button[aria-pressed="true"] {
+    #panel .icon-buttons button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
@@ -1082,16 +1082,16 @@
               <div id="icon-options" class="icon-options" hidden></div>
             </span>
           </div>
-          <label id="label-icon-placement-field" class="field">
+          <div id="label-icon-placement-field" class="field">
             Placement
-            <select id="label-icon-placement">
-              <option value="inside">Inside</option>
-              <option value="outside">Outside</option>
-            </select>
-          </label>
+            <div id="label-icon-placement" class="icon-buttons">
+              <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">arrows_input</span></button>
+              <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">arrows_output</span></button>
+            </div>
+          </div>
           <div id="label-icon-side-field" class="field">
             Alignment
-            <div id="label-icon-side">
+            <div id="label-icon-side" class="icon-buttons">
               <button type="button" data-icon-side="left" aria-label="Icon left of text"><span class="material-symbols-rounded">keyboard_tab_rtl</span></button>
               <button type="button" data-icon-side="right" aria-label="Icon right of text"><span class="material-symbols-rounded">keyboard_tab</span></button>
               <button type="button" data-icon-side="bottom" aria-label="Icon below text"><span class="material-symbols-rounded">vertical_align_bottom</span></button>
@@ -3765,16 +3765,18 @@
       e.target.dispatchEvent(new Event('change', { bubbles: true }));
     }, true);
     const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
-    const labelIconPlacement = document.getElementById('label-icon-placement');
-    labelIconPlacement.addEventListener('change', () => {
-      const label = soleLabel();
-      if (!label) return;
-      recordUndo();
-      if (labelIconPlacement.value === 'outside') label.iconOutside = true;
-      else delete label.iconOutside;
-      labelIconPlacement.blur();
-      draw();
-    });
+    const placementButtons = document.querySelectorAll('[data-icon-placement]');
+    for (const button of placementButtons) {
+      button.addEventListener('click', () => {
+        const label = soleLabel();
+        button.blur();
+        if (!label || (button.dataset.iconPlacement === 'outside') === !!label.iconOutside) return;
+        recordUndo();
+        if (button.dataset.iconPlacement === 'outside') label.iconOutside = true;
+        else delete label.iconOutside;
+        draw();
+      });
+    }
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     // Each of these number fields shares a .slider with a slider; moving
@@ -4407,7 +4409,6 @@
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
         labelIconToggle.disabled = textHidden;
-        labelIconPlacement.disabled = textHidden;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
           field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;
@@ -4428,7 +4429,9 @@
         document.getElementById('label-icon-placement-field').hidden = !iconOn || textHidden;
         // The offset only applies to an icon outside the label.
         document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;
-        if (document.activeElement !== labelIconPlacement) labelIconPlacement.value = selectedLabel.iconOutside && !textHidden ? 'outside' : 'inside';
+        for (const button of placementButtons) {
+          button.setAttribute('aria-pressed', button.dataset.iconPlacement === (selectedLabel.iconOutside ? 'outside' : 'inside'));
+        }
         show(labelIconOffsetInput, textHidden ? 0 : selectedLabel.iconOffset ?? 0);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
         show(labelIconGapInput, textHidden ? 0 : selectedLabel.iconGap ?? '');

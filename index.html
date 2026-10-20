@@ -4322,11 +4322,16 @@
     // of the map's zoom: at 100 it scales with the map, at 0 it keeps one
     // on-screen size.
     const labelZoom = (label) => view.scale ** (styleOf(label).zoomScale / 100 - 1);
-    // The point a label grows and shrinks about: its spot, except that a pin
-    // standing alone, its text hidden, keeps its point fixed on the map. Its
-    // shadow's gap is in map units, so the shadow stays put too.
+    // The point a label grows and shrinks about, which stays fixed on the
+    // map: the end of its pointer, so it keeps pointing at the same thing;
+    // the point of a pin standing alone, its text hidden; else its spot. A
+    // lone pin's shadow gap is in map units, so the shadow stays put too.
     function zoomAnchor(label) {
       const style = styleOf(label);
+      if (label.pointer) {
+        const { endX, endY } = pointerLine(label, style, labelZoom(label));
+        return { x: endX, y: endY };
+      }
       if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
       return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
@@ -4462,7 +4467,8 @@
     // A short line out from the label's box in its pointer direction: from a
     // corner for diagonals, from the middle of a side otherwise. It takes the
     // box's outline color, else its background, else the text color.
-    function drawPointer(label, style, zoom) {
+    // The pointer's line, from start to end, unscaled about the label's spot.
+    function pointerLine(label, style, zoom) {
       const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
       const box = labelBox(label, zoom);
       const cornerX = label.x + (dx * box.w) / 2;
@@ -4480,6 +4486,11 @@
       const startY = cornerY - dy * inset;
       const endX = startX + (dx / unit) * (inset + length);
       const endY = startY + (dy / unit) * (inset + length);
+      return { startX, startY, endX, endY };
+    }
+    function drawPointer(label, style, zoom) {
+      const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
+      const { startX, startY, endX, endY } = pointerLine(label, style, zoom);
       const lineWidth = style.pointerWidth;
       // The line's cap and sides would bulge past the box's edges
       // where it leaves the box, so with a box the line reaches deeper inside.

@@ -4310,12 +4310,14 @@
     // on-screen size.
     const labelZoom = (label) => view.scale ** (styleOf(label).zoomScale / 100 - 1);
     // The point a label grows and shrinks about: its spot, except that a pin
-    // standing alone, its text hidden, keeps its point fixed on the map.
+    // standing alone, its text hidden, keeps fixed on the map where it
+    // stands: the middle of its shadow, else its point.
     function zoomAnchor(label) {
       const style = styleOf(label);
       if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
-      return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
+      const point = iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH;
+      return { x: iconX, y: style.iconShadow ? point + style.iconShadowGap : point };
     }
     function zoomedRect(label, r) {
       const k = labelZoom(label);

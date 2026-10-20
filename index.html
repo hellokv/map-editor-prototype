@@ -1188,12 +1188,12 @@
       </div>
     </div>
     <div id="background-panel" hidden>
-      <div class="group">
+      <div class="group background-settings">
         <label class="row">
           <span><input id="background-show-labels" type="checkbox" checked> Show labels</span>
         </label>
       </div>
-      <div class="group">
+      <div class="group background-settings">
         <input id="image-upload" type="file" accept="image/*">
         <div id="image-preview" hidden>
           <img alt="Background image">
@@ -3841,6 +3841,8 @@
       }
       const backgroundLayers = document.getElementById('background-layers');
       backgroundLayers.hidden = !selectedShapes.length && !sketchSelected;
+      // With something selected, the panel is about that, not the map's background.
+      for (const group of document.querySelectorAll('.background-settings')) group.hidden = !backgroundLayers.hidden;
       if (!backgroundLayers.hidden) {
         const items = layerItems();
         for (const button of backgroundLayers.querySelectorAll('[data-layer]')) {

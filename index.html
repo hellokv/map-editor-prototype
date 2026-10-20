@@ -78,7 +78,7 @@
       position: relative;
       display: inline-block;
     }
-    #icon-options {
+    .icon-options {
       position: absolute;
       z-index: 1;
       left: 0;
@@ -88,16 +88,32 @@
       background: #fff;
       border: 1px solid #ccc;
     }
-    #icon-options div {
+    .icon-options div {
       display: flex;
       align-items: center;
       gap: 6px;
       padding: 2px 6px;
       cursor: pointer;
     }
-    #icon-options div[aria-selected="true"],
+    .icon-options div[aria-selected="true"],
     .font-options div[aria-selected="true"] {
       background: #ddd;
+    }
+    .list-item-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      padding: 3px 6px;
+      background: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .list-item-row .material-symbols-rounded {
+      width: 20px;
+    }
+    .list-item-row[aria-selected="true"] {
+      box-shadow: 0 0 0 1.5px #008FF0;
     }
     #crossing-dialog {
       position: absolute;
@@ -793,7 +809,7 @@
             <span id="label-icon-preview" class="material-symbols-rounded"></span>
             <span class="icon-picker">
               <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
-              <div id="icon-options" hidden></div>
+              <div id="icon-options" class="icon-options" hidden></div>
             </span>
           </div>
           <div id="label-icon-side-field" class="row">
@@ -841,19 +857,35 @@
             Heading
             <input id="list-heading" type="text">
           </label>
-          <label class="row">
-            Items
-            <textarea id="list-items" rows="4"></textarea>
-          </label>
-          <label class="row">
-            Heading style
-            <select id="list-heading-style"></select>
-          </label>
-          <label class="row">
-            Item style
-            <select id="list-item-style"></select>
-          </label>
         </div>
+        <div id="list-heading-style-picker" class="group"></div>
+        <div class="group">
+          Items
+          <div id="list-item-rows"></div>
+          <button id="list-add-item" type="button">Add item</button>
+        </div>
+        <div id="list-item-fields" class="group" hidden>
+          <label class="row">
+            Place
+            <select id="list-item-place"></select>
+          </label>
+          <label class="row">
+            Label
+            <input id="list-item-text" type="text">
+          </label>
+          <label class="row">
+            <span><input id="list-item-icon-on" type="checkbox"> Icon</span>
+          </label>
+          <div id="list-item-icon-field" class="row">
+            <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
+            <span class="icon-picker">
+              <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search icons">
+              <div class="icon-options" hidden></div>
+            </span>
+          </div>
+          <button id="list-delete-item" type="button">Delete item</button>
+        </div>
+        <div id="list-item-style-picker" class="group"></div>
         <div class="group">
           <label class="row">
             Background color
@@ -2190,7 +2222,7 @@
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
-        lists: lists.map((list) => ({ ...list, items: [...list.items] })),
+        lists: lists.map((list) => ({ ...list, items: list.items.map((item) => ({ ...item })) })),
         shapes: shapes.map((shape) => ({ ...shape })),
         ...copySketch(),
         selection: copiedSelection,
@@ -2301,14 +2333,15 @@
       }
     });
 
-    // Lists, such as a map key: a heading and items, each drawn as a label in
-    // its style, stacked down the left of a box whose top left is (x, y).
+    // Lists, such as a map key: a heading and items ({ text, icon, place },
+    // icon and place absent when unset), each drawn as a label in its style,
+    // stacked down the left of a box whose top left is (x, y).
     // background, outline and shadow are colors, the last two null when off.
     const lists = [];
     let selectedList = null;
     const LIST_ROW_GAP = 6;
     const newList = (p) => ({
-      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'],
+      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text })),
       headingStyleId: labelStyles[0].id, itemStyleId: labelStyles[0].id,
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
       outline: null, outlineWidth: 2, shadow: null,
@@ -2317,8 +2350,8 @@
     function listLayout(list) {
       const rows = [
         { text: list.heading, styleId: list.headingStyleId },
-        ...list.items.map((text) => ({ text, styleId: list.itemStyleId })),
-      ].filter((row) => row.text.trim());
+        ...list.items.map(({ text, icon }) => ({ text, icon, styleId: list.itemStyleId })),
+      ].filter((row) => row.text.trim() || row.icon);
       const sizes = rows.map((row) => labelBox({ ...row, x: 0, y: 0 }));
       const w = Math.max(0, ...sizes.map((size) => size.w)) + 2 * list.padding;
       const h = sizes.reduce((sum, size) => sum + size.h, 0) + LIST_ROW_GAP * Math.max(0, rows.length - 1) + 2 * list.padding;
@@ -2865,7 +2898,9 @@
     // A style's ⋮ menu. A clone made while labels are selected is given to them.
     // With editButton, Edit is an icon beside the menu, shown while the card
     // is hovered, rather than an item in it.
-    function styleMenu(style, { deletable = false, editButton = false } = {}) {
+    // adopt gives a style to whatever the menu's picker is for.
+    const adoptForLabels = (style) => { for (const label of selectedLabels) setLabelStyle(label, style); };
+    function styleMenu(style, { deletable = false, editButton = false, adopt = adoptForLabels } = {}) {
       const menu = document.createElement('span');
       menu.className = 'style-menu';
       const toggle = document.createElement('button');
@@ -2911,7 +2946,7 @@
         recordUndo();
         const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
         labelStyles.push(copy);
-        for (const label of selectedLabels) setLabelStyle(label, copy);
+        adopt(copy);
         setAsideLabels();
         renderLabelStyles();
         openStyleForm(copy, true);
@@ -3038,29 +3073,34 @@
     }
 
     // Selected labels take the new style.
-    function newLabelStyle() {
+    function newLabelStyle(adopt = adoptForLabels) {
       recordUndo();
       const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
       labelStyles.push(style);
-      for (const label of selectedLabels) setLabelStyle(label, style);
+      adopt(style);
       setAsideLabels();
       renderLabelStyles();
       openStyleForm(style, true);
       styleInputs.name.select();
     }
-    document.getElementById('new-label-style').addEventListener('click', newLabelStyle);
+    document.getElementById('new-label-style').addEventListener('click', () => newLabelStyle());
     // A style's form can't show while labels are selected, so opening it from
     // a label lets go of the selection, and the back arrow restores it.
     let labelsSetAside = [];
+    let listSetAside = null;
     function setAsideLabels() {
       labelsSetAside = selectedLabels;
+      listSetAside = selectedList;
       selectedLabels = [];
+      selectedList = null;
       draw();
     }
     function leaveStyleForm() {
       closeStyleForm();
       selectedLabels = labelsSetAside.filter((label) => labels.includes(label));
       labelsSetAside = [];
+      selectedList = lists.includes(listSetAside) ? listSetAside : null;
+      listSetAside = null;
       draw();
     }
     // The slider and the field move each other; the field can go past 100%.
@@ -3145,40 +3185,39 @@
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
     }
-    // Shows the labels' style alone, unless Change style has opened the
-    // whole list to pick from. Mixed styles show only the button.
-    function renderStylePicker(source, styleIds) {
-      const { text } = source;
+    // A style picker: the style in use alone, and Change style to open the
+    // whole list to pick from, that style first. Mixed styles show only the
+    // button. adopt gives a picked style to whatever the picker is for.
+    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt }) {
       // The picker has no width yet the first time, while it's empty.
       // Less room than the main list: each card here also has an edit icon.
-      const room = (labelStylePicker.clientWidth || 284) - 170;
-      const card = (element, style, pick) => styleCard(element, style, pick, stylePreview(style, text, room, iconSettingsOf(source)), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true }));
-      if (!stylePickerOpen) {
+      const room = (container.clientWidth || 284) - 170;
+      const card = (element, style, pick) => styleCard(element, style, pick, stylePreview(style, text, room, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true, adopt }));
+      if (!open) {
         const style = styleIds.size === 1 ? labelStyles.find((each) => styleIds.has(each.id)) : null;
         const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Change style' });
         change.addEventListener('click', () => {
-          stylePickerOpen = true;
+          setOpen(true);
           draw();
         });
-        labelStylePicker.replaceChildren('Style', ...(style ? [card(document.createElement('div'), style, '')] : []), change);
+        container.replaceChildren(title, ...(style ? [card(document.createElement('div'), style, '')] : []), change);
         return;
       }
-      // The labels' own style leads the list.
       const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];
-      labelStylePicker.replaceChildren('Style', ...ordered.map((style) => {
-        const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'label-style', value: style.id });
+      container.replaceChildren(title, ...ordered.map((style) => {
+        const pick = Object.assign(document.createElement('input'), { type: 'radio', name: container.id, value: style.id, checked: styleIds.size === 1 && styleIds.has(style.id) });
         pick.addEventListener('change', () => {
           recordUndo();
-          for (const label of selectedLabels) setLabelStyle(label, style);
-          stylePickerOpen = false;
+          adopt(style);
+          setOpen(false);
           pick.blur();
           draw();
         });
         return card(document.createElement('label'), style, pick);
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'New label style' });
-      create.addEventListener('click', newLabelStyle);
-      labelStylePicker.append(create);
+      create.addEventListener('click', () => newLabelStyle(adopt));
+      container.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
     // A blank override field shows its default as the placeholder; stepping
@@ -3399,6 +3438,10 @@
     });
     let hadSelection = false;
 
+    // Stand-ins for the places labels and list items will belong to; a
+    // place is one of these names, absent when there's none.
+    const PLACES = ['African Elephant', 'Giraffe', 'Lion', 'Red Panda', 'Gorilla', 'Zebra', 'Snow Leopard', 'Penguin', 'Komodo Dragon', 'Hippopotamus', 'Meerkat', 'Polar Bear', 'Orangutan', 'Flamingo', 'Sea Lion'];
+
     // The selected list's fields. Each applies as it changes and is one undo step.
     const listProperties = document.getElementById('list-properties');
     const theList = () => selectedList;
@@ -3407,9 +3450,6 @@
     const listShadowToggle = document.getElementById('list-shadow-on');
     const listInputs = {
       heading: liveField('list-heading', 'heading', (input) => input.value, theList),
-      items: liveField('list-items', 'items', (input) => input.value.split('\n'), theList),
-      headingStyleId: liveField('list-heading-style', 'headingStyleId', (input) => Number(input.value), theList),
-      itemStyleId: liveField('list-item-style', 'itemStyleId', (input) => Number(input.value), theList),
       background: liveField('list-background', 'background', colorOf, theList),
       corners: liveField('list-corners', 'corners', (input) => input.value, theList),
       radius: liveField('list-radius', 'radius', listNumber(0, 0), theList),
@@ -3424,23 +3464,129 @@
     liveField('list-outline', 'outline', () => (listOutlineToggle.checked ? colorOf(listOutline) : null), theList);
     liveField('list-shadow-on', 'shadow', () => (listShadowToggle.checked ? colorOf(listShadow) : null), theList);
     liveField('list-shadow', 'shadow', () => (listShadowToggle.checked ? colorOf(listShadow) : null), theList);
-    let listStyleOptionsKey = '';
+    // The item being edited, by its place in the selected list; -1 for none.
+    let listItemIndex = -1;
+    const theItem = () => selectedList?.items[listItemIndex] ?? null;
+    const listItemRows = document.getElementById('list-item-rows');
+    const listItemFields = document.getElementById('list-item-fields');
+    const listItemPlace = document.getElementById('list-item-place');
+    const listItemText = liveField('list-item-text', 'text', (input) => input.value, theItem);
+    const listItemIconToggle = document.getElementById('list-item-icon-on');
+    const listItemIcon = document.getElementById('list-item-icon');
+    listItemPlace.replaceChildren(
+      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
+      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: place })),
+    );
+    // As on a label, picking a place names the item after it.
+    listItemPlace.addEventListener('change', () => {
+      const item = theItem();
+      if (!item) return;
+      recordUndo();
+      if (listItemPlace.value) {
+        item.place = listItemPlace.value;
+        item.text = listItemPlace.value;
+      } else {
+        delete item.place;
+      }
+      listItemPlace.blur();
+      draw();
+    });
+    // An item's icon is '' while switched on with none picked yet.
+    listItemIconToggle.addEventListener('change', () => {
+      const item = theItem();
+      if (!item) return;
+      recordUndo();
+      if (listItemIconToggle.checked) item.icon = '';
+      else delete item.icon;
+      draw();
+      if (listItemIconToggle.checked) listItemIcon.focus();
+      else listItemIconToggle.blur();
+    });
+    iconPicker(listItemIcon, listItemIcon.nextElementSibling, () => theItem()?.icon, (name) => {
+      const item = theItem();
+      if (item && item.icon !== name) {
+        recordUndo();
+        item.icon = name;
+      }
+      draw();
+    });
+    document.getElementById('list-add-item').addEventListener('click', (e) => {
+      if (!selectedList) return;
+      recordUndo();
+      selectedList.items.push({ text: 'New item' });
+      listItemIndex = selectedList.items.length - 1;
+      e.currentTarget.blur();
+      draw();
+      listItemText.select();
+    });
+    document.getElementById('list-delete-item').addEventListener('click', (e) => {
+      if (!theItem()) return;
+      recordUndo();
+      selectedList.items.splice(listItemIndex, 1);
+      listItemIndex = -1;
+      e.currentTarget.blur();
+      draw();
+    });
+    let listPanelFor = null;
+    let listRowsKey = '';
+    const listPickers = {
+      heading: { container: document.getElementById('list-heading-style-picker'), key: 'headingStyleId', title: 'Heading style', open: false, rendered: '' },
+      item: { container: document.getElementById('list-item-style-picker'), key: 'itemStyleId', title: 'Item style', open: false, rendered: '' },
+    };
     function showListPanel() {
       listProperties.hidden = !selectedList || labelTools.hidden;
       if (listProperties.hidden) return;
       const list = selectedList;
-      const optionsKey = JSON.stringify(labelStyles.map((style) => [style.id, style.name]));
-      if (optionsKey !== listStyleOptionsKey) {
-        listStyleOptionsKey = optionsKey;
-        for (const select of [listInputs.headingStyleId, listInputs.itemStyleId]) {
-          select.replaceChildren(...labelStyles.map((style) => Object.assign(document.createElement('option'), { value: style.id, textContent: style.name })));
-        }
+      // Another list starts with its pickers shut and no item open.
+      if (list !== listPanelFor) {
+        listPanelFor = list;
+        listItemIndex = -1;
+        for (const picker of Object.values(listPickers)) picker.open = false;
+      }
+      if (listItemIndex >= list.items.length) listItemIndex = -1;
+      for (const picker of Object.values(listPickers)) {
+        const styleId = styleOf({ styleId: list[picker.key] }).id;
+        const text = picker === listPickers.heading ? list.heading : list.items.find((item) => item.text)?.text ?? 'Item';
+        const key = JSON.stringify([text, styleId, picker.open, labelStyles, loadedFontCount, picker.container.clientWidth]);
+        if (key === picker.rendered) continue;
+        picker.rendered = key;
+        renderStylePicker(picker.container, {
+          title: picker.title,
+          text,
+          styleIds: new Set([styleId]),
+          open: picker.open,
+          setOpen: (open) => { picker.open = open; },
+          adopt: (style) => { list[picker.key] = style.id; },
+        });
+      }
+      const rowsKey = JSON.stringify([list.items, listItemIndex]);
+      if (rowsKey !== listRowsKey) {
+        listRowsKey = rowsKey;
+        listItemRows.replaceChildren(...list.items.map((item, i) => {
+          const row = Object.assign(document.createElement('div'), { className: 'list-item-row' });
+          row.setAttribute('aria-selected', i === listItemIndex);
+          row.append(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded', textContent: item.icon ?? '' }), item.text);
+          // A second click on the open item closes it.
+          row.addEventListener('click', () => {
+            listItemIndex = i === listItemIndex ? -1 : i;
+            draw();
+          });
+          return row;
+        }));
+      }
+      const item = theItem();
+      listItemFields.hidden = !item;
+      if (item) {
+        if (document.activeElement !== listItemPlace) listItemPlace.value = item.place ?? '';
+        if (document.activeElement !== listItemText) listItemText.value = item.text;
+        const iconOn = item.icon !== undefined;
+        listItemIconToggle.checked = iconOn;
+        document.getElementById('list-item-icon-field').hidden = !iconOn;
+        if (document.activeElement !== listItemIcon) listItemIcon.value = item.icon ?? '';
+        document.getElementById('list-item-icon-preview').textContent = item.icon ?? '';
       }
       const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
       show(listInputs.heading, list.heading);
-      show(listInputs.items, list.items.join('\n'));
-      show(listInputs.headingStyleId, styleOf({ styleId: list.headingStyleId }).id);
-      show(listInputs.itemStyleId, styleOf({ styleId: list.itemStyleId }).id);
       if (document.activeElement !== listInputs.background) showColor(listInputs.background, list.background);
       show(listInputs.corners, list.corners);
       show(listInputs.radius, list.radius);
@@ -3576,11 +3722,15 @@
         const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds]]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
-          renderStylePicker(source, styleIds);
-        }
-        // Mixed styles leave the list's radios blank.
-        for (const pick of labelStylePicker.querySelectorAll('input')) {
-          pick.checked = styleIds.size === 1 && styleIds.has(Number(pick.value));
+          renderStylePicker(labelStylePicker, {
+            title: 'Style',
+            text: source.text,
+            iconSettings: iconSettingsOf(source),
+            styleIds,
+            open: stylePickerOpen,
+            setOpen: (open) => { stylePickerOpen = open; },
+            adopt: adoptForLabels,
+          });
         }
       }
       const selectedLabel = soleLabel();
@@ -3635,9 +3785,6 @@
       }
     }
 
-    // Stand-ins for the places labels will belong to; a label's place is one
-    // of these names, absent when it has none.
-    const PLACES = ['African Elephant', 'Giraffe', 'Lion', 'Red Panda', 'Gorilla', 'Zebra', 'Snow Leopard', 'Penguin', 'Komodo Dragon', 'Hippopotamus', 'Meerkat', 'Polar Bear', 'Orangutan', 'Flamingo', 'Sea Lion'];
     const labelPlaceSelect = document.getElementById('label-place');
     labelPlaceSelect.replaceChildren(
       Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
@@ -3678,10 +3825,6 @@
     const labelIconInput = document.getElementById('label-icon');
     const labelIconPreview = document.getElementById('label-icon-preview');
     const iconOptions = document.getElementById('icon-options');
-    // Listing every icon at once makes the list slow to open.
-    const MAX_ICON_OPTIONS = 300;
-    let iconMatches = [];
-    let activeIcon = -1;
     labelIconToggle.addEventListener('change', () => {
       const label = soleLabel();
       if (!label) return;
@@ -3692,54 +3835,65 @@
       if (labelIconToggle.checked) labelIconInput.focus();
       else labelIconToggle.blur();
     });
-    function showIconOptions() {
-      const typed = labelIconInput.value.trim().toLowerCase().replace(/\s+/g, '_');
-      iconMatches = MATERIAL_SYMBOLS.filter((name) => name.includes(typed)).slice(0, MAX_ICON_OPTIONS);
-      activeIcon = iconMatches.indexOf(typed);
-      iconOptions.replaceChildren(...iconMatches.map((name, i) => {
-        const option = document.createElement('div');
-        option.append(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded', textContent: name }), name);
-        option.setAttribute('aria-selected', i === activeIcon);
-        // mousedown, not click, so the input keeps focus until the pick.
-        option.addEventListener('mousedown', (e) => {
+    // Listing every icon at once makes the list slow to open.
+    const MAX_ICON_OPTIONS = 300;
+    // Searchable icon list for a text input and the list element given:
+    // typing filters Material icons; arrows move, Enter or a click picks.
+    // Unpicked typing is dropped for current().
+    function iconPicker(input, list, current, pick) {
+      let matches = [];
+      let active = -1;
+      function show() {
+        const typed = input.value.trim().toLowerCase().replace(/\s+/g, '_');
+        matches = MATERIAL_SYMBOLS.filter((name) => name.includes(typed)).slice(0, MAX_ICON_OPTIONS);
+        active = matches.indexOf(typed);
+        list.replaceChildren(...matches.map((name, i) => {
+          const option = document.createElement('div');
+          option.append(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded', textContent: name }), name);
+          option.setAttribute('aria-selected', i === active);
+          // mousedown, not click, so the input keeps focus until the pick.
+          option.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            choose(name);
+          });
+          return option;
+        }));
+        list.hidden = matches.length === 0;
+        list.children[active]?.scrollIntoView({ block: 'nearest' });
+      }
+      function choose(name) {
+        list.hidden = true;
+        pick(name);
+        input.blur();
+      }
+      input.addEventListener('focus', show);
+      input.addEventListener('input', show);
+      input.addEventListener('blur', () => {
+        list.hidden = true;
+        input.value = current() ?? '';
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
-          pickIcon(name);
-        });
-        return option;
-      }));
-      iconOptions.hidden = iconMatches.length === 0;
-      iconOptions.children[activeIcon]?.scrollIntoView({ block: 'nearest' });
+          if (list.hidden) show();
+          active = Math.max(0, Math.min(matches.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
+          [...list.children].forEach((option, i) => option.setAttribute('aria-selected', i === active));
+          list.children[active]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && matches[active]) {
+          e.preventDefault();
+          choose(matches[active]);
+        } else if (e.key === 'Escape') {
+          input.blur();
+        }
+      });
     }
-    function pickIcon(name) {
+    iconPicker(labelIconInput, iconOptions, () => soleLabel()?.icon, (name) => {
       const label = soleLabel();
-      iconOptions.hidden = true;
       if (label && label.icon !== name) {
         recordUndo();
         label.icon = name;
       }
-      labelIconInput.blur();
       draw();
-    }
-    labelIconInput.addEventListener('focus', showIconOptions);
-    labelIconInput.addEventListener('input', showIconOptions);
-    labelIconInput.addEventListener('blur', () => {
-      iconOptions.hidden = true;
-      // Unpicked typing is dropped.
-      labelIconInput.value = soleLabel()?.icon ?? '';
-    });
-    labelIconInput.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (iconOptions.hidden) showIconOptions();
-        activeIcon = Math.max(0, Math.min(iconMatches.length - 1, activeIcon + (e.key === 'ArrowDown' ? 1 : -1)));
-        [...iconOptions.children].forEach((option, i) => option.setAttribute('aria-selected', i === activeIcon));
-        iconOptions.children[activeIcon]?.scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter' && iconMatches[activeIcon]) {
-        e.preventDefault();
-        pickIcon(iconMatches[activeIcon]);
-      } else if (e.key === 'Escape') {
-        labelIconInput.blur();
-      }
     });
 
     function strokeGroupWidth(group) {

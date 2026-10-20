@@ -2490,9 +2490,13 @@
     const lists = [];
     let selectedList = null;
     const LIST_ROW_GAP = 6;
+    // New lists start in these styles, or the first style once they're deleted.
+    const LIST_HEADING_STYLE_ID = 4;
+    const LIST_ITEM_STYLE_ID = 5;
+    const styleIdOr = (id) => (labelStyles.some((style) => style.id === id) ? id : labelStyles[0].id);
     const newList = (p) => ({
       x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text })),
-      headingStyleId: labelStyles[0].id, itemStyleId: labelStyles[0].id,
+      headingStyleId: styleIdOr(LIST_HEADING_STYLE_ID), itemStyleId: styleIdOr(LIST_ITEM_STYLE_ID),
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
       outline: null, outlineWidth: 2, shadow: null, zoomScale: 100,
     });
@@ -4273,11 +4277,13 @@
     // be deleted.
     const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconShape: 'square', iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
     const labelStyles = [
-      { id: 1, name: 'Default', ...NEW_STYLE },
+      { id: 1, name: 'Label', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
       { ...NEW_STYLE, id: 3, name: 'Pin', zoomScale: 29, iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
+      { ...NEW_STYLE, id: LIST_HEADING_STYLE_ID, name: 'List heading', weight: 600 },
+      { ...NEW_STYLE, id: LIST_ITEM_STYLE_ID, name: 'List item' },
     ];
-    let nextStyleId = 4;
+    let nextStyleId = 6;
     // The style new labels are created in, picked in the style list.
     let currentStyleId = 1;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];
@@ -6906,7 +6912,7 @@
       fills.splice(0, fills.length, ...(file.fills ?? []).map((fill) => Object.assign(new Set(fill.points.map((i) => points[i])), { visible: fill.visible, color: fill.color })));
       groups.splice(0, groups.length, ...(file.groups ?? []).map((group) => ({ ...group, segments: new Set(group.segments.map(([i, j]) => paths[i].segments[j])) })));
       labelStyles.splice(0, labelStyles.length, ...(file.labelStyles ?? []).map((style) => ({ ...NEW_STYLE, ...style })));
-      if (!labelStyles.length) labelStyles.push({ ...NEW_STYLE, id: 1, name: 'Default' });
+      if (!labelStyles.length) labelStyles.push({ ...NEW_STYLE, id: 1, name: 'Label' });
       nextStyleId = file.nextStyleId ?? Math.max(...labelStyles.map((style) => style.id)) + 1;
       labels.splice(0, labels.length, ...(file.labels ?? []).map((label) => ({ pins: [], ...label })));
       lists.splice(0, lists.length, ...(file.lists ?? []).map((list) => ({ ...newList(list), ...list })));

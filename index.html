@@ -1083,6 +1083,14 @@
               <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
             <label class="row">
+              Shadow gap
+              <input id="style-icon-shadow-gap" type="number" step="0.5">
+            </label>
+            <label class="row">
+              Shadow size
+              <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
+            </label>
+            <label class="row">
               Corners
               <select id="style-icon-corners">
                 <option value="round">Rounded</option>
@@ -2880,7 +2888,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -3059,6 +3067,8 @@
         iconOutline: styleInputs['icon-outline-on'].checked ? colorOf(styleInputs['icon-outline']) : null,
         iconOutlineWidth: Math.max(0, Number(styleInputs['icon-outline-width'].value) || 0),
         iconShadow: styleInputs['icon-shadow-on'].checked ? colorOf(styleInputs['icon-shadow']) : null,
+        iconShadowGap: Number(styleInputs['icon-shadow-gap'].value) || 0,
+        iconShadowSize: Math.max(0, Number(styleInputs['icon-shadow-size'].value) || 0),
         iconShape: styleInputs['icon-shape'].value,
         iconCorners: styleInputs['icon-corners'].value,
         iconRadius: Math.max(0, Number(styleInputs['icon-radius'].value) || 0),
@@ -3094,6 +3104,8 @@
         showColor(styleInputs[`icon-${key}`], value ?? (key === 'background' ? '#ffffff' : '#000000'));
       }
       styleInputs['icon-outline-width'].value = values.iconOutlineWidth;
+      styleInputs['icon-shadow-gap'].value = values.iconShadowGap;
+      styleInputs['icon-shadow-size'].value = values.iconShadowSize;
       styleInputs['icon-shape'].value = values.iconShape;
       styleInputs['icon-corners'].value = values.iconCorners;
       styleInputs['icon-radius'].value = values.iconRadius;
@@ -3192,6 +3204,8 @@
       const iconShape = styleInputs['icon-shape'].value;
       styleInputs['icon-corners'].closest('.row').hidden = iconShape !== 'square';
       styleInputs['icon-radius'].closest('.row').hidden = iconShape === 'circle';
+      // A pin's shadow lies on the ground below it.
+      for (const key of ['icon-shadow-gap', 'icon-shadow-size']) styleInputs[key].closest('.row').hidden = iconShape !== 'pin' || !styleInputs['icon-shadow-on'].checked;
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -4036,14 +4050,15 @@
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, letterSpacing, zoomScale, caps, color, outline,
     // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength, pointerWidth, pointerEnd, iconBackground, iconOutline,
-    // iconOutlineWidth, iconShadow, iconShape, iconCorners, iconRadius, iconPadding }; lineHeight
+    // iconOutlineWidth, iconShadow, iconShadowGap, iconShadowSize (percent), iconShape, iconCorners,
+    // iconRadius, iconPadding }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
     // is how thick the outline looks. corners is 'round' or 'chamfer', and
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShape: 'square', iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconShape: 'square', iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -4494,12 +4509,11 @@
     function iconPaddingOf(style) {
       return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
     }
-    // An oval fading from color at its middle to nothing at its rim, just
-    // under a pin's point at (x, y), narrower than its head of radius r.
-    function paintGroundShadow(c, color, x, y, headRadius) {
-      const r = headRadius * 0.7;
+    // An oval reaching r either side of (x, y) and a quarter as tall,
+    // fading from color at its middle to nothing at its rim.
+    function paintGroundShadow(c, color, x, y, r) {
       c.save();
-      c.translate(x, y + headRadius * 0.15);
+      c.translate(x, y);
       c.scale(1, 0.25);
       const fade = c.createRadialGradient(0, 0, 0, 0, 0, r);
       fade.addColorStop(0, color);
@@ -4547,7 +4561,7 @@
       const pin = style.iconShape === 'pin';
       // A pin stands on the map, so its shadow is a soft oval on the ground
       // under its point rather than a drop shadow.
-      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH, r);
+      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH + style.iconShadowGap, r * 0.7 * (style.iconShadowSize / 100));
       c.shadowColor = pin ? 'transparent' : style.iconShadow ?? 'transparent';
       if (style.iconBackground) {
         c.fillStyle = style.iconBackground;

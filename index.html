@@ -1828,6 +1828,14 @@
           return;
         }
         setLabelTool(button.dataset.labelTool);
+        // Adding a label starts from the main panel, with nothing selected.
+        if (button.dataset.labelTool === 'add') {
+          selectedLabels = [];
+          selectedPins = [];
+          selectedList = null;
+          selectedShapes = [];
+          draw();
+        }
       });
     }
     const backgroundTools = document.getElementById('background-tools');

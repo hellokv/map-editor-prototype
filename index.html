@@ -4062,8 +4062,9 @@
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
+      { ...NEW_STYLE, id: 3, name: 'Pin', zoomScale: 29, iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
     ];
-    let nextStyleId = 3;
+    let nextStyleId = 4;
     // The style new labels are created in, picked in the style list.
     let currentStyleId = 1;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];

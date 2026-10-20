@@ -2850,6 +2850,13 @@
       };
       if (hovered) emphasise(hovered, 'rgba(255, 255, 255, 0.7)', true);
       for (const point of selectedPoints) emphasise(point, SELECTED_COLOR, false);
+      for (const path of paths) {
+        for (const point of path.points) {
+          if (!point.intersection) continue;
+          const big = selectedPoints.has(point) || point === hovered;
+          drawIntersectionIcon(path, point, (big ? SELECTED_DOT_RADIUS : DOT_RADIUS) * dotScale(point) * px, color);
+        }
+      }
 
       const ghost = target?.insert?.point ?? target?.split?.point ?? bendGhost();
       if (ghost) {
@@ -5892,6 +5899,47 @@
         draw();
       }
     });
+
+    // The call_split icon over an intersection dot, in black or white to
+    // stand out from the dot. The icon's stem points down from its fork, so
+    // it's turned to point along the line the others fan out evenly around,
+    // straight opposite it: the foot of a T, the stem of a Y. A tie goes to
+    // the line furthest from its nearest neighbour.
+    function drawIntersectionIcon(path, point, radius, dotColor) {
+      const font = '300 24px "Material Symbols Rounded"';
+      if (!document.fonts.check(font, 'call_split')) {
+        document.fonts.load(font, 'call_split').then(draw);
+        return;
+      }
+      // Each line's direction leaving the point, along its curve if bent.
+      const angles = [];
+      for (const [a, b, c1, c2] of path.segments) {
+        if (a !== point && b !== point) continue;
+        const toward = a === point ? c1 ?? b : c2 ?? a;
+        angles.push(Math.atan2(toward.y - point.y, toward.x - point.x));
+      }
+      const turn = (s, t) => Math.atan2(Math.sin(s - t), Math.cos(s - t));
+      let stem = Math.PI / 2;
+      let best = null;
+      for (const angle of angles) {
+        const others = angles.filter((other) => other !== angle);
+        const lopsided = Math.abs(others.reduce((sum, other) => sum + turn(other, angle + Math.PI), 0));
+        const nearest = Math.min(...others.map((other) => Math.abs(turn(angle, other))));
+        if (!best || lopsided < best.lopsided - 1e-6 || (Math.abs(lopsided - best.lopsided) <= 1e-6 && nearest > best.nearest)) {
+          stem = angle;
+          best = { lopsided, nearest };
+        }
+      }
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.rotate(stem - Math.PI / 2);
+      ctx.font = `300 ${radius * 1.6}px "Material Symbols Rounded"`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isLight(dotColor) ? '#000000' : '#ffffff';
+      ctx.fillText('call_split', 0, 0);
+      ctx.restore();
+    }
 
     function traceArea(area) {
       ctx.beginPath();

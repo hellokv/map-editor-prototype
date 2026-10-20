@@ -1059,6 +1059,14 @@
               <input id="style-icon-gap" type="number" min="0" max="200" step="1">
             </label>
             <label class="row">
+              Background shape
+              <select id="style-icon-shape">
+                <option value="square">Square</option>
+                <option value="circle">Circle</option>
+                <option value="pin">Pin</option>
+              </select>
+            </label>
+            <label class="row">
               <span><input id="style-icon-background-on" type="checkbox"> Background color</span>
               <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
@@ -1073,6 +1081,13 @@
             <label class="row">
               <span><input id="style-icon-shadow-on" type="checkbox"> Shadow</span>
               <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="row">
+              Corners
+              <select id="style-icon-corners">
+                <option value="round">Rounded</option>
+                <option value="chamfer">Chamfered</option>
+              </select>
             </label>
             <label class="row">
               Border radius
@@ -2865,7 +2880,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-radius', 'icon-padding'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
@@ -3044,6 +3059,8 @@
         iconOutline: styleInputs['icon-outline-on'].checked ? colorOf(styleInputs['icon-outline']) : null,
         iconOutlineWidth: Math.max(0, Number(styleInputs['icon-outline-width'].value) || 0),
         iconShadow: styleInputs['icon-shadow-on'].checked ? colorOf(styleInputs['icon-shadow']) : null,
+        iconShape: styleInputs['icon-shape'].value,
+        iconCorners: styleInputs['icon-corners'].value,
         iconRadius: Math.max(0, Number(styleInputs['icon-radius'].value) || 0),
         iconPadding: Math.max(0, Number(styleInputs['icon-padding'].value) || 0),
       };
@@ -3077,6 +3094,8 @@
         showColor(styleInputs[`icon-${key}`], value ?? (key === 'background' ? '#ffffff' : '#000000'));
       }
       styleInputs['icon-outline-width'].value = values.iconOutlineWidth;
+      styleInputs['icon-shape'].value = values.iconShape;
+      styleInputs['icon-corners'].value = values.iconCorners;
       styleInputs['icon-radius'].value = values.iconRadius;
       styleInputs['icon-padding'].value = values.iconPadding;
       styleInputs['shadow-on'].checked = !!values.shadow;
@@ -3162,6 +3181,8 @@
       styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
       for (const key of ['icon-background', 'icon-outline', 'icon-shadow']) styleInputs[key].parentElement.hidden = !styleInputs[`${key}-on`].checked;
       styleInputs['icon-outline-width'].closest('.row').hidden = !styleInputs['icon-outline-on'].checked;
+      // Only a square backdrop has corners to shape.
+      for (const key of ['icon-corners', 'icon-radius']) styleInputs[key].closest('.row').hidden = styleInputs['icon-shape'].value !== 'square';
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -4006,14 +4027,14 @@
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, letterSpacing, zoomScale, caps, color, outline,
     // outlineWidth, shadow, paddingY, paddingX, background, corners, radius, pointerLength, pointerWidth, pointerEnd, iconBackground, iconOutline,
-    // iconOutlineWidth, iconShadow, iconRadius, iconPadding }; lineHeight
+    // iconOutlineWidth, iconShadow, iconShape, iconCorners, iconRadius, iconPadding }; lineHeight
     // is how far apart a label's lines stack, as a multiple of size, and caps
     // shows the text in capitals without changing what was typed. outlineWidth
     // is how thick the outline looks. corners is 'round' or 'chamfer', and
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconRadius: 0, iconPadding: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShape: 'square', iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
     const labelStyles = [
       { id: 1, name: 'Default', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
@@ -4464,13 +4485,31 @@
     function iconPaddingOf(style) {
       return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
     }
-    // The style's box behind an icon centred on (x, y): the style's icon
-    // size plus its padding, whatever size the label draws its icon at. Its
+    // How far below the centre of a pin's round head its point reaches, in head radii.
+    const PIN_REACH = 1.7;
+    // The style's shape behind an icon centred on (x, y): a square, circle,
+    // or pin whose head is the style's icon size plus its padding, whatever
+    // size the label draws its icon at. A pin's point hangs below. Its
     // shadow takes the blur and drop set up for the label's.
     function paintIconBackdrop(c, style, x, y) {
       const size = style.iconSize + 2 * iconPaddingOf(style);
-      const box = { x: x - size / 2, y: y - size / 2, w: size, h: size };
-      const shape = boxPath(box, style.iconRadius, 'round');
+      const r = size / 2;
+      let box = { x: x - r, y: y - r, w: size, h: size };
+      let shape;
+      if (style.iconShape === 'circle') {
+        shape = new Path2D();
+        shape.arc(x, y, r, 0, Math.PI * 2);
+      } else if (style.iconShape === 'pin') {
+        // The sides run from the point to where they meet the head tangentially.
+        const spread = Math.acos(1 / PIN_REACH);
+        shape = new Path2D();
+        shape.moveTo(x, y + r * PIN_REACH);
+        shape.arc(x, y, r, Math.PI / 2 + spread, Math.PI / 2 - spread);
+        shape.closePath();
+        box = { ...box, h: r * (1 + PIN_REACH) };
+      } else {
+        shape = boxPath(box, style.iconRadius, style.iconCorners);
+      }
       c.save();
       c.shadowColor = style.iconShadow ?? 'transparent';
       if (style.iconBackground) {

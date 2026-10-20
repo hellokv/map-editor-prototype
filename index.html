@@ -3212,8 +3212,9 @@
       label.styleId = style.id;
       for (const key of STYLE_OVERRIDES) delete label[key];
     }
-    // Previews show the style's own values, not the label's overrides or offset.
-    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside'];
+    // Previews show the style's own values, not the label's overrides or
+    // offset, and leave out text the label hides.
+    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside', 'hideText'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     // A style's card: its radio, its name beside its preview, and its menu.
     // It sits on white, or on dark grey when the style's most prominent
@@ -3853,7 +3854,8 @@
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
-        document.getElementById('label-icon-side-field').hidden = !iconOn;
+        // With its text hidden a label is just its icon, so where the icon sits doesn't apply.
+        document.getElementById('label-icon-side-field').hidden = !iconOn || textHidden;
         for (const button of iconSideButtons) {
           button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
         }
@@ -3861,7 +3863,7 @@
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn || textHidden;
-        document.getElementById('label-icon-outside-field').hidden = !iconOn;
+        document.getElementById('label-icon-outside-field').hidden = !iconOn || textHidden;
         // The offset only applies to an icon outside the label.
         document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;
         labelIconOutsideToggle.checked = !!selectedLabel.iconOutside && !textHidden;

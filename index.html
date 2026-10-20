@@ -1191,6 +1191,11 @@
           <span class="slider"><input type="range" min="0" max="40" step="1" value="5" aria-label="Blur"><span class="percent-field px"><input id="preview-blur" type="number" min="0" step="1" value="5"></span></span>
         </label>
       </div>
+      <div class="group">
+        <button id="map-save" type="button">Save map file</button>
+        <button id="map-load" type="button">Load map file</button>
+        <input id="map-file" type="file" accept=".json,application/json" hidden>
+      </div>
     </div>
     <div id="path-panel">
       <div class="group">
@@ -6807,14 +6812,165 @@
     const START_IMAGE = 'demo-park.svg';
     if (START_IMAGE) setBackgroundImage(START_IMAGE, () => setMode('background'));
 
-    document.getElementById('image-delete').addEventListener('click', () => {
-      if (backgroundImage.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
+    function clearBackgroundImage() {
+      if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundImage = null;
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
       upload.hidden = false;
       draw();
+    }
+    document.getElementById('image-delete').addEventListener('click', clearBackgroundImage);
+
+    // A map file holds the whole map, images included as data URLs, so it
+    // can be loaded back into a later version of the editor. Shared points
+    // and segments are saved as indexes into their lists. Anything a file
+    // lacks, being older than the editor, loads as its default.
+    const MAP_FILE_VERSION = 1;
+    // Settings that live only in their fields, saved by id.
+    const SETTING_FIELDS = [
+      'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur',
+    ];
+    function imageData(image) {
+      return fetch(image.src)
+        .then((response) => response.blob())
+        .then((blob) => new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        }));
+    }
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = src;
+      });
+    }
+    async function mapFile() {
+      const pointIds = new Map();
+      const pointId = (point) => {
+        if (!pointIds.has(point)) pointIds.set(point, pointIds.size);
+        return pointIds.get(point);
+      };
+      const segmentIds = new Map();
+      const savedPaths = paths.map((path, i) => ({
+        points: path.points.map(pointId),
+        segments: path.segments.map((segment, j) => {
+          segmentIds.set(segment, [i, j]);
+          const [a, b, ...controls] = segment;
+          return [pointId(a), pointId(b), ...controls];
+        }),
+      }));
+      const sketchIds = new Map(sketch.points.map((point, i) => [point, i]));
+      const images = [];
+      const imageId = (image) => (images.includes(image) ? images.indexOf(image) : images.push(image) - 1);
+      const settings = {};
+      for (const id of SETTING_FIELDS) {
+        const input = document.getElementById(id);
+        settings[id] = input.type === 'checkbox' ? input.checked : input.type === 'color' ? colorOf(input) : input.value;
+      }
+      const file = {
+        version: MAP_FILE_VERSION,
+        points: [...pointIds.keys()],
+        paths: savedPaths,
+        fills: fills.map((fill) => ({ points: [...fill].filter((point) => pointIds.has(point)).map(pointId), visible: fill.visible, color: fill.color })),
+        groups: groups.map((group) => ({ ...group, segments: [...group.segments].map((segment) => segmentIds.get(segment)).filter(Boolean) })),
+        labels,
+        labelStyles,
+        nextStyleId,
+        lists,
+        shapes: shapes.map((shape) => (shape.image ? { ...shape, image: imageId(shape.image) } : shape)),
+        sketch: {
+          points: sketch.points,
+          segments: sketch.segments.map(([a, b, ...controls]) => [sketchIds.get(a), sketchIds.get(b), ...controls]),
+          fills: sketchFills.map((fill) => ({ points: [...fill].map((point) => sketchIds.get(point)), ...lookOf(fill) })),
+        },
+        layerZoom,
+        settings,
+      };
+      file.images = await Promise.all(images.map(imageData));
+      file.background = backgroundImage && await imageData(backgroundImage);
+      return file;
+    }
+    async function loadMapFile(file) {
+      const images = await Promise.all((file.images ?? []).map(loadImage));
+      const points = (file.points ?? []).map((point) => ({ ...point }));
+      paths.splice(0, paths.length, ...(file.paths ?? []).map((path) => ({
+        points: path.points.map((i) => points[i]),
+        segments: path.segments.map(([a, b, ...controls]) => [points[a], points[b], ...controls]),
+      })));
+      fills.splice(0, fills.length, ...(file.fills ?? []).map((fill) => Object.assign(new Set(fill.points.map((i) => points[i])), { visible: fill.visible, color: fill.color })));
+      groups.splice(0, groups.length, ...(file.groups ?? []).map((group) => ({ ...group, segments: new Set(group.segments.map(([i, j]) => paths[i].segments[j])) })));
+      labelStyles.splice(0, labelStyles.length, ...(file.labelStyles ?? []).map((style) => ({ ...NEW_STYLE, ...style })));
+      if (!labelStyles.length) labelStyles.push({ ...NEW_STYLE, id: 1, name: 'Default' });
+      nextStyleId = file.nextStyleId ?? Math.max(...labelStyles.map((style) => style.id)) + 1;
+      labels.splice(0, labels.length, ...(file.labels ?? []).map((label) => ({ pins: [], ...label })));
+      lists.splice(0, lists.length, ...(file.lists ?? []).map((list) => ({ ...newList(list), ...list })));
+      shapes.splice(0, shapes.length, ...(file.shapes ?? []).map((shape) => (shape.kind === 'image' ? { ...shape, image: images[shape.image] } : shape)));
+      const sketchPoints = file.sketch?.points ?? [];
+      sketch.points.splice(0, sketch.points.length, ...sketchPoints);
+      sketch.segments.splice(0, sketch.segments.length, ...(file.sketch?.segments ?? []).map(([a, b, ...controls]) => [sketchPoints[a], sketchPoints[b], ...controls]));
+      sketchFills.splice(0, sketchFills.length, ...(file.sketch?.fills ?? []).map(({ points: loop, ...look }) => newLoop(loop.map((i) => sketchPoints[i]), look)));
+      const zoomInputs = layerZoomGrid.querySelectorAll('input');
+      LAYERS.forEach((layer, i) => {
+        Object.assign(layerZoom[layer], file.layerZoom?.[layer]);
+        zoomInputs[2 * i].value = layerZoom[layer].min;
+        zoomInputs[2 * i + 1].value = layerZoom[layer].max;
+      });
+      // Every field is set before any applies, as some read others.
+      const fields = SETTING_FIELDS.map((id) => document.getElementById(id));
+      for (const input of fields) {
+        const value = file.settings?.[input.id];
+        const opacity = input.nextElementSibling?.classList.contains('opacity') ? input.nextElementSibling : null;
+        if (input.type === 'checkbox') input.checked = value ?? input.defaultChecked;
+        else if (value === undefined) {
+          input.value = input.defaultValue;
+          if (opacity) opacity.value = opacity.defaultValue;
+        } else if (opacity) showColor(input, value);
+        else input.value = value;
+      }
+      for (const input of fields) {
+        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('change'));
+      }
+      if (file.background) setBackgroundImage(file.background);
+      else clearBackgroundImage();
+      undoState = null;
+      selected = null;
+      selectedLabels = [];
+      selectedPins = [];
+      selectedList = null;
+      selectedShapes = [];
+      sketchSelected = null;
+      sketchActive = null;
+      closeStyleForm();
+      renderLabelStyles();
+      draw();
+    }
+    document.getElementById('map-save').addEventListener('click', async (e) => {
+      e.currentTarget.blur();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(await mapFile())], { type: 'application/json' }));
+      Object.assign(document.createElement('a'), { href: url, download: 'map.json' }).click();
+      URL.revokeObjectURL(url);
+    });
+    const mapFileInput = document.getElementById('map-file');
+    document.getElementById('map-load').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      mapFileInput.click();
+    });
+    mapFileInput.addEventListener('change', async () => {
+      const chosen = mapFileInput.files[0];
+      mapFileInput.value = '';
+      if (!chosen) return;
+      try {
+        await loadMapFile(JSON.parse(await chosen.text()));
+      } catch {
+        alert('That file could not be loaded as a map.');
+      }
     });
 
     renderLabelStyles();

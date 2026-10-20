@@ -933,6 +933,10 @@
         </div>
         <div class="group">
           <label class="row">
+            Scale factor
+            <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span></span>
+          </label>
+          <label class="row">
             X
             <input id="list-x" type="number" step="1">
           </label>
@@ -2485,8 +2489,17 @@
       x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text })),
       headingStyleId: labelStyles[0].id, itemStyleId: labelStyles[0].id,
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
-      outline: null, outlineWidth: 2, shadow: null,
+      outline: null, outlineWidth: 2, shadow: null, zoomScale: 100,
     });
+    // Like a label's, a list's zoomScale is the percent of the map's zoom it
+    // follows, here about the box's centre. Its rows are laid out at their
+    // styles' sizes, without the styles' own scale factors.
+    const listZoom = (list) => view.scale ** ((list.zoomScale ?? 100) / 100 - 1);
+    function listArea(list) {
+      const { box } = listLayout(list);
+      const k = listZoom(list);
+      return { x: box.x + (box.w * (1 - k)) / 2, y: box.y + (box.h * (1 - k)) / 2, w: box.w * k, h: box.h * k };
+    }
     // The list's box and its rows as labels, laid out in background pixels.
     function listLayout(list) {
       const rows = [
@@ -2506,23 +2519,27 @@
     }
     function listAt(p) {
       for (let i = lists.length - 1; i >= 0; i--) {
-        const { box } = listLayout(lists[i]);
+        const box = listArea(lists[i]);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return lists[i];
       }
       return null;
     }
-    // Expects drawLabels' text set-up. Lists scale with the map like the
-    // background, whatever their styles' scale factor.
+    // Expects drawLabels' text set-up.
     function drawLists() {
       const dpr = window.devicePixelRatio || 1;
       for (const list of lists) {
         const { box, rows } = listLayout(list);
+        const k = listZoom(list);
         const shape = boxPath(box, list.radius, list.corners);
+        ctx.save();
+        ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
+        ctx.scale(k, k);
+        ctx.translate(-(box.x + box.w / 2), -(box.y + box.h / 2));
         ctx.save();
         if (list.shadow) {
           ctx.shadowColor = list.shadow;
-          ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * dpr;
-          ctx.shadowOffsetY = SHAPE_SHADOW_DROP * view.scale * dpr;
+          ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * k * dpr;
+          ctx.shadowOffsetY = SHAPE_SHADOW_DROP * view.scale * k * dpr;
         }
         ctx.fillStyle = list.background;
         ctx.fill(shape);
@@ -2534,11 +2551,12 @@
           ctx.save();
           ctx.font = fontOf(style);
           ctx.shadowColor = style.shadow ?? 'transparent';
-          ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
-          ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
+          ctx.shadowBlur = style.size * 0.25 * view.scale * k * dpr;
+          ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
           paintLabel(ctx, row, style);
           ctx.restore();
         }
+        ctx.restore();
       }
     }
 
@@ -3682,6 +3700,21 @@
     // place is one of these names, absent when there's none.
     const PLACES = ['African Elephant', 'Giraffe', 'Lion', 'Red Panda', 'Gorilla', 'Zebra', 'Snow Leopard', 'Penguin', 'Komodo Dragon', 'Hippopotamus', 'Meerkat', 'Polar Bear', 'Orangutan', 'Flamingo', 'Sea Lion'];
 
+    // The slider beside a percent field. The two move each other; the field
+    // can go past 100%.
+    function linkSlider(field) {
+      const slider = field.closest('.slider').querySelector('input[type="range"]');
+      slider.addEventListener('input', () => {
+        field.value = slider.value;
+        field.dispatchEvent(new Event('input'));
+      });
+      slider.addEventListener('change', () => {
+        field.dispatchEvent(new Event('change'));
+        slider.blur();
+      });
+      field.addEventListener('input', () => { slider.value = field.value; });
+      return slider;
+    }
     // A placed image's fields, in label mode, where images are selected.
     const imageProperties = document.getElementById('image-properties');
     const soleImage = () => (selectedShapes.length === 1 && selectedShapes[0].kind === 'image' ? selectedShapes[0] : null);
@@ -3709,17 +3742,7 @@
       h: liveField('image-h', 'h', (input) => Math.max(1, Number(input.value) || 1), soleImage),
       rotation: liveField('image-rotation', 'rotation', (input) => ((Number(input.value) || 0) * Math.PI) / 180, soleImage),
     };
-    // The slider and the field move each other; the field can go past 100%.
-    const imageZoomSlider = imageInputs.zoomScale.closest('.slider').querySelector('input[type="range"]');
-    imageZoomSlider.addEventListener('input', () => {
-      imageInputs.zoomScale.value = imageZoomSlider.value;
-      imageInputs.zoomScale.dispatchEvent(new Event('input'));
-    });
-    imageZoomSlider.addEventListener('change', () => {
-      imageInputs.zoomScale.dispatchEvent(new Event('change'));
-      imageZoomSlider.blur();
-    });
-    imageInputs.zoomScale.addEventListener('input', () => { imageZoomSlider.value = imageInputs.zoomScale.value; });
+    const imageZoomSlider = linkSlider(imageInputs.zoomScale);
     // Change image swaps the picture, keeping its width and centre.
     let replacingImage = null;
     document.getElementById('image-change').addEventListener('click', (e) => {
@@ -3758,9 +3781,11 @@
       radius: liveField('list-radius', 'radius', listNumber(0, 0), theList),
       padding: liveField('list-padding', 'padding', listNumber(0, 0), theList),
       outlineWidth: liveField('list-outline-width', 'outlineWidth', listNumber(0, 0), theList),
+      zoomScale: liveField('list-zoom-scale', 'zoomScale', listNumber(0, 0), theList),
       x: liveField('list-x', 'x', listNumber(0), theList),
       y: liveField('list-y', 'y', listNumber(0), theList),
     };
+    const listZoomSlider = linkSlider(listInputs.zoomScale);
     const listOutline = document.getElementById('list-outline');
     const listShadow = document.getElementById('list-shadow');
     liveField('list-outline-on', 'outline', () => (listOutlineToggle.checked ? colorOf(listOutline) : null), theList);
@@ -3895,6 +3920,8 @@
       show(listInputs.radius, list.radius);
       show(listInputs.padding, list.padding);
       show(listInputs.outlineWidth, list.outlineWidth);
+      show(listInputs.zoomScale, list.zoomScale ?? 100);
+      show(listZoomSlider, list.zoomScale ?? 100);
       show(listInputs.x, Math.round(list.x));
       show(listInputs.y, Math.round(list.y));
       listOutlineToggle.checked = !!list.outline;
@@ -4873,7 +4900,7 @@
       const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
       if (typing && !editingLabel.label) boxed.push(typing);
       if (selectedList && !labelTools.hidden) {
-        const { box } = listLayout(selectedList);
+        const box = listArea(selectedList);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
       for (const label of boxed) {

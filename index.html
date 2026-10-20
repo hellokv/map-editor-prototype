@@ -3020,7 +3020,7 @@
     function renderLabelStyles() {
       styleListKey = currentStyleListKey();
       // Before the list is first laid out it has no width to fit previews to.
-      const room = (labelStyleList.clientWidth || 280) - 142;
+      const room = (labelStyleList.clientWidth || 280) - 170;
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
         const row = document.createElement('label');
         row.className = 'row';
@@ -3035,7 +3035,7 @@
           updateCursor();
           pick.blur();
         });
-        return styleCard(row, style, pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0 }));
+        return styleCard(row, style, pick, stylePreview(style, style.name, room), styleMenu(style, { deletable: i > 0, editButton: true }));
       }));
     }
 

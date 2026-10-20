@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Map Editor Prototype</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,300,0,0">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=National+Park:wght@400;600;700&display=swap">
   <style>
     /* Without this, any display rule on an element overrides its hidden attribute. */
     [hidden] {
@@ -501,19 +502,6 @@
       right: 12px;
       background: rgba(255, 255, 255, 0.9);
     }
-    #label-pointer {
-      display: grid;
-      grid-template-columns: repeat(3, max-content);
-      gap: 2px;
-    }
-    #label-pointer button {
-      display: flex;
-      padding: 2px;
-    }
-    #panel #add-pin {
-      display: flex;
-      padding: 2px;
-    }
     .toggle-group {
       display: flex;
       gap: 2px;
@@ -532,19 +520,6 @@
       padding: 3px 8px;
     }
     #panel .layer-toggles button[aria-pressed="true"] {
-      background: #ddd;
-    }
-    #label-icon-side {
-      display: flex;
-      gap: 2px;
-    }
-    #label-icon-side button {
-      display: flex;
-      padding: 2px;
-    }
-    #label-pointer button[aria-pressed="true"],
-    #label-icon-side button[aria-pressed="true"],
-    #panel #add-pin[aria-pressed="true"] {
       background: #ddd;
     }
     #image-upload {
@@ -655,6 +630,273 @@
       white-space: nowrap;
       font-size: 11px;
       color: #666;
+    }
+    /* The label panel's look: white fields on warm grey, in National Park. */
+    #panel.label-look {
+      --label-ink: #000;
+      --label-ground: #f4f1ee;
+      --label-rule: #dcd8d3;
+      padding: 0;
+      background: var(--label-ground);
+      color: var(--label-ink);
+      font: 15px 'National Park', system-ui, sans-serif;
+    }
+    #panel.label-look #panel-header {
+      min-height: 48px;
+      margin: 0;
+      padding: 0 12px 0 16px;
+      gap: 8px;
+      border-bottom: 1px solid var(--label-ink);
+    }
+    #panel.label-look #panel-title {
+      flex: 1;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    #panel.label-look #panel-header button {
+      display: flex;
+      padding: 2px;
+      border: none;
+      background: none;
+      color: var(--label-ink);
+    }
+    #panel.label-look #panel-header button:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    #panel.label-look #panel-header #add-pin[aria-pressed="true"] {
+      background: var(--label-ink);
+      color: #fff;
+    }
+    #panel.label-look #panel-close {
+      margin-left: 0;
+    }
+    .label-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+    }
+    .label-section + .label-section {
+      border-top: 1px solid var(--label-rule);
+    }
+    .label-section:not(:has(> :not([hidden]))) {
+      display: none;
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 32px;
+      padding: 0 12px;
+      background: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .field-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    #panel .field input[type="text"],
+    #panel .field input[type="number"],
+    #panel .field select,
+    #panel .field textarea {
+      min-width: 0;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background-color: transparent;
+      font: 15px 'National Park', system-ui, sans-serif;
+      text-align: right;
+      outline: none;
+    }
+    #panel .field select {
+      flex: 1;
+      width: auto;
+      padding-right: 18px;
+      background-position: right 0 center;
+      text-align-last: right;
+    }
+    #panel .field textarea {
+      flex: 1;
+      width: auto;
+      padding: 7px 0 5px;
+      resize: none;
+    }
+    #panel .field-pair input[type="number"] {
+      flex: 1;
+      width: auto;
+    }
+    #panel .field .slider input[type="number"],
+    #panel .field .percent-field input {
+      width: 44px;
+    }
+    #panel .field .percent-field input {
+      padding-right: 14px;
+    }
+    .field .percent-field::after {
+      right: 0;
+    }
+    .field .icon-picker {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    #panel .field .icon-picker input {
+      field-sizing: content;
+      min-width: 40px;
+      max-width: 150px;
+    }
+    .field .icon-options {
+      top: 100%;
+      text-align: left;
+      font-weight: 400;
+    }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    #panel .section-heading .chevron {
+      display: flex;
+      padding: 0;
+      border: none;
+      background: none;
+    }
+    .section-label {
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    /* A checkbox drawn as a switch: an outlined pill, its knob at the right when on. */
+    input.switch {
+      flex: none;
+      position: relative;
+      width: 30px;
+      height: 16px;
+      margin: 0;
+      border: 2px solid #9a9a9a;
+      border-radius: 8px;
+      appearance: none;
+      cursor: pointer;
+    }
+    input.switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9a9a9a;
+    }
+    input.switch:checked {
+      border-color: var(--label-ink, #000);
+    }
+    input.switch:checked::after {
+      left: auto;
+      right: 2px;
+      background: var(--label-ink, #000);
+    }
+    #label-icon-side {
+      display: flex;
+      gap: 4px;
+    }
+    #panel #label-icon-side button {
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+    }
+    #panel #label-icon-side button[aria-pressed="true"] {
+      background: var(--label-ink);
+      color: #fff;
+    }
+    .label-columns {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 24px;
+    }
+    #label-pointer {
+      display: grid;
+      grid-template-columns: repeat(3, 32px);
+      grid-auto-rows: 32px;
+      gap: 2px;
+    }
+    #panel #label-pointer button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: #fff;
+    }
+    #panel #label-pointer button .material-symbols-rounded {
+      font-size: 18px;
+    }
+    #panel #label-pointer button[aria-pressed="true"] {
+      background: var(--label-ink);
+      color: #fff;
+    }
+    #label-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    /* Each level is a row with a switch, drawn on the toggle button itself. */
+    #panel #label-layers button {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--label-ink);
+      font: inherit;
+      text-align: left;
+    }
+    #panel #label-layers button::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      width: 26px;
+      height: 12px;
+      border: 2px solid #9a9a9a;
+      border-radius: 8px;
+      background: radial-gradient(circle 4px at 8px 50%, #9a9a9a 99%, transparent);
+    }
+    #panel #label-layers button[aria-pressed="true"]::after {
+      border-color: var(--label-ink);
+      background: radial-gradient(circle 4px at 18px 50%, var(--label-ink) 99%, transparent);
+    }
+    #panel.label-look .style-card {
+      margin-top: 0;
+      min-height: 32px;
+      padding: 0 4px 0 12px;
+    }
+    #panel.label-look .style-option-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--label-ink);
+    }
+    #panel.label-look .label-section > button {
+      align-self: flex-start;
+      min-height: 32px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
     }
   </style>
 </head>
@@ -770,97 +1012,100 @@
     <div id="panel-header">
       <button id="panel-back" type="button" aria-label="Back" hidden><span class="material-symbols-rounded">arrow_back</span></button>
       <h2 id="panel-title"></h2>
+      <button id="add-pin" type="button" aria-label="Add location" aria-pressed="false" hidden>
+        <span class="material-symbols-rounded">add_location</span>
+      </button>
       <button id="panel-close" type="button" aria-label="Close panel"><span class="material-symbols-rounded">right_panel_close</span></button>
     </div>
     <div id="labels-panel" hidden>
       <div id="label-properties" hidden>
-        <div id="label-single-fields" class="group">
-          <label class="row">
+        <div class="label-section label-single">
+          <label class="field">
             Place
             <select id="label-place"></select>
           </label>
-          <label class="row">
-            Label
+          <label class="field">
+            Text
             <textarea id="label-text" rows="1"></textarea>
           </label>
-          <label id="label-hide-text-field" class="row">
-            <span><input id="label-hide-text" type="checkbox"> Hide text</span>
+          <div class="field-pair">
+            <label class="field">
+              X
+              <input id="label-x" type="number" min="0" max="1500" step="1">
+            </label>
+            <label class="field">
+              Y
+              <input id="label-y" type="number" min="0" max="1500" step="1">
+            </label>
+          </div>
+        </div>
+        <div id="label-style-picker" class="label-section"></div>
+        <div class="label-section label-single">
+          <label class="section-heading">
+            Icon
+            <input id="label-icon-on" class="switch" type="checkbox">
           </label>
-          <label class="row">
-            X
-            <input id="label-x" type="number" min="0" max="1500" step="1">
+          <div id="label-icon-field" class="field">
+            Image
+            <span class="icon-picker">
+              <span id="label-icon-preview" class="material-symbols-rounded"></span>
+              <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
+              <div id="icon-options" class="icon-options" hidden></div>
+            </span>
+          </div>
+          <label id="label-hide-text-field" class="field">
+            Hide text
+            <input id="label-hide-text" class="switch" type="checkbox">
           </label>
-          <label class="row">
-            Y
-            <input id="label-y" type="number" min="0" max="1500" step="1">
+          <label id="label-icon-outside-field" class="field">
+            Place outside Label
+            <input id="label-icon-outside" class="switch" type="checkbox">
           </label>
-          <div class="row">
-            Pointer
+          <div id="label-icon-side-field" class="field">
+            Alignment
+            <div id="label-icon-side">
+              <button type="button" data-icon-side="left" aria-label="Icon left of text"><span class="material-symbols-rounded">keyboard_tab_rtl</span></button>
+              <button type="button" data-icon-side="right" aria-label="Icon right of text"><span class="material-symbols-rounded">keyboard_tab</span></button>
+              <button type="button" data-icon-side="bottom" aria-label="Icon below text"><span class="material-symbols-rounded">vertical_align_bottom</span></button>
+              <button type="button" data-icon-side="top" aria-label="Icon above text"><span class="material-symbols-rounded">vertical_align_top</span></button>
+            </div>
+          </div>
+          <label id="label-icon-offset-field" class="field">
+            Icon offset
+            <span class="slider"><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span></span>
+          </label>
+          <label id="label-icon-size-field" class="field">
+            Icon size
+            <span class="slider"><input type="range" min="4" max="120" step="1" aria-label="Icon size"><input id="label-icon-size" type="number" min="4" max="200" step="1"></span>
+          </label>
+          <label id="label-icon-gap-field" class="field">
+            Icon gap
+            <span class="slider"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"><input id="label-icon-gap" type="number" min="0" max="200" step="1"></span>
+          </label>
+        </div>
+        <div class="label-section label-columns">
+          <div class="label-single">
+            <div class="section-label">Pointer</div>
             <div id="label-pointer">
               <button type="button" data-pointer="nw" aria-label="Top left"><span class="material-symbols-rounded">north_west</span></button>
               <button type="button" data-pointer="n" aria-label="Top"><span class="material-symbols-rounded">north</span></button>
               <button type="button" data-pointer="ne" aria-label="Top right"><span class="material-symbols-rounded">north_east</span></button>
               <button type="button" data-pointer="w" aria-label="Left"><span class="material-symbols-rounded">west</span></button>
-              <button type="button" data-pointer="" aria-label="No pointer"><span class="material-symbols-rounded">block</span></button>
+              <button type="button" data-pointer="" aria-label="No pointer"></button>
               <button type="button" data-pointer="e" aria-label="Right"><span class="material-symbols-rounded">east</span></button>
               <button type="button" data-pointer="sw" aria-label="Bottom left"><span class="material-symbols-rounded">south_west</span></button>
               <button type="button" data-pointer="s" aria-label="Bottom"><span class="material-symbols-rounded">south</span></button>
               <button type="button" data-pointer="se" aria-label="Bottom right"><span class="material-symbols-rounded">south_east</span></button>
             </div>
           </div>
-          <div class="row">
-            Pins
-            <button id="add-pin" type="button" aria-label="Add location" aria-pressed="false">
-              <span class="material-symbols-rounded">add_location</span>
-            </button>
-          </div>
-          <label class="row">
-            <span><input id="label-icon-on" type="checkbox"> Icon</span>
-          </label>
-          <div id="label-icon-field" class="row">
-            <span id="label-icon-preview" class="material-symbols-rounded"></span>
-            <span class="icon-picker">
-              <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
-              <div id="icon-options" class="icon-options" hidden></div>
-            </span>
-          </div>
-          <div id="label-icon-side-field" class="row">
-            Icon position
-            <div id="label-icon-side">
-              <button type="button" data-icon-side="left" aria-label="Icon left of text"><span class="material-symbols-rounded">align_horizontal_left</span></button>
-              <button type="button" data-icon-side="right" aria-label="Icon right of text"><span class="material-symbols-rounded">align_horizontal_right</span></button>
-              <button type="button" data-icon-side="top" aria-label="Icon above text"><span class="material-symbols-rounded">align_vertical_top</span></button>
-              <button type="button" data-icon-side="bottom" aria-label="Icon below text"><span class="material-symbols-rounded">align_vertical_bottom</span></button>
-            </div>
-          </div>
-          <label id="label-icon-outside-field" class="row">
-            <span><input id="label-icon-outside" type="checkbox"> Outside label</span>
-          </label>
-          <label id="label-icon-offset-field" class="row">
-            Icon offset
-            <span class="slider"><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span></span>
-          </label>
-          <label id="label-icon-size-field" class="row">
-            Icon size
-            <span class="slider"><input type="range" min="4" max="120" step="1" aria-label="Icon size"><input id="label-icon-size" type="number" min="4" max="200" step="1"></span>
-          </label>
-          <label id="label-icon-gap-field" class="row">
-            Icon gap
-            <span class="slider"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"><input id="label-icon-gap" type="number" min="0" max="200" step="1"></span>
-          </label>
-        </div>
-        <div class="group">
-          <div class="row">
-            Layers
-            <div id="label-layers" class="layer-toggles">
+          <div>
+            <div class="section-label">Level</div>
+            <div id="label-layers">
               <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
               <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
               <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
             </div>
           </div>
-        </div>
-        <div id="label-style-picker" class="group">
-          Style
         </div>
       </div>
       <div id="list-properties" hidden>
@@ -3406,8 +3651,21 @@
     }
     // A style picker: the style in use alone, and Change style to open the
     // whole list to pick from, that style first. Mixed styles show only the
-    // button. adopt gives a picked style to whatever the picker is for.
-    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt }) {
+    // button. adopt gives a picked style to whatever the picker is for. With
+    // chevron, a chevron beside the title opens and closes the list instead.
+    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false }) {
+      if (chevron) {
+        const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
+        const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });
+        toggle.setAttribute('aria-label', open ? 'Close styles' : 'Change style');
+        toggle.innerHTML = `<span class="material-symbols-rounded">${open ? 'expand_less' : 'expand_more'}</span>`;
+        toggle.addEventListener('click', () => {
+          setOpen(!open);
+          draw();
+        });
+        heading.append(toggle);
+        title = heading;
+      }
       // The picker has no width yet the first time, while it's empty.
       // Less room than the main list: each card here also has an edit icon.
       const room = (container.clientWidth || 284) - 170;
@@ -3419,7 +3677,7 @@
           setOpen(true);
           draw();
         });
-        container.replaceChildren(title, ...(style ? [card(document.createElement('div'), style, '')] : []), change);
+        container.replaceChildren(title, ...(style ? [card(document.createElement('div'), style, '')] : []), ...(chevron ? [] : [change]));
         return;
       }
       const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];
@@ -4056,6 +4314,9 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
+      // The label panel has its own look, header included.
+      document.getElementById('panel').classList.toggle('label-look', anyLabels);
+      document.querySelector('#panel-back .material-symbols-rounded').textContent = anyLabels ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
       showImagePanel();
@@ -4083,11 +4344,13 @@
             open: stylePickerOpen,
             setOpen: (open) => { stylePickerOpen = open; },
             adopt: adoptForLabels,
+            chevron: true,
           });
         }
       }
       const selectedLabel = soleLabel();
-      document.getElementById('label-single-fields').hidden = !selectedLabel;
+      for (const part of document.querySelectorAll('.label-single')) part.hidden = !selectedLabel;
+      addPinButton.hidden = !selectedLabel;
       if (selectedLabel) {
         // Leave a field alone while it's being typed in.
         const show = (input, value) => { if (document.activeElement !== input) input.value = value; };

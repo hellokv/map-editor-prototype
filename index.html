@@ -3181,8 +3181,10 @@
       styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
       for (const key of ['icon-background', 'icon-outline', 'icon-shadow']) styleInputs[key].parentElement.hidden = !styleInputs[`${key}-on`].checked;
       styleInputs['icon-outline-width'].closest('.row').hidden = !styleInputs['icon-outline-on'].checked;
-      // Only a square backdrop has corners to shape.
-      for (const key of ['icon-corners', 'icon-radius']) styleInputs[key].closest('.row').hidden = styleInputs['icon-shape'].value !== 'square';
+      // Only a square backdrop has corners to shape; a pin's radius rounds its point.
+      const iconShape = styleInputs['icon-shape'].value;
+      styleInputs['icon-corners'].closest('.row').hidden = iconShape !== 'square';
+      styleInputs['icon-radius'].closest('.row').hidden = iconShape === 'circle';
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -4500,11 +4502,18 @@
         shape = new Path2D();
         shape.arc(x, y, r, 0, Math.PI * 2);
       } else if (style.iconShape === 'pin') {
-        // The sides run from the point to where they meet the head tangentially.
+        // The sides run from the point to where they meet the head
+        // tangentially; the radius rounds the point, no further than the
+        // sides are long.
         const spread = Math.acos(1 / PIN_REACH);
+        const tip = { x, y: y + r * PIN_REACH };
+        const side = r * Math.sqrt(PIN_REACH ** 2 - 1);
+        const half = Math.asin(1 / PIN_REACH);
+        const left = { x: x + r * Math.cos(Math.PI / 2 + spread), y: y + r * Math.sin(Math.PI / 2 + spread) };
         shape = new Path2D();
-        shape.moveTo(x, y + r * PIN_REACH);
+        shape.moveTo(left.x, left.y);
         shape.arc(x, y, r, Math.PI / 2 + spread, Math.PI / 2 - spread);
+        shape.arcTo(tip.x, tip.y, left.x, left.y, Math.min(style.iconRadius, side * Math.tan(half)));
         shape.closePath();
         box = { ...box, h: r * (1 + PIN_REACH) };
       } else {

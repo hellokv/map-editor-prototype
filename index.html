@@ -4309,15 +4309,25 @@
     // of the map's zoom: at 100 it scales with the map, at 0 it keeps one
     // on-screen size.
     const labelZoom = (label) => view.scale ** (styleOf(label).zoomScale / 100 - 1);
+    // The point a label grows and shrinks about: its spot, except that a pin
+    // standing alone, its text hidden, keeps its point fixed on the map.
+    function zoomAnchor(label) {
+      const style = styleOf(label);
+      if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
+      const { iconX, iconY } = labelLayout(label);
+      return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
+    }
     function zoomedRect(label, r) {
       const k = labelZoom(label);
-      return { x: label.x + (r.x - label.x) * k, y: label.y + (r.y - label.y) * k, w: r.w * k, h: r.h * k };
+      const a = zoomAnchor(label);
+      return { x: a.x + (r.x - a.x) * k, y: a.y + (r.y - a.y) * k, w: r.w * k, h: r.h * k };
     }
     function zoomAboutLabel(c, label) {
       const k = labelZoom(label);
-      c.translate(label.x, label.y);
+      const a = zoomAnchor(label);
+      c.translate(a.x, a.y);
       c.scale(k, k);
-      c.translate(-label.x, -label.y);
+      c.translate(-a.x, -a.y);
     }
     // What can be clicked and selected on the map.
     const labelArea = (label) => zoomedRect(label, labelBounds(label));

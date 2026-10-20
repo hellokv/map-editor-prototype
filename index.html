@@ -6951,9 +6951,22 @@
       renderLabelStyles();
       draw();
     }
+    // Inside claude.ai the page is sandboxed and can only save through the
+    // viewer's downloads capability; opened anywhere else, that's null.
+    const downloadsReady = window.claude?.use('downloads') ?? Promise.resolve(null);
     document.getElementById('map-save').addEventListener('click', async (e) => {
       e.currentTarget.blur();
-      const url = URL.createObjectURL(new Blob([JSON.stringify(await mapFile())], { type: 'application/json' }));
+      const data = new Blob([JSON.stringify(await mapFile())], { type: 'application/json' });
+      const downloads = await downloadsReady;
+      if (downloads) {
+        try {
+          await downloads.save({ filename: 'map.json', data });
+        } catch (error) {
+          if (error?.code !== 'declined') alert('The map file could not be saved here.');
+        }
+        return;
+      }
+      const url = URL.createObjectURL(data);
       Object.assign(document.createElement('a'), { href: url, download: 'map.json' }).click();
       URL.revokeObjectURL(url);
     });

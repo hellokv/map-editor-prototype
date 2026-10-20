@@ -972,6 +972,11 @@
     #panel.label-look .label-section > button.new-style {
       margin: 0;
     }
+    #label-style-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     #panel.label-look .style-card {
       margin-top: 0;
       min-height: 40px;
@@ -1345,7 +1350,7 @@
         </div>
       </div>
       <div id="label-styles">
-        <div id="label-style-browser" class="group">
+        <div id="label-style-browser" class="label-section">
           <div id="label-style-list"></div>
           <button id="new-label-style" class="new-style" type="button">New Label Style<span class="material-symbols-rounded">add</span></button>
         </div>
@@ -4429,8 +4434,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // The label panel and the label style form have their own look, header included.
-      const labelLook = anyLabels || (!!editingStyle && !labelTools.hidden);
+      // Labels mode has its own look, header included, but not yet for lists and images.
+      const labelLook = !labelTools.hidden && !inPreview() && !selectedList && !selectedShapes.length;
       document.getElementById('panel').classList.toggle('label-look', labelLook);
       document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();

@@ -671,6 +671,9 @@
         <button type="button" data-label-tool="add" aria-label="New label" aria-pressed="false">
           <span class="material-symbols-rounded">new_label</span>
         </button>
+        <button type="button" data-label-tool="list" aria-label="List" aria-pressed="false">
+          <span class="material-symbols-rounded">list_alt_add</span>
+        </button>
       </div>
       <div id="background-tools" hidden>
         <hr>
@@ -830,6 +833,69 @@
         </div>
         <div id="label-style-picker" class="group">
           Style
+        </div>
+      </div>
+      <div id="list-properties" hidden>
+        <div class="group">
+          <label class="row">
+            Heading
+            <input id="list-heading" type="text">
+          </label>
+          <label class="row">
+            Items
+            <textarea id="list-items" rows="4"></textarea>
+          </label>
+          <label class="row">
+            Heading style
+            <select id="list-heading-style"></select>
+          </label>
+          <label class="row">
+            Item style
+            <select id="list-item-style"></select>
+          </label>
+        </div>
+        <div class="group">
+          <label class="row">
+            Background color
+            <span class="color-field"><input id="list-background" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          </label>
+          <label class="row">
+            Corners
+            <select id="list-corners">
+              <option value="round">Rounded</option>
+              <option value="chamfer">Chamfered</option>
+            </select>
+          </label>
+          <label class="row">
+            Border radius
+            <input id="list-radius" type="number" min="0" step="1">
+          </label>
+          <label class="row">
+            Padding
+            <input id="list-padding" type="number" min="0" step="1">
+          </label>
+          <label class="row">
+            <span><input id="list-outline-on" type="checkbox"> Outline</span>
+            <span class="color-field"><input id="list-outline" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          </label>
+          <label id="list-outline-width-field" class="row">
+            Outline weight
+            <input id="list-outline-width" type="number" min="0" step="0.5">
+          </label>
+          <label class="row">
+            <span><input id="list-shadow-on" type="checkbox"> Shadow</span>
+            <span class="color-field"><input id="list-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
+          </label>
+        </div>
+        <div class="group">
+          <label class="row">
+            X
+            <input id="list-x" type="number" step="1">
+          </label>
+          <label class="row">
+            Y
+            <input id="list-y" type="number" step="1">
+          </label>
         </div>
       </div>
       <div id="label-styles">
@@ -1599,6 +1665,7 @@
         setLabelTool('select');
         finishLabel(false);
         selectedLabels = [];
+        selectedList = null;
       }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
@@ -2123,6 +2190,7 @@
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
+        lists: lists.map((list) => ({ ...list, items: [...list.items] })),
         shapes: shapes.map((shape) => ({ ...shape })),
         ...copySketch(),
         selection: copiedSelection,
@@ -2135,12 +2203,14 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, lists: restoredLists, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
       labels.splice(0, labels.length, ...restoredLabels);
       labelStyles.splice(0, labelStyles.length, ...restoredStyles);
+      lists.splice(0, lists.length, ...restoredLists);
+      selectedList = null;
       renderLabelStyles();
       closeStyleForm();
       selectedLabels = [];
@@ -2231,6 +2301,73 @@
       }
     });
 
+    // Lists, such as a map key: a heading and items, each drawn as a label in
+    // its style, stacked down the left of a box whose top left is (x, y).
+    // background, outline and shadow are colors, the last two null when off.
+    const lists = [];
+    let selectedList = null;
+    const LIST_ROW_GAP = 6;
+    const newList = (p) => ({
+      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'],
+      headingStyleId: labelStyles[0].id, itemStyleId: labelStyles[0].id,
+      background: '#ffffff', corners: 'round', radius: 8, padding: 16,
+      outline: null, outlineWidth: 2, shadow: null,
+    });
+    // The list's box and its rows as labels, laid out in background pixels.
+    function listLayout(list) {
+      const rows = [
+        { text: list.heading, styleId: list.headingStyleId },
+        ...list.items.map((text) => ({ text, styleId: list.itemStyleId })),
+      ].filter((row) => row.text.trim());
+      const sizes = rows.map((row) => labelBox({ ...row, x: 0, y: 0 }));
+      const w = Math.max(0, ...sizes.map((size) => size.w)) + 2 * list.padding;
+      const h = sizes.reduce((sum, size) => sum + size.h, 0) + LIST_ROW_GAP * Math.max(0, rows.length - 1) + 2 * list.padding;
+      let top = list.y + list.padding;
+      const placed = rows.map((row, i) => {
+        const label = { ...row, x: list.x + list.padding + sizes[i].w / 2, y: top + sizes[i].h / 2 };
+        top += sizes[i].h + LIST_ROW_GAP;
+        return label;
+      });
+      return { box: { x: list.x, y: list.y, w, h }, rows: placed };
+    }
+    function listAt(p) {
+      for (let i = lists.length - 1; i >= 0; i--) {
+        const { box } = listLayout(lists[i]);
+        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return lists[i];
+      }
+      return null;
+    }
+    // Expects drawLabels' text set-up. Lists scale with the map like the
+    // background, whatever their styles' scale factor.
+    function drawLists() {
+      const dpr = window.devicePixelRatio || 1;
+      for (const list of lists) {
+        const { box, rows } = listLayout(list);
+        const shape = boxPath(box, list.radius, list.corners);
+        ctx.save();
+        if (list.shadow) {
+          ctx.shadowColor = list.shadow;
+          ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * dpr;
+          ctx.shadowOffsetY = SHAPE_SHADOW_DROP * view.scale * dpr;
+        }
+        ctx.fillStyle = list.background;
+        ctx.fill(shape);
+        ctx.restore();
+        if (list.outline) strokeOutside(ctx, shape, box, list.outline, list.outlineWidth);
+        for (const row of rows) {
+          const style = styleOf(row);
+          loadFont(style.font, style.weight);
+          ctx.save();
+          ctx.font = fontOf(style);
+          ctx.shadowColor = style.shadow ?? 'transparent';
+          ctx.shadowBlur = style.size * 0.25 * view.scale * dpr;
+          ctx.shadowOffsetY = style.size * 0.08 * view.scale * dpr;
+          paintLabel(ctx, row, style);
+          ctx.restore();
+        }
+      }
+    }
+
     // The map's bounding box, in background pixels from its top left. The
     // image fits inside it, inset by padding; its outline (null when off)
     // sits wholly outside its edge. corners is 'round' or 'chamfer', reaching
@@ -2239,24 +2376,39 @@
       w: 1500, h: 1500, padding: 0, outline: null, outlineWidth: 1, corners: 'round', radius: 0,
       shadow: null, shadowX: 0, shadowY: 8, shadowBlur: 24,
     };
-    function boardShape() {
+    const boardShape = () => boxPath({ x: 0, y: 0, w: board.w, h: board.h }, board.radius, board.corners);
+    // A box as a path, its corners rounded, or cut off when corners is
+    // 'chamfer', reaching radius along each side.
+    function boxPath({ x, y, w, h }, radius, corners) {
       const shape = new Path2D();
-      const { w, h } = board;
-      const r = Math.min(board.radius, w / 2, h / 2);
-      if (board.corners === 'chamfer') {
-        shape.moveTo(r, 0);
-        shape.lineTo(w - r, 0);
-        shape.lineTo(w, r);
-        shape.lineTo(w, h - r);
-        shape.lineTo(w - r, h);
-        shape.lineTo(r, h);
-        shape.lineTo(0, h - r);
-        shape.lineTo(0, r);
+      const r = Math.min(radius, w / 2, h / 2);
+      if (corners === 'chamfer') {
+        shape.moveTo(x + r, y);
+        shape.lineTo(x + w - r, y);
+        shape.lineTo(x + w, y + r);
+        shape.lineTo(x + w, y + h - r);
+        shape.lineTo(x + w - r, y + h);
+        shape.lineTo(x + r, y + h);
+        shape.lineTo(x, y + h - r);
+        shape.lineTo(x, y + r);
         shape.closePath();
       } else {
-        shape.roundRect(0, 0, w, h, r);
+        shape.roundRect(x, y, w, h, r);
       }
       return shape;
+    }
+    // An outline wholly outside a box's shape: a stroke twice as wide,
+    // clipped to everything but the shape.
+    function strokeOutside(c, shape, box, color, width) {
+      const outside = new Path2D();
+      outside.rect(box.x - 2 * width, box.y - 2 * width, box.w + 4 * width, box.h + 4 * width);
+      outside.addPath(shape);
+      c.save();
+      c.clip(outside, 'evenodd');
+      c.strokeStyle = color;
+      c.lineWidth = width * 2;
+      c.stroke(shape);
+      c.restore();
     }
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
@@ -2414,19 +2566,7 @@
       }
       drawShapes();
       drawSketchFills();
-      if (board.outline) {
-        // A stroke twice as wide, clipped to everything but the box.
-        const width = board.outlineWidth;
-        const outside = new Path2D();
-        outside.rect(-2 * width, -2 * width, board.w + 4 * width, board.h + 4 * width);
-        outside.addPath(boardShape());
-        ctx.save();
-        ctx.clip(outside, 'evenodd');
-        ctx.strokeStyle = board.outline;
-        ctx.lineWidth = width * 2;
-        ctx.stroke(boardShape());
-        ctx.restore();
-      }
+      if (board.outline) strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
       if (pathTools.hidden) {
         for (const area of computeAreas()) {
           const fill = fillOf(area.points);
@@ -3237,7 +3377,7 @@
     // Whether anything is selected in the mode on show.
     function hasSelection() {
       if (inPreview()) return false;
-      if (!labelTools.hidden) return selectedLabels.length > 0 || selectedPins.length > 0;
+      if (!labelTools.hidden) return selectedLabels.length > 0 || selectedPins.length > 0 || !!selectedList;
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
     }
@@ -3250,6 +3390,7 @@
       }
       selectedLabels = [];
       selectedPins = [];
+      selectedList = null;
       selectedShapes = [];
       sketchSelected = null;
       selected = null;
@@ -3257,6 +3398,64 @@
       updateCursor();
     });
     let hadSelection = false;
+
+    // The selected list's fields. Each applies as it changes and is one undo step.
+    const listProperties = document.getElementById('list-properties');
+    const theList = () => selectedList;
+    const listNumber = (fallback, min = -Infinity) => (input) => Math.max(min, Number(input.value) || fallback);
+    const listOutlineToggle = document.getElementById('list-outline-on');
+    const listShadowToggle = document.getElementById('list-shadow-on');
+    const listInputs = {
+      heading: liveField('list-heading', 'heading', (input) => input.value, theList),
+      items: liveField('list-items', 'items', (input) => input.value.split('\n'), theList),
+      headingStyleId: liveField('list-heading-style', 'headingStyleId', (input) => Number(input.value), theList),
+      itemStyleId: liveField('list-item-style', 'itemStyleId', (input) => Number(input.value), theList),
+      background: liveField('list-background', 'background', colorOf, theList),
+      corners: liveField('list-corners', 'corners', (input) => input.value, theList),
+      radius: liveField('list-radius', 'radius', listNumber(0, 0), theList),
+      padding: liveField('list-padding', 'padding', listNumber(0, 0), theList),
+      outlineWidth: liveField('list-outline-width', 'outlineWidth', listNumber(0, 0), theList),
+      x: liveField('list-x', 'x', listNumber(0), theList),
+      y: liveField('list-y', 'y', listNumber(0), theList),
+    };
+    const listOutline = document.getElementById('list-outline');
+    const listShadow = document.getElementById('list-shadow');
+    liveField('list-outline-on', 'outline', () => (listOutlineToggle.checked ? colorOf(listOutline) : null), theList);
+    liveField('list-outline', 'outline', () => (listOutlineToggle.checked ? colorOf(listOutline) : null), theList);
+    liveField('list-shadow-on', 'shadow', () => (listShadowToggle.checked ? colorOf(listShadow) : null), theList);
+    liveField('list-shadow', 'shadow', () => (listShadowToggle.checked ? colorOf(listShadow) : null), theList);
+    let listStyleOptionsKey = '';
+    function showListPanel() {
+      listProperties.hidden = !selectedList || labelTools.hidden;
+      if (listProperties.hidden) return;
+      const list = selectedList;
+      const optionsKey = JSON.stringify(labelStyles.map((style) => [style.id, style.name]));
+      if (optionsKey !== listStyleOptionsKey) {
+        listStyleOptionsKey = optionsKey;
+        for (const select of [listInputs.headingStyleId, listInputs.itemStyleId]) {
+          select.replaceChildren(...labelStyles.map((style) => Object.assign(document.createElement('option'), { value: style.id, textContent: style.name })));
+        }
+      }
+      const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
+      show(listInputs.heading, list.heading);
+      show(listInputs.items, list.items.join('\n'));
+      show(listInputs.headingStyleId, styleOf({ styleId: list.headingStyleId }).id);
+      show(listInputs.itemStyleId, styleOf({ styleId: list.itemStyleId }).id);
+      if (document.activeElement !== listInputs.background) showColor(listInputs.background, list.background);
+      show(listInputs.corners, list.corners);
+      show(listInputs.radius, list.radius);
+      show(listInputs.padding, list.padding);
+      show(listInputs.outlineWidth, list.outlineWidth);
+      show(listInputs.x, Math.round(list.x));
+      show(listInputs.y, Math.round(list.y));
+      listOutlineToggle.checked = !!list.outline;
+      listOutline.parentElement.hidden = !list.outline;
+      document.getElementById('list-outline-width-field').hidden = !list.outline;
+      if (list.outline && document.activeElement !== listOutline) showColor(listOutline, list.outline);
+      listShadowToggle.checked = !!list.shadow;
+      listShadow.parentElement.hidden = !list.shadow;
+      if (list.shadow && document.activeElement !== listShadow) showColor(listShadow, list.shadow);
+    }
 
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
@@ -3359,7 +3558,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      labelStylesSection.hidden = anyLabels;
+      labelStylesSection.hidden = anyLabels || !!selectedList;
+      showListPanel();
       // Selecting a label swaps the style list and form for its properties.
       if (anyLabels && editingStyle) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
@@ -3989,39 +4189,11 @@
       if (style.background) {
         // With a background, the outline and shadow belong to the box, not the text.
         const box = labelBox(label);
-        const radius = Math.min(style.radius, box.w / 2, box.h / 2);
-        const shape = new Path2D();
-        if (style.corners === 'chamfer') {
-          const { x, y, w, h } = box;
-          shape.moveTo(x + radius, y);
-          shape.lineTo(x + w - radius, y);
-          shape.lineTo(x + w, y + radius);
-          shape.lineTo(x + w, y + h - radius);
-          shape.lineTo(x + w - radius, y + h);
-          shape.lineTo(x + radius, y + h);
-          shape.lineTo(x, y + h - radius);
-          shape.lineTo(x, y + radius);
-          shape.closePath();
-        } else {
-          shape.roundRect(box.x, box.y, box.w, box.h, radius);
-        }
+        const shape = boxPath(box, style.radius, style.corners);
         c.fillStyle = style.background;
         c.fill(shape);
         c.shadowColor = 'transparent';
-        if (style.outline) {
-          // The outline sits wholly outside the box: a stroke twice as wide,
-          // clipped to everything but the box.
-          const width = style.outlineWidth;
-          const outside = new Path2D();
-          outside.rect(box.x - 2 * width, box.y - 2 * width, box.w + 4 * width, box.h + 4 * width);
-          outside.addPath(shape);
-          c.save();
-          c.clip(outside, 'evenodd');
-          c.strokeStyle = style.outline;
-          c.lineWidth = width * 2;
-          c.stroke(shape);
-          c.restore();
-        }
+        if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
       const { lines, iconX, iconY } = labelLayout(label);
       // Centred text would be pulled left by the trailing gap after its last letter.
@@ -4070,6 +4242,7 @@
       // which leaves text sitting high in most fonts.
       ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
+      drawLists();
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
       const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false };
@@ -4110,6 +4283,10 @@
       const pad = 4 / view.scale;
       const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
       if (typing && !editingLabel.label) boxed.push(typing);
+      if (selectedList && !labelTools.hidden) {
+        const { box } = listLayout(selectedList);
+        ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+      }
       for (const label of boxed) {
         const box = labelArea(label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
@@ -5139,7 +5316,14 @@
       } else if (e.key === 'Escape') {
         e.preventDefault();
         selectedLabels = [];
+        selectedList = null;
         setLabelTool('select');
+        draw();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedList) {
+        e.preventDefault();
+        recordUndo();
+        lists.splice(lists.indexOf(selectedList), 1);
+        selectedList = null;
         draw();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPins.length) {
         e.preventDefault();
@@ -5403,6 +5587,7 @@
       if (spaceHeld || drag?.spacePan) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = labelCursor();
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
+      else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = iconCursor('list_alt_add', '#000000', 'crosshair');
       else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? iconCursor('add_circle', SELECTED_COLOR, 'crosshair') : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
       else canvas.style.cursor = addTarget() ? addCursor() : '';
     }
@@ -5571,6 +5756,7 @@
         const p = toBackground(s.x, s.y);
         const pressedPin = pinAt(p);
         if (pressedPin) {
+          selectedList = null;
           // Selecting a pin selects its label too, so it shows at full opacity.
           const owner = pinOwner(pressedPin);
           if (shiftHeld) {
@@ -5593,7 +5779,15 @@
         }
         if (!shiftHeld) selectedPins = [];
         const pressedLabel = labelAt(p);
-        if (pressedLabel && shiftHeld) {
+        const pressedList = pressedLabel ? null : listAt(p);
+        if (!pressedList) selectedList = null;
+        if (pressedList) {
+          selectedLabels = [];
+          selectedPins = [];
+          selectedList = pressedList;
+          // The snapshot only becomes the undo step once the list moves.
+          drag = { list: pressedList, last: p, before: snapshot() };
+        } else if (pressedLabel && shiftHeld) {
           selectedLabels = selectedLabels.includes(pressedLabel)
             ? selectedLabels.filter((label) => label !== pressedLabel)
             : [...selectedLabels, pressedLabel];
@@ -5704,6 +5898,15 @@
           pin.y = clampY(pin.y + p.y - drag.last.y);
         }
         drag.last = p;
+      } else if (drag?.list) {
+        if (drag.before) {
+          recordUndo(drag.before);
+          drag.before = null;
+        }
+        const p = toBackground(pointer.x, pointer.y);
+        drag.list.x += p.x - drag.last.x;
+        drag.list.y += p.y - drag.last.y;
+        drag.last = p;
       } else if (drag?.labels) {
         if (drag.before) {
           recordUndo(drag.before);
@@ -5770,7 +5973,7 @@
         const { path, segment, t } = drag.snapOnto;
         mergePoints(drag.path, drag.point, { path, point: splitSegment(path, segment, t) });
       }
-      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !drag.pins && !active && !group
+      const wasClick = !drag.point && !drag.bend && !drag.spacePan && !drag.labels && !drag.list && !drag.pins && !active && !group
         && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
       drag = null;
       if (group && !moving) {
@@ -5794,6 +5997,16 @@
           if (label && inBackground(p)) {
             recordUndo();
             label.pins.push({ x: p.x, y: p.y });
+          }
+          setLabelTool('select');
+        } else if (labelTool === 'list') {
+          // The List tool places one list, then hands back to the cursor tool.
+          if (inBackground(p)) {
+            recordUndo();
+            const list = newList(p);
+            lists.push(list);
+            selectedLabels = [];
+            selectedList = list;
           }
           setLabelTool('select');
         } else {
@@ -5886,6 +6099,7 @@
       if (!labelTools.hidden) {
         if (selectedPins.length) return selectedPins.length > 1 ? 'Pins' : 'Pin';
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';
+        if (selectedList) return 'List';
         return editingStyle ? 'Label style' : 'Labels';
       }
       if (!backgroundTools.hidden) {

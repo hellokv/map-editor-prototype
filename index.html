@@ -3366,8 +3366,8 @@
       crossingDialog.hidden = true;
     }
 
-    // Two or more labels selected offers to make a list of them, until it's
-    // answered No for that selection.
+    // Two or more labels selected offers to turn them into a list, until
+    // it's answered No for that selection.
     const listDialog = document.getElementById('list-dialog');
     let listDeclinedFor = [];
     const sameLabels = (a, b) => a.length === b.length && a.every((label, i) => label === b[i]);
@@ -3387,11 +3387,14 @@
     document.getElementById('list-yes').addEventListener('click', (e) => {
       recordUndo();
       const area = selectionArea();
-      const list = newList({ x: area.x + area.w + 40, y: area.y });
+      // The labels become the list's items, and the list takes their place.
+      const list = newList({ x: area.x, y: area.y });
       const ordered = [...selectedLabels].sort((a, b) => a.y - b.y);
+      list.heading = '';
       list.items = ordered.map(({ text, icon, place }) => ({ text, ...(icon ? { icon } : {}), ...(place ? { place } : {}) }));
       list.itemStyleId = styleOf(selectedLabels[0]).id;
       lists.push(list);
+      for (const label of selectedLabels) labels.splice(labels.indexOf(label), 1);
       selectedLabels = [];
       selectedList = list;
       e.currentTarget.blur();

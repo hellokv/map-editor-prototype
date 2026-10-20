@@ -596,24 +596,19 @@
       gap: 8px;
       margin-top: 4px;
       padding: 3px 6px;
-      background: #fff;
+      background: var(--map-ground, #fff);
+      color: var(--map-ink, #000);
       border-radius: 6px;
     }
     .style-card:hover {
       box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
     }
-    .style-card.dark {
-      background: #4a4a4a;
-      color: #eee;
+    #panel .style-card .style-option-name,
+    #panel .style-card .style-menu > button {
+      color: var(--map-ink, #000);
     }
-    .style-card.dark .style-option-name {
-      color: #ccc;
-    }
-    #panel .style-card.dark .style-menu > button {
-      color: #eee;
-    }
-    #panel .style-card.dark .style-menu > button:hover {
-      background: rgba(255, 255, 255, 0.15);
+    #panel .style-card .style-menu > button:hover {
+      background: rgba(127, 127, 127, 0.25);
     }
     .style-option-body {
       display: flex;
@@ -894,7 +889,6 @@
     #panel.label-look .style-option-name {
       font-size: 12px;
       font-weight: 600;
-      color: var(--label-ink);
     }
     #panel.label-look .label-section > button {
       align-self: flex-start;
@@ -3644,12 +3638,10 @@
     // offset, and leave out text the label hides.
     const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside', 'hideText'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
-    // A style's card: its radio, its name beside its preview, and its menu.
-    // It sits on white, or on dark grey when the style's most prominent
-    // color (its outline, else background, else text) is light.
+    // A style's card: its radio, its name beside its preview, and its menu,
+    // on the map's background color (set by updatePanel).
     function styleCard(card, style, pick, preview, menu) {
       card.classList.add('style-card');
-      if (isLight(style.outline ?? style.background ?? style.color)) card.classList.add('dark');
       const body = document.createElement('span');
       body.className = 'style-option-body';
       body.append(Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), preview);
@@ -4217,6 +4209,10 @@
 
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
+      const mapGround = colorOf(boardColor);
+      const panelStyle = document.getElementById('panel').style;
+      panelStyle.setProperty('--map-ground', mapGround);
+      panelStyle.setProperty('--map-ink', isLight(mapGround) ? '#000' : '#fff');
       placeCrossingDialog();
       placeListDialog();
       document.getElementById('panel-title').textContent = panelTitle();

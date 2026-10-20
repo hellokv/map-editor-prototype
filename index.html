@@ -1321,6 +1321,13 @@
           </label>
         </div>
         <div id="shape-stripes" class="stripe-fields"></div>
+        <label id="shape-corners-field" class="row">
+          Corners
+          <select id="shape-corners">
+            <option value="round">Rounded</option>
+            <option value="chamfer">Chamfered</option>
+          </select>
+        </label>
         <label id="shape-radius-field" class="row">
           Corner radius
           <input id="shape-radius" type="number" min="0" step="1">
@@ -1332,6 +1339,10 @@
         <label id="shape-shadow-field" class="row">
           <span><input id="shape-shadow-on" type="checkbox"> Shadow color</span>
           <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <label id="shape-zoom-scale-field" class="row">
+          Scale factor
+          <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="shape-zoom-scale" type="number" min="0" step="1"></span></span>
         </label>
         <div id="shape-single-fields">
           <label class="row">
@@ -2491,8 +2502,11 @@
     const boardShape = () => boxPath({ x: 0, y: 0, w: board.w, h: board.h }, board.radius, board.corners);
     // A box as a path, its corners rounded, or cut off when corners is
     // 'chamfer', reaching radius along each side.
-    function boxPath({ x, y, w, h }, radius, corners) {
-      const shape = new Path2D();
+    function boxPath(box, radius, corners) {
+      return traceBox(new Path2D(), box, radius, corners);
+    }
+    // Traces the box onto a path or a context's current path.
+    function traceBox(shape, { x, y, w, h }, radius, corners) {
       const r = Math.min(radius, w / 2, h / 2);
       if (corners === 'chamfer') {
         shape.moveTo(x + r, y);
@@ -3839,7 +3853,15 @@
         const plain = selectedShapes.filter((shape) => shape.kind !== 'compass' && shape.kind !== 'image');
         document.getElementById('shape-color-field').hidden = selectedShapes.every((shape) => shape.kind === 'image');
         document.getElementById('shape-color-name').textContent = allCompasses ? 'Main star' : 'Fill color';
-        document.getElementById('shape-radius-field').hidden = plain.every((shape) => shape.kind === 'circle');
+        const images = selectedShapes.filter((shape) => shape.kind === 'image');
+        document.getElementById('shape-radius-field').hidden = [...plain, ...images].every((shape) => shape.kind === 'circle');
+        document.getElementById('shape-corners-field').hidden = !images.length;
+        document.getElementById('shape-zoom-scale-field').hidden = !images.length;
+        if (images.length) {
+          if (document.activeElement !== shapeCornersInput) shapeCornersInput.value = images[0].corners ?? 'round';
+          if (document.activeElement !== shapeZoomScaleInput) shapeZoomScaleInput.value = images[0].zoomScale ?? 100;
+          if (document.activeElement !== shapeZoomScaleSlider) shapeZoomScaleSlider.value = images[0].zoomScale ?? 100;
+        }
         document.getElementById('shape-outline-field').hidden = !plain.length;
         document.getElementById('shape-stripes').hidden = !plain.length;
         shapeStripeFields.show(selectedShapes.find((shape) => shape.stripes)?.stripes);
@@ -4865,6 +4887,21 @@
     }
     const shapeRadiusInput = document.getElementById('shape-radius');
     bindShapeInput(shapeRadiusInput, (shape) => { shape.radius = Math.max(0, Number(shapeRadiusInput.value) || 0); });
+    const shapeCornersInput = document.getElementById('shape-corners');
+    bindShapeInput(shapeCornersInput, (shape) => { if (shape.kind === 'image') shape.corners = shapeCornersInput.value; });
+    const shapeZoomScaleInput = document.getElementById('shape-zoom-scale');
+    const shapeZoomScaleSlider = shapeZoomScaleInput.closest('.slider').querySelector('input[type="range"]');
+    bindShapeInput(shapeZoomScaleInput, (shape) => { if (shape.kind === 'image') shape.zoomScale = Math.max(0, Number(shapeZoomScaleInput.value) || 0); });
+    // The slider and the field move each other; the field can go past 100%.
+    shapeZoomScaleSlider.addEventListener('input', () => {
+      shapeZoomScaleInput.value = shapeZoomScaleSlider.value;
+      shapeZoomScaleInput.dispatchEvent(new Event('input'));
+    });
+    shapeZoomScaleSlider.addEventListener('change', () => {
+      shapeZoomScaleInput.dispatchEvent(new Event('change'));
+      shapeZoomScaleSlider.blur();
+    });
+    shapeZoomScaleInput.addEventListener('input', () => { shapeZoomScaleSlider.value = shapeZoomScaleInput.value; });
     shapeStripeFields.bindEach(bindShapeInput, (shape, stripes) => {
       if (shape.kind === 'compass') return;
       if (stripes) shape.stripes = stripes;
@@ -4958,13 +4995,24 @@
 
     const rotate = (v, angle) => ({ x: v.x * Math.cos(angle) - v.y * Math.sin(angle), y: v.x * Math.sin(angle) + v.y * Math.cos(angle) });
     const shapeCentre = (shape) => ({ x: shape.x + shape.w / 2, y: shape.y + shape.h / 2 });
+    // A shape with a scale factor (an image's zoomScale, in percent) is drawn
+    // larger or smaller about its centre so it follows that share of the
+    // map's zoom, as labels do. Drawing, clicking and its frame use this box;
+    // moves and resizes go by its centre and proportions, so they carry over.
+    function shownBox(shape) {
+      if (shape.zoomScale === undefined) return shape;
+      const k = view.scale ** (shape.zoomScale / 100 - 1);
+      const c = shapeCentre(shape);
+      return { ...shape, x: c.x - (shape.w * k) / 2, y: c.y - (shape.h * k) / 2, w: shape.w * k, h: shape.h * k };
+    }
     // A background point in the shape's own unrotated frame.
     function unrotated(shape, p) {
       const c = shapeCentre(shape);
       const v = rotate({ x: p.x - c.x, y: p.y - c.y }, -(shape.rotation ?? 0));
       return { x: c.x + v.x, y: c.y + v.y };
     }
-    function traceShape(shape) {
+    function traceShape(placed) {
+      const shape = shownBox(placed);
       const c = shapeCentre(shape);
       ctx.save();
       ctx.translate(c.x, c.y);
@@ -4975,7 +5023,7 @@
       if (shape.kind === 'circle' || shape.kind === 'compass') {
         ctx.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
       } else if (shape.kind === 'square' || shape.kind === 'image') {
-        ctx.roundRect(shape.x, shape.y, shape.w, shape.h, Math.min(radius, shape.w / 2, shape.h / 2));
+        traceBox(ctx, shape, radius, shape.corners);
       } else {
         traceRoundedPolygon(shapeCorners(shape), radius);
       }
@@ -5011,14 +5059,18 @@
       ctx.closePath();
     }
     // An uploaded image placed on the map: a shape of kind 'image' holding
-    // the loaded <img>, stretched to its box and turned with it.
-    function drawImageShape(shape) {
+    // the loaded <img>, stretched to its box, turned with it and cut to its
+    // corners.
+    function drawImageShape(placed) {
+      const shape = shownBox(placed);
       const c = shapeCentre(shape);
+      const box = { x: -shape.w / 2, y: -shape.h / 2, w: shape.w, h: shape.h };
       ctx.save();
       ctx.shadowColor = 'transparent';
       ctx.translate(c.x, c.y);
       ctx.rotate(shape.rotation ?? 0);
-      ctx.drawImage(shape.image, -shape.w / 2, -shape.h / 2, shape.w, shape.h);
+      ctx.clip(boxPath(box, shape.radius ?? 0, shape.corners));
+      ctx.drawImage(shape.image, box.x, box.y, box.w, box.h);
       ctx.restore();
     }
     const placeImageInput = document.getElementById('place-image');
@@ -5034,7 +5086,7 @@
         const w = Math.min(image.naturalWidth, canvas.clientWidth / 3 / view.scale);
         const h = (w * image.naturalHeight) / image.naturalWidth;
         recordUndo();
-        const shape = { kind: 'image', image, x: middle.x - w / 2, y: middle.y - h / 2, w, h, layers: newLayers() };
+        const shape = { kind: 'image', image, x: middle.x - w / 2, y: middle.y - h / 2, w, h, radius: 0, corners: 'round', zoomScale: 100, layers: newLayers() };
         shapes.push(shape);
         selectedShapes = [shape];
         sketchSelected = null;
@@ -5121,7 +5173,8 @@
       ctx.restore();
     }
     // The corners of a shape's box, turned with it.
-    function boxCorners(shape) {
+    function boxCorners(placed) {
+      const shape = shownBox(placed);
       const c = shapeCentre(shape);
       return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
         const v = rotate({ x: (sx * shape.w) / 2, y: (sy * shape.h) / 2 }, shape.rotation ?? 0);
@@ -5138,7 +5191,10 @@
     // box around several. { x, y } is its centre.
     function selectionFrame() {
       const shape = soleShape();
-      if (shape) return { ...shapeCentre(shape), w: shape.w, h: shape.h, angle: shape.rotation ?? 0 };
+      if (shape) {
+        const { w, h } = shownBox(shape);
+        return { ...shapeCentre(shape), w, h, angle: shape.rotation ?? 0 };
+      }
       const box = shapesBox(selectedShapes);
       return { x: box.x + box.w / 2, y: box.y + box.h / 2, w: box.w, h: box.h, angle: 0 };
     }
@@ -5225,9 +5281,10 @@
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
         if (!onShownLayer(shape)) continue;
+        const shown = shownBox(shape);
         const q = unrotated(shape, p);
-        const dx = (q.x - shape.x - shape.w / 2) / (shape.w / 2);
-        const dy = (q.y - shape.y - shape.h / 2) / (shape.h / 2);
+        const dx = (q.x - shown.x - shown.w / 2) / (shown.w / 2);
+        const dy = (q.y - shown.y - shown.h / 2) / (shown.h / 2);
         const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
           : shape.kind === 'square' || shape.kind === 'compass' || shape.kind === 'image' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
           : insidePolygon(shapeCorners(shape), q);

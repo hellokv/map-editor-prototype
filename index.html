@@ -871,6 +871,49 @@
       border-color: var(--label-ink);
       background: radial-gradient(circle 4px at 18px 50%, var(--label-ink) 99%, transparent);
     }
+    /* In a field, the number sits before its slider, a thin line with a pill handle. */
+    .field .slider {
+      flex: 1;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    #panel .field .slider input[type="number"] {
+      appearance: textfield;
+    }
+    .field .slider input[type="range"] {
+      flex: 1;
+      width: auto;
+      max-width: 160px;
+      height: 20px;
+      background: none;
+      appearance: none;
+      cursor: pointer;
+    }
+    .field .slider input[type="range"]::-webkit-slider-runnable-track {
+      height: 1.5px;
+      background: var(--label-ink);
+    }
+    .field .slider input[type="range"]::-webkit-slider-thumb {
+      width: 10px;
+      height: 20px;
+      margin-top: -9.25px;
+      border: 1.5px solid var(--label-ink);
+      border-radius: 5px;
+      background: #fff;
+      appearance: none;
+    }
+    .field .slider input[type="range"]::-moz-range-track {
+      height: 1.5px;
+      background: var(--label-ink);
+    }
+    .field .slider input[type="range"]::-moz-range-thumb {
+      box-sizing: border-box;
+      width: 10px;
+      height: 20px;
+      border: 1.5px solid var(--label-ink);
+      border-radius: 5px;
+      background: #fff;
+    }
     #panel.label-look .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 300, 'opsz' 24;
@@ -1054,13 +1097,12 @@
               <div id="icon-options" class="icon-options" hidden></div>
             </span>
           </div>
-          <label id="label-hide-text-field" class="field">
-            Hide text
-            <input id="label-hide-text" class="switch" type="checkbox">
-          </label>
-          <label id="label-icon-outside-field" class="field">
-            Place outside Label
-            <input id="label-icon-outside" class="switch" type="checkbox">
+          <label id="label-icon-placement-field" class="field">
+            Placement
+            <select id="label-icon-placement">
+              <option value="inside">Inside</option>
+              <option value="outside">Outside</option>
+            </select>
           </label>
           <div id="label-icon-side-field" class="field">
             Alignment
@@ -1071,17 +1113,21 @@
               <button type="button" data-icon-side="top" aria-label="Icon above text"><span class="material-symbols-rounded">vertical_align_top</span></button>
             </div>
           </div>
-          <label id="label-icon-offset-field" class="field">
-            Icon offset
-            <span class="slider"><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span></span>
-          </label>
           <label id="label-icon-size-field" class="field">
-            Icon size
-            <span class="slider"><input type="range" min="4" max="120" step="1" aria-label="Icon size"><input id="label-icon-size" type="number" min="4" max="200" step="1"></span>
+            Size
+            <span class="slider"><input id="label-icon-size" type="number" min="4" max="200" step="1"><input type="range" min="4" max="120" step="1" aria-label="Icon size"></span>
+          </label>
+          <label id="label-icon-offset-field" class="field">
+            Offset
+            <span class="slider"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"></span>
           </label>
           <label id="label-icon-gap-field" class="field">
-            Icon gap
-            <span class="slider"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"><input id="label-icon-gap" type="number" min="0" max="200" step="1"></span>
+            Gap
+            <span class="slider"><input id="label-icon-gap" type="number" min="0" max="200" step="1"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"></span>
+          </label>
+          <label id="label-hide-text-field" class="field">
+            Hide text
+            <input id="label-hide-text" class="switch" type="checkbox">
           </label>
         </div>
         <div class="label-section label-columns">
@@ -3738,14 +3784,14 @@
       e.target.dispatchEvent(new Event('change', { bubbles: true }));
     }, true);
     const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
-    const labelIconOutsideToggle = document.getElementById('label-icon-outside');
-    labelIconOutsideToggle.addEventListener('change', () => {
+    const labelIconPlacement = document.getElementById('label-icon-placement');
+    labelIconPlacement.addEventListener('change', () => {
       const label = soleLabel();
       if (!label) return;
       recordUndo();
-      if (labelIconOutsideToggle.checked) label.iconOutside = true;
+      if (labelIconPlacement.value === 'outside') label.iconOutside = true;
       else delete label.iconOutside;
-      labelIconOutsideToggle.blur();
+      labelIconPlacement.blur();
       draw();
     });
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
@@ -4380,7 +4426,7 @@
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
         labelIconToggle.disabled = textHidden;
-        labelIconOutsideToggle.disabled = textHidden;
+        labelIconPlacement.disabled = textHidden;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
           field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;
@@ -4398,10 +4444,10 @@
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn || textHidden;
-        document.getElementById('label-icon-outside-field').hidden = !iconOn || textHidden;
+        document.getElementById('label-icon-placement-field').hidden = !iconOn || textHidden;
         // The offset only applies to an icon outside the label.
         document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;
-        labelIconOutsideToggle.checked = !!selectedLabel.iconOutside && !textHidden;
+        if (document.activeElement !== labelIconPlacement) labelIconPlacement.value = selectedLabel.iconOutside && !textHidden ? 'outside' : 'inside';
         show(labelIconOffsetInput, textHidden ? 0 : selectedLabel.iconOffset ?? 0);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
         show(labelIconGapInput, textHidden ? 0 : selectedLabel.iconGap ?? '');

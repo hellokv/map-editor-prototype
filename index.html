@@ -4723,8 +4723,6 @@
       draw();
     });
     const textIsHidden = (label) => !!((label.hideText || styleOf(label).hideText) && label.icon);
-    // Also hidden while the levels on show are all ones the label shows only its icon on.
-    const textHiddenNow = (label) => textIsHidden(label) || (!!label.icon && !labelTextShown(label));
     // hideTextAt holds the levels a label shows only its icon on.
     const labelTextLayerButtons = document.querySelectorAll('[data-text-layer]');
     for (const button of labelTextLayerButtons) {
@@ -5056,7 +5054,7 @@
     function labelLayout(label, zoom = 1) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
-      const hidden = textHiddenNow(label);
+      const hidden = textIsHidden(label);
       const texts = hidden ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
@@ -5112,7 +5110,13 @@
       const iconY = icon ? icon.y + dy : label.y;
       const bounds = outside ? unionRect(box, { x: iconX - s / 2, y: iconY - s / 2, w: s, h: s }) : box;
       const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
-      return { lines, textX: dx, iconX, iconY, box, bounds };
+      // On levels where only the label's icon shows, the icon keeps its place
+      // in the whole label, in a box of its own; frame is still the whole label.
+      if (label.icon && !hidden && !labelTextShown(label)) {
+        const iconBox = pad({ x: iconX - head, y: iconY - head, w: s, h: s });
+        return { lines: [], textX: dx, iconX, iconY, box: iconBox, bounds: iconBox, frame: box, textOff: true };
+      }
+      return { lines, textX: dx, iconX, iconY, box, bounds, frame: box };
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -5134,7 +5138,7 @@
         const { endX, endY } = pointerLine(label, style, labelZoom(label));
         return { x: endX, y: endY };
       }
-      if (style.iconShape !== 'pin' || !textHiddenNow(label) || !(style.iconBackground || style.iconOutline)) return label;
+      if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
       return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
     }
@@ -5286,7 +5290,7 @@
     // The pointer's line, from start to end, unscaled about the label's spot.
     function pointerLine(label, style, zoom) {
       const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
-      const box = labelBox(label, zoom);
+      const box = labelLayout(label, zoom).frame;
       const cornerX = label.x + (dx * box.w) / 2;
       const cornerY = label.y + (dy * box.h) / 2;
       const length = style.pointerLength;
@@ -5475,7 +5479,8 @@
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
         ctx.save();
         zoomAboutLabel(ctx, label);
-        if (label.pointer) drawPointer(label, style, k);
+        // A pointer leaves the whole label's edge, so it goes when only the icon shows.
+        if (label.pointer && !labelLayout(label, k).textOff) drawPointer(label, style, k);
         paintLabel(ctx, label, style, k);
         ctx.restore();
       }

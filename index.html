@@ -762,6 +762,30 @@
     #panel .field .field-clear:hover {
       background: rgba(0, 0, 0, 0.06);
     }
+    /* Numbers each led by an icon saying what they set, side by side in one field. */
+    .icon-inputs {
+      display: flex;
+      gap: 20px;
+    }
+    .icon-inputs label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #panel .field .icon-inputs input {
+      width: 32px;
+      text-align: left;
+    }
+    #panel.label-look .field .icon-inputs .material-symbols-rounded {
+      font-size: 24px;
+      font-variation-settings: 'wght' 400, 'opsz' 24;
+    }
+    #panel .icon-buttons.with-text button {
+      gap: 6px;
+      align-items: center;
+      padding: 6px 8px;
+      font: 13px 'National Park', system-ui, sans-serif;
+    }
     .field-pair {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1568,14 +1592,13 @@
             </label>
           </div>
           <div class="label-section">
-            <label class="field">
-              Padding top and bottom
-              <input id="style-padding-y" type="number" min="0" max="200" step="1">
-            </label>
-            <label class="field">
-              Padding sides
-              <input id="style-padding-x" type="number" min="0" max="200" step="1">
-            </label>
+            <div class="field">
+              Padding
+              <span class="icon-inputs">
+                <label><span class="material-symbols-rounded" title="Sides">horizontal_distribute</span><input id="style-padding-x" type="number" min="0" max="200" step="1" aria-label="Padding sides"></label>
+                <label><span class="material-symbols-rounded" title="Top and bottom">vertical_distribute</span><input id="style-padding-y" type="number" min="0" max="200" step="1" aria-label="Padding top and bottom"></label>
+              </span>
+            </div>
             <label class="field">
               Background color
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
@@ -1618,9 +1641,9 @@
             <div class="field">
               Placement
               <input id="style-icon-outside" type="checkbox" hidden>
-              <div class="icon-buttons">
-                <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">collapse_content</span></button>
-                <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">expand_content</span></button>
+              <div class="icon-buttons with-text">
+                <button type="button" data-icon-placement="inside"><span class="material-symbols-rounded">collapse_content</span>Inside</button>
+                <button type="button" data-icon-placement="outside"><span class="material-symbols-rounded">expand_content</span>Outside</button>
               </div>
             </div>
             <label class="field">

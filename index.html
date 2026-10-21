@@ -616,7 +616,7 @@
       display: flex;
       align-items: center;
       width: 64px;
-      padding-left: 6px;
+      padding-left: 2px;
       box-sizing: border-box;
       overflow: hidden;
       background: var(--map-ground, #fff);
@@ -3580,18 +3580,23 @@
     // it, for its style previews: from the label's left edge, as they show
     // the start of a label.
     const labelBackdrop = document.createElement('canvas');
+    const SWATCH_OPEN_WIDTH = 268;
+    const SWATCH_HEIGHT = 40;
     function captureLabelBackdrop() {
       const label = !labelTools.hidden && soleLabel();
       if (!label) return;
       const dpr = window.devicePixelRatio || 1;
       const area = labelArea(label);
-      const top = toScreen({ x: area.x, y: area.y });
-      const h = area.h * view.scale;
-      // As wide as a whole card, for when a swatch opens across one.
-      const w = Math.max(area.w * view.scale, h * (268 / 40));
-      labelBackdrop.width = Math.max(1, Math.round(w * dpr));
-      labelBackdrop.height = Math.max(1, Math.round(h * dpr));
-      labelBackdrop.getContext('2d').drawImage(canvas, top.x * dpr, top.y * dpr, w * dpr, h * dpr, 0, 0, labelBackdrop.width, labelBackdrop.height);
+      // The map at the scale the previews draw the label, so the two line up
+      // as they do on the map, over a whole card's width for when a swatch
+      // opens across one.
+      const ratio = (view.scale * labelZoom(label) * styleOf(label).size) / PREVIEW_TEXT_SIZE;
+      const w = SWATCH_OPEN_WIDTH * ratio;
+      const h = SWATCH_HEIGHT * ratio;
+      const left = toScreen({ x: area.x, y: area.y + area.h / 2 });
+      labelBackdrop.width = SWATCH_OPEN_WIDTH * dpr;
+      labelBackdrop.height = SWATCH_HEIGHT * dpr;
+      labelBackdrop.getContext('2d').drawImage(canvas, left.x * dpr, (left.y - h / 2) * dpr, w * dpr, h * dpr, 0, 0, labelBackdrop.width, labelBackdrop.height);
     }
 
     const createPathButton = document.getElementById('create-path');
@@ -4024,7 +4029,7 @@
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
     // A canvas showing text drawn in a style.
-    const PREVIEW_TEXT_SIZE = 15;
+    const PREVIEW_TEXT_SIZE = 12;
     const PREVIEW_MAX_HEIGHT = 36;
     // extra carries a label's icon settings, if any.
     function stylePreview(style, text, extra = {}) {
@@ -4120,7 +4125,7 @@
       }
       const card = (element, style, pick) => {
         const made = styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true, adopt }));
-        if (backdrop) Object.assign(made.querySelector('.style-swatch').style, { backgroundImage: `url(${backdrop})`, backgroundSize: 'cover', backgroundPosition: 'left center' });
+        if (backdrop) Object.assign(made.querySelector('.style-swatch').style, { backgroundImage: `url(${backdrop})`, backgroundSize: `${SWATCH_OPEN_WIDTH}px ${SWATCH_HEIGHT}px`, backgroundPosition: 'left center' });
         return made;
       };
       if (!open) {

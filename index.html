@@ -5112,11 +5112,19 @@
       const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
       // On levels where only the label's icon shows, the icon keeps its place
       // in the whole label, in a box of its own; frame is still the whole label.
-      if (label.icon && !hidden && !labelTextShown(label)) {
+      // While the text fades, the box moves between the two.
+      const textAlpha = label.icon && !hidden ? labelTextAlpha(label) : 1;
+      if (textAlpha < 1) {
         const iconBox = pad({ x: iconX - head, y: iconY - head, w: s, h: s });
-        return { lines: [], textX: dx, iconX, iconY, box: iconBox, bounds: iconBox, frame: box, textOff: true };
+        const mix = (r) => ({
+          x: iconBox.x + (r.x - iconBox.x) * textAlpha,
+          y: iconBox.y + (r.y - iconBox.y) * textAlpha,
+          w: iconBox.w + (r.w - iconBox.w) * textAlpha,
+          h: iconBox.h + (r.h - iconBox.h) * textAlpha,
+        });
+        return { lines: textAlpha ? lines : [], textX: dx, iconX, iconY, box: mix(box), bounds: mix(bounds), frame: box, textAlpha };
       }
-      return { lines, textX: dx, iconX, iconY, box, bounds, frame: box };
+      return { lines, textX: dx, iconX, iconY, box, bounds, frame: box, textAlpha };
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -5248,12 +5256,20 @@
     const labelFades = new WeakMap();
     let fadeFrame = null;
     function labelAlpha(label) {
-      const target = labelShown(label) ? 1 : 0;
+      return fadeAlpha(labelFades, label, labelShown(label));
+    }
+    // A label's text shown only on some levels fades the same way, within its label.
+    const textFades = new WeakMap();
+    function labelTextAlpha(label) {
+      return fadeAlpha(textFades, label, labelTextShown(label));
+    }
+    function fadeAlpha(fades, item, shown) {
+      const target = shown ? 1 : 0;
       const now = performance.now();
-      let fade = labelFades.get(label);
+      let fade = fades.get(item);
       if (!fade) {
         fade = { alpha: target, at: now };
-        labelFades.set(label, fade);
+        fades.set(item, fade);
       }
       // A settled fade starts timing when its target changes, not at the
       // last redraw.
@@ -5345,7 +5361,8 @@
         c.shadowColor = 'transparent';
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
-      const { lines, iconX, iconY, textX: textMiddle } = labelLayout(label, zoom);
+      const { lines, iconX, iconY, textX: textMiddle, textAlpha } = labelLayout(label, zoom);
+      const alpha = c.globalAlpha;
       if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY, zoom);
       // Centred text would be pulled left by the trailing gap after its last letter.
       const textX = textMiddle + style.letterSpacing / 2;
@@ -5354,12 +5371,16 @@
         c.strokeStyle = style.outline;
         // Half of a stroke falls inside the glyphs, under the fill.
         c.lineWidth = style.outlineWidth * 2;
+        c.globalAlpha = alpha * textAlpha;
         for (const line of lines) c.strokeText(line.text, textX, line.y + baseline);
+        c.globalAlpha = alpha;
         if (label.icon) paintIcon(c, label, style, iconX, iconY, 'strokeText');
         c.shadowColor = 'transparent';
       }
       c.fillStyle = style.color;
+      c.globalAlpha = alpha * textAlpha;
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
+      c.globalAlpha = alpha;
       c.fillStyle = style.iconColor ?? style.color;
       if (label.icon) paintIcon(c, label, style, iconX, iconY, 'fillText');
     }
@@ -5479,8 +5500,14 @@
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
         ctx.save();
         zoomAboutLabel(ctx, label);
-        // A pointer leaves the whole label's edge, so it goes when only the icon shows.
-        if (label.pointer && !labelLayout(label, k).textOff) drawPointer(label, style, k);
+        // A pointer leaves the whole label's edge, so it fades with the text.
+        const textAlpha = labelLayout(label, k).textAlpha;
+        if (label.pointer && textAlpha > 0) {
+          ctx.save();
+          ctx.globalAlpha *= textAlpha;
+          drawPointer(label, style, k);
+          ctx.restore();
+        }
         paintLabel(ctx, label, style, k);
         ctx.restore();
       }

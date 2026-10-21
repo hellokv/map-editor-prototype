@@ -874,6 +874,10 @@
       border-radius: 6px;
       background: #fff;
     }
+    #panel #label-pointer button:disabled {
+      color: #b5b5b5;
+      cursor: default;
+    }
     #panel #label-pointer button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
@@ -1263,7 +1267,7 @@
               <button type="button" data-pointer="n" aria-label="Top"><span class="material-symbols-rounded">north</span></button>
               <button type="button" data-pointer="ne" aria-label="Top right"><span class="material-symbols-rounded">north_east</span></button>
               <button type="button" data-pointer="w" aria-label="Left"><span class="material-symbols-rounded">west</span></button>
-              <button type="button" data-pointer="" aria-label="No pointer"></button>
+              <button type="button" data-pointer="" aria-label="No pointer"><span class="material-symbols-rounded">close</span></button>
               <button type="button" data-pointer="e" aria-label="Right"><span class="material-symbols-rounded">east</span></button>
               <button type="button" data-pointer="sw" aria-label="Bottom left"><span class="material-symbols-rounded">south_west</span></button>
               <button type="button" data-pointer="s" aria-label="Bottom"><span class="material-symbols-rounded">south</span></button>
@@ -4016,9 +4020,13 @@
     const pointerButtons = document.querySelectorAll('[data-pointer]');
     for (const button of pointerButtons) {
       button.addEventListener('click', () => {
-        recordUndo();
-        soleLabel().pointer = button.dataset.pointer || null;
+        const label = soleLabel();
         button.blur();
+        // The centre X, or a second click on the pointer in use, takes the pointer away.
+        const pointer = button.dataset.pointer && button.dataset.pointer !== label.pointer ? button.dataset.pointer : null;
+        if (pointer === (label.pointer ?? null)) return;
+        recordUndo();
+        label.pointer = pointer;
         draw();
       });
     }
@@ -4647,7 +4655,8 @@
         show(labelXInput, Math.round(selectedLabel.x));
         show(labelYInput, Math.round(selectedLabel.y));
         for (const button of pointerButtons) {
-          button.setAttribute('aria-pressed', button.dataset.pointer === (selectedLabel.pointer ?? ''));
+          if (button.dataset.pointer) button.setAttribute('aria-pressed', button.dataset.pointer === selectedLabel.pointer);
+          else button.disabled = !selectedLabel.pointer;
         }
         // Text can only be hidden behind an icon, which then has to stay,
         // and sits plainly inside the label: no outside, offset or gap.

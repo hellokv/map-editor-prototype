@@ -1181,6 +1181,16 @@
       background: var(--label-ink);
       color: #fff;
     }
+    /* The eye shows what the button is; hovering shows what a click makes it. */
+    .level-row button .eye-off,
+    .level-row button[aria-pressed="true"]:hover .eye-on,
+    .level-row button[aria-pressed="false"]:not(:hover) .eye-on {
+      display: none;
+    }
+    .level-row button[aria-pressed="true"]:hover .eye-off,
+    .level-row button[aria-pressed="false"]:not(:hover) .eye-off {
+      display: inline;
+    }
     :is(#panel, #style-panel) .level-row button:disabled {
       color: #b5b5b5;
       cursor: default;
@@ -1450,17 +1460,17 @@
             <div id="label-layers">
               <div class="level-row">
                 Sky
-                <button type="button" data-layer="sky" aria-pressed="false" aria-label="Label on Sky"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-layer="sky" aria-pressed="false" aria-label="Label on Sky"><span class="material-symbols-rounded eye-on">visibility</span><span class="material-symbols-rounded eye-off">visibility_off</span></button>
                 <button type="button" data-text-layer="sky" aria-pressed="false" aria-label="Text on Sky">Aa</button>
               </div>
               <div class="level-row">
                 Canopy
-                <button type="button" data-layer="canopy" aria-pressed="false" aria-label="Label on Canopy"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-layer="canopy" aria-pressed="false" aria-label="Label on Canopy"><span class="material-symbols-rounded eye-on">visibility</span><span class="material-symbols-rounded eye-off">visibility_off</span></button>
                 <button type="button" data-text-layer="canopy" aria-pressed="false" aria-label="Text on Canopy">Aa</button>
               </div>
               <div class="level-row">
                 Ground
-                <button type="button" data-layer="ground" aria-pressed="false" aria-label="Label on Ground"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-layer="ground" aria-pressed="false" aria-label="Label on Ground"><span class="material-symbols-rounded eye-on">visibility</span><span class="material-symbols-rounded eye-off">visibility_off</span></button>
                 <button type="button" data-text-layer="ground" aria-pressed="false" aria-label="Text on Ground">Aa</button>
               </div>
             </div>

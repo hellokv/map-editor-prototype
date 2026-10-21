@@ -1221,15 +1221,10 @@
       background: var(--label-ink);
       color: #fff;
     }
-    /* The eye shows what the button is; hovering shows what a click makes it. */
-    .level-row button .eye-off,
-    .level-row button[aria-pressed="true"]:hover .eye-on,
-    .level-row button[aria-pressed="false"]:not(:hover) .eye-on {
+    /* An open eye for a level that's on, a crossed-out one for a level that's off. */
+    .level-row button[aria-pressed="true"] .eye-off,
+    .level-row button:not([aria-pressed="true"]) .eye-on {
       display: none;
-    }
-    .level-row button[aria-pressed="true"]:hover .eye-off,
-    .level-row button[aria-pressed="false"]:not(:hover) .eye-off {
-      display: inline;
     }
     :is(#panel, #style-panel) .level-row button:disabled {
       color: #b5b5b5;

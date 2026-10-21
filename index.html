@@ -146,11 +146,11 @@
       font-size: 15px;
       font-weight: 600;
     }
-    #panel #panel-close {
+    :is(#panel, #style-panel) #panel-close {
       margin-left: auto;
     }
-    #panel #panel-back,
-    #panel #panel-close,
+    :is(#panel, #style-panel) #panel-back,
+    :is(#panel, #style-panel) #panel-close,
     #panel-open {
       display: flex;
       padding: 2px;
@@ -159,8 +159,8 @@
       background: none;
       cursor: pointer;
     }
-    #panel #panel-back:hover,
-    #panel #panel-close:hover {
+    :is(#panel, #style-panel) #panel-back:hover,
+    :is(#panel, #style-panel) #panel-close:hover {
       background: #e4e4e4;
     }
     #panel-open {
@@ -331,7 +331,7 @@
       border: none;
       border-top: 1px solid #ddd;
     }
-    #panel {
+    :is(#panel, #style-panel) {
       flex: none;
       width: 300px;
       padding: 4px 8px 80px;
@@ -347,6 +347,36 @@
       margin-right: -300px;
       visibility: hidden;
       transition: margin-right 0.25s ease, visibility 0s 0.25s;
+    }
+    /* A label style edited for a selected label opens in a panel of its own
+       beside the label's, closed from its top right. */
+    #style-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 0 12px 0 16px;
+      border-bottom: 1px solid var(--label-ink);
+    }
+    #style-panel-header h2 {
+      flex: 1;
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    #style-panel #style-panel-close {
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      color: var(--label-ink);
+    }
+    #style-panel #style-panel-close:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    #style-panel {
+      border-left: 1px solid var(--label-rule);
     }
     .group {
       padding: 6px 0;
@@ -379,10 +409,10 @@
     .row input[type="radio"] {
       margin: 0;
     }
-    #panel input[type="text"],
-    #panel input[type="number"],
-    #panel select,
-    #panel textarea {
+    :is(#panel, #style-panel) input[type="text"],
+    :is(#panel, #style-panel) input[type="number"],
+    :is(#panel, #style-panel) select,
+    :is(#panel, #style-panel) textarea {
       box-sizing: border-box;
       padding: 3px 6px;
       border: 1px solid #ccc;
@@ -390,18 +420,18 @@
       background: #fff;
       font: inherit;
     }
-    #panel textarea {
+    :is(#panel, #style-panel) textarea {
       resize: vertical;
     }
     /* The browser's own arrow sits hard against the right edge, so it's
        replaced with one drawn clear of it. */
-    #panel select,
+    :is(#panel, #style-panel) select,
     #view-menu select {
       appearance: none;
       padding-right: 24px;
       background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23555' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;
     }
-    #panel .row textarea {
+    :is(#panel, #style-panel) .row textarea {
       width: 140px;
       resize: none;
     }
@@ -412,7 +442,7 @@
     .row input[type="number"]:not(.opacity) {
       width: 64px;
     }
-    #panel .opacity {
+    :is(#panel, #style-panel) .opacity {
       width: 52px;
       margin-left: 2px;
       padding: 3px 4px;
@@ -444,7 +474,7 @@
       color: #666;
       pointer-events: none;
     }
-    #panel .percent-field input {
+    :is(#panel, #style-panel) .percent-field input {
       width: 60px;
       padding-right: 18px;
       appearance: textfield;
@@ -476,7 +506,7 @@
       border-radius: 4px;
       background: none;
     }
-    #panel button {
+    :is(#panel, #style-panel) button {
       padding: 4px 10px;
       border: 1px solid #ccc;
       border-radius: 4px;
@@ -484,24 +514,24 @@
       font: inherit;
       cursor: pointer;
     }
-    #panel button:hover {
+    :is(#panel, #style-panel) button:hover {
       background: #f8f8f8;
     }
     .group > button {
       display: block;
       margin: 4px 0;
     }
-    #panel #image-delete {
+    :is(#panel, #style-panel) #image-delete {
       flex: none;
       display: flex;
       padding: 2px;
       border: none;
       background: none;
     }
-    #panel #image-delete:hover {
+    :is(#panel, #style-panel) #image-delete:hover {
       background: #e4e4e4;
     }
-    #panel #image-delete {
+    :is(#panel, #style-panel) #image-delete {
       position: absolute;
       top: 12px;
       right: 12px;
@@ -511,20 +541,20 @@
       display: flex;
       gap: 2px;
     }
-    #panel .toggle-group button {
+    :is(#panel, #style-panel) .toggle-group button {
       padding: 3px 8px;
     }
-    #panel .toggle-group button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .toggle-group button[aria-pressed="true"] {
       background: #ddd;
     }
     .layer-toggles {
       display: flex;
       gap: 2px;
     }
-    #panel .layer-toggles button {
+    :is(#panel, #style-panel) .layer-toggles button {
       padding: 3px 8px;
     }
-    #panel .layer-toggles button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .layer-toggles button[aria-pressed="true"] {
       background: #ddd;
     }
     #image-upload {
@@ -557,13 +587,13 @@
     .style-card:hover .style-edit {
       visibility: visible;
     }
-    #panel .style-menu > button {
+    :is(#panel, #style-panel) .style-menu > button {
       display: flex;
       padding: 2px;
       border: none;
       background: none;
     }
-    #panel .style-menu > button:hover {
+    :is(#panel, #style-panel) .style-menu > button:hover {
       background: #e4e4e4;
     }
     .style-menu [role="menu"] {
@@ -580,13 +610,13 @@
       border-radius: 4px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
-    #panel .style-menu [role="menu"] button {
+    :is(#panel, #style-panel) .style-menu [role="menu"] button {
       padding: 4px 12px;
       border: none;
       border-radius: 0;
       text-align: left;
     }
-    #panel .style-menu [role="menu"] button:hover {
+    :is(#panel, #style-panel) .style-menu [role="menu"] button:hover {
       background: #eee;
     }
     #label-style-list .style-menu {
@@ -656,7 +686,7 @@
     .style-swatch:hover::after {
       opacity: 0;
     }
-    #panel .style-card .style-menu > button:hover {
+    :is(#panel, #style-panel) .style-card .style-menu > button:hover {
       background: rgba(0, 0, 0, 0.06);
     }
     .style-option-name {
@@ -669,7 +699,7 @@
       font-weight: 600;
     }
     /* The label panel's look: white fields on warm grey, in National Park. */
-    #panel.label-look {
+    :is(#panel, #style-panel).label-look {
       --label-ink: #000;
       --label-ground: #f4f1ee;
       --label-rule: #dcd8d3;
@@ -678,33 +708,33 @@
       color: var(--label-ink);
       font: 15px 'National Park', system-ui, sans-serif;
     }
-    #panel.label-look #panel-header {
+    :is(#panel, #style-panel).label-look #panel-header {
       min-height: 48px;
       margin: 0;
       padding: 0 12px 0 16px;
       gap: 8px;
       border-bottom: 1px solid var(--label-ink);
     }
-    #panel.label-look #panel-title {
+    :is(#panel, #style-panel).label-look #panel-title {
       flex: 1;
       font-size: 18px;
       font-weight: 700;
     }
-    #panel.label-look #panel-header button {
+    :is(#panel, #style-panel).label-look #panel-header button {
       display: flex;
       padding: 2px;
       border: none;
       background: none;
       color: var(--label-ink);
     }
-    #panel.label-look #panel-header button:hover {
+    :is(#panel, #style-panel).label-look #panel-header button:hover {
       background: rgba(0, 0, 0, 0.06);
     }
-    #panel.label-look #panel-header #add-pin[aria-pressed="true"] {
+    :is(#panel, #style-panel).label-look #panel-header #add-pin[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
-    #panel.label-look #panel-close {
+    :is(#panel, #style-panel).label-look #panel-close {
       margin-left: 0;
     }
     .label-section {
@@ -732,15 +762,15 @@
       font-size: 12px;
       font-weight: 600;
     }
-    #panel .field > input[type="text"],
-    #panel .field .font-picker {
+    :is(#panel, #style-panel) .field > input[type="text"],
+    :is(#panel, #style-panel) .field .font-picker {
       flex: 1;
       min-width: 0;
     }
-    #panel .field .font-picker input {
+    :is(#panel, #style-panel) .field .font-picker input {
       width: 100%;
     }
-    #panel .field > input[type="number"] {
+    :is(#panel, #style-panel) .field > input[type="number"] {
       width: 64px;
     }
     .field .font-options {
@@ -750,25 +780,25 @@
     .field .color-field {
       margin-left: auto;
     }
-    #panel .field .color-field input[type="color"] {
+    :is(#panel, #style-panel) .field .color-field input[type="color"] {
       width: 24px;
       height: 24px;
       border-radius: 6px;
     }
-    #panel .field .opacity {
+    :is(#panel, #style-panel) .field .opacity {
       width: 30px;
       padding: 0;
     }
     /* Arrow keys still step these; the spinner would push the value off the right edge. */
-    #panel .field input[type="number"] {
+    :is(#panel, #style-panel) .field input[type="number"] {
       appearance: textfield;
     }
-    #panel .field input[type="number"]::-webkit-inner-spin-button,
-    #panel .field input[type="number"]::-webkit-outer-spin-button {
+    :is(#panel, #style-panel) .field input[type="number"]::-webkit-inner-spin-button,
+    :is(#panel, #style-panel) .field input[type="number"]::-webkit-outer-spin-button {
       appearance: none;
       margin: 0;
     }
-    #panel .field .field-clear {
+    :is(#panel, #style-panel) .field .field-clear {
       flex: none;
       display: flex;
       margin-left: -6px;
@@ -777,7 +807,7 @@
       border-radius: 4px;
       background: none;
     }
-    #panel .field .field-clear:hover {
+    :is(#panel, #style-panel) .field .field-clear:hover {
       background: rgba(0, 0, 0, 0.06);
     }
     /* Numbers each led by an icon saying what they set, side by side in one field. */
@@ -790,22 +820,22 @@
       align-items: center;
       gap: 6px;
     }
-    #panel .field .icon-inputs input {
+    :is(#panel, #style-panel) .field .icon-inputs input {
       width: 32px;
       text-align: left;
     }
-    #panel.label-look .field .icon-inputs .material-symbols-rounded {
+    :is(#panel, #style-panel).label-look .field .icon-inputs .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 400, 'opsz' 24;
     }
-    #panel.label-look .field .shape-buttons .material-symbols-rounded {
+    :is(#panel, #style-panel).label-look .field .shape-buttons .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 400, 'opsz' 24;
     }
-    #panel .shape-buttons button {
+    :is(#panel, #style-panel) .shape-buttons button {
       padding: 2px;
     }
-    #panel .icon-buttons.with-text button {
+    :is(#panel, #style-panel) .icon-buttons.with-text button {
       gap: 6px;
       align-items: center;
       padding: 6px 8px;
@@ -816,10 +846,10 @@
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 8px;
     }
-    #panel .field input[type="text"],
-    #panel .field input[type="number"],
-    #panel .field select,
-    #panel .field textarea {
+    :is(#panel, #style-panel) .field input[type="text"],
+    :is(#panel, #style-panel) .field input[type="number"],
+    :is(#panel, #style-panel) .field select,
+    :is(#panel, #style-panel) .field textarea {
       min-width: 0;
       padding: 0;
       border: none;
@@ -829,29 +859,29 @@
       text-align: right;
       outline: none;
     }
-    #panel .field select {
+    :is(#panel, #style-panel) .field select {
       flex: 1;
       width: auto;
       padding-right: 18px;
       background-position: right 0 center;
       text-align-last: right;
     }
-    #panel .field textarea {
+    :is(#panel, #style-panel) .field textarea {
       flex: 1;
       width: auto;
       padding: 11px 0 9px;
       resize: none;
     }
-    #panel .field-pair .field > input[type="number"] {
+    :is(#panel, #style-panel) .field-pair .field > input[type="number"] {
       flex: 1;
       width: auto;
       min-width: 0;
     }
-    #panel .field .slider input[type="number"],
-    #panel .field .percent-field input {
+    :is(#panel, #style-panel) .field .slider input[type="number"],
+    :is(#panel, #style-panel) .field .percent-field input {
       width: 44px;
     }
-    #panel .field .percent-field input {
+    :is(#panel, #style-panel) .field .percent-field input {
       padding-right: 14px;
     }
     .field .percent-field::after {
@@ -864,7 +894,7 @@
       justify-content: flex-end;
       gap: 6px;
     }
-    #panel .field .icon-picker input {
+    :is(#panel, #style-panel) .field .icon-picker input {
       field-sizing: content;
       min-width: 40px;
       max-width: 150px;
@@ -881,7 +911,7 @@
       font-size: 15px;
       font-weight: 600;
     }
-    #panel .section-heading .chevron {
+    :is(#panel, #style-panel) .section-heading .chevron {
       display: flex;
       padding: 0;
       border: none;
@@ -902,14 +932,14 @@
       cursor: pointer;
     }
     input.switch::after,
-    #panel .level-toggles button::after {
+    :is(#panel, #style-panel) .level-toggles button::after {
       content: 'toggle_off';
       font: 32px/1 'Material Symbols Rounded';
       font-variation-settings: 'wght' 200, 'opsz' 32;
       color: #9a9a9a;
     }
     input.switch:checked::after,
-    #panel .level-toggles button[aria-pressed="true"]::after {
+    :is(#panel, #style-panel) .level-toggles button[aria-pressed="true"]::after {
       content: 'toggle_on';
       color: var(--label-ink, #000);
     }
@@ -923,14 +953,14 @@
       display: flex;
       gap: 12px;
     }
-    #panel .icon-buttons button {
+    :is(#panel, #style-panel) .icon-buttons button {
       display: flex;
       padding: 6px;
       border: none;
       border-radius: 4px;
       background: none;
     }
-    #panel .icon-buttons button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .icon-buttons button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
@@ -945,7 +975,7 @@
       grid-auto-rows: 32px;
       gap: 2px;
     }
-    #panel #label-pointer button {
+    :is(#panel, #style-panel) #label-pointer button {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -954,11 +984,11 @@
       border-radius: 6px;
       background: #fff;
     }
-    #panel #label-pointer button:disabled {
+    :is(#panel, #style-panel) #label-pointer button:disabled {
       color: #b5b5b5;
       cursor: default;
     }
-    #panel #label-pointer button[aria-pressed="true"] {
+    :is(#panel, #style-panel) #label-pointer button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
@@ -968,7 +998,7 @@
       gap: 2px;
     }
     /* Each level is a row with its toggle icon, drawn on the button itself. */
-    #panel .level-toggles button {
+    :is(#panel, #style-panel) .level-toggles button {
       position: relative;
       display: flex;
       align-items: center;
@@ -982,7 +1012,7 @@
       font-size: 12px;
       text-align: left;
     }
-    #panel .level-toggles button::after {
+    :is(#panel, #style-panel) .level-toggles button::after {
       position: absolute;
       right: 12px;
     }
@@ -994,11 +1024,11 @@
       grid-template-columns: 44px minmax(60px, 130px);
       gap: 12px;
     }
-    #panel .field .slider input[type="number"] {
+    :is(#panel, #style-panel) .field .slider input[type="number"] {
       appearance: textfield;
       text-align: left;
     }
-    #panel .field .slider input[type="range"] {
+    :is(#panel, #style-panel) .field .slider input[type="range"] {
       width: 100%;
       min-width: 0;
       height: 20px;
@@ -1031,23 +1061,23 @@
       border-radius: 5px;
       background: #fff;
     }
-    #panel.label-look .material-symbols-rounded {
+    :is(#panel, #style-panel).label-look .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
-    #panel.label-look .field .material-symbols-rounded,
-    #panel.label-look .list-item-row .material-symbols-rounded,
-    #panel.label-look #label-pointer .material-symbols-rounded {
+    :is(#panel, #style-panel).label-look .field .material-symbols-rounded,
+    :is(#panel, #style-panel).label-look .list-item-row .material-symbols-rounded,
+    :is(#panel, #style-panel).label-look #label-pointer .material-symbols-rounded {
       font-size: 16px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
     }
-    #panel .style-card .style-menu .material-symbols-rounded,
-    #panel button.new-style .material-symbols-rounded {
+    :is(#panel, #style-panel) .style-card .style-menu .material-symbols-rounded,
+    :is(#panel, #style-panel) button.new-style .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
     /* A row like a field: its name on the left, a plus on the right. */
-    #panel button.new-style {
+    :is(#panel, #style-panel) button.new-style {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1062,7 +1092,7 @@
       color: #000;
       font: 600 12px 'National Park', system-ui, sans-serif;
     }
-    #panel.label-look .label-section > button.new-style {
+    :is(#panel, #style-panel).label-look .label-section > button.new-style {
       margin: 0;
     }
     /* Groups of fields within a section keep the section's spacing. */
@@ -1071,21 +1101,21 @@
       flex-direction: column;
       gap: 8px;
     }
-    #panel .field .toggle-group button {
+    :is(#panel, #style-panel) .field .toggle-group button {
       padding: 4px 8px;
       border: none;
       border-radius: 4px;
       background: none;
       font: inherit;
     }
-    #panel .field .toggle-group button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .field .toggle-group button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
     #image-upload-field {
       cursor: pointer;
     }
-    #panel.label-look #image-preview {
+    :is(#panel, #style-panel).label-look #image-preview {
       border: none;
     }
     #label-layers {
@@ -1109,7 +1139,7 @@
     .level-row > button + button {
       margin-left: -8px;
     }
-    #panel .level-row button {
+    :is(#panel, #style-panel) .level-row button {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1122,15 +1152,15 @@
       color: var(--label-ink);
       font: 15px 'National Park', system-ui, sans-serif;
     }
-    #panel .level-row button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .level-row button[aria-pressed="true"] {
       background: var(--label-ink);
       color: #fff;
     }
-    #panel .level-row button:disabled {
+    :is(#panel, #style-panel) .level-row button:disabled {
       color: #b5b5b5;
       cursor: default;
     }
-    #panel.label-look .level-row .material-symbols-rounded {
+    :is(#panel, #style-panel).label-look .level-row .material-symbols-rounded {
       font-size: 20px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
     }
@@ -1168,20 +1198,20 @@
       background: #fff;
       border-radius: 6px;
     }
-    #panel #device-list .field {
+    :is(#panel, #style-panel) #device-list .field {
       margin: 0;
       border-radius: 0;
     }
     #device-list > * + * {
       border-top: 1px solid rgba(127, 127, 127, 0.25);
     }
-    #panel #device-list .field:hover {
+    :is(#panel, #style-panel) #device-list .field:hover {
       background: rgba(127, 127, 127, 0.12);
     }
-    #panel.label-look .style-card {
+    :is(#panel, #style-panel).label-look .style-card {
       min-height: 40px;
     }
-    #panel.label-look .label-section > button {
+    :is(#panel, #style-panel).label-look .label-section > button {
       align-self: flex-start;
       min-height: 40px;
       padding: 0 12px;
@@ -2050,6 +2080,12 @@
           <input id="sketch-radius" type="number" min="0" step="1">
         </label>
       </div>
+    </div>
+  </div>
+  <div id="style-panel" class="label-look" hidden>
+    <div id="style-panel-header">
+      <h2>Label Style</h2>
+      <button id="style-panel-close" type="button" aria-label="Close label style"><span class="material-symbols-rounded">close</span></button>
     </div>
   </div>
   <script src="google-fonts.js"></script>
@@ -3805,7 +3841,6 @@
         items.hidden = !opening;
       });
       edit.addEventListener('click', () => {
-        setAsideLabels();
         openStyleForm(style);
       });
       clone.addEventListener('click', () => {
@@ -3813,7 +3848,6 @@
         const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
         labelStyles.push(copy);
         adopt(copy);
-        setAsideLabels();
         renderLabelStyles();
         openStyleForm(copy, true);
         styleInputs.name.select();
@@ -3888,6 +3922,7 @@
     }
 
     const styleBrowser = document.getElementById('label-style-browser');
+    const stylePanel = document.getElementById('style-panel');
 
     function openStyleForm(style, recorded = false) {
       closeStyleForm();
@@ -3939,7 +3974,13 @@
       styleInputs['pointer-length'].value = values.pointerLength;
       styleInputs['pointer-width'].value = values.pointerWidth;
       styleInputs['pointer-end'].value = values.pointerEnd;
-      styleBrowser.hidden = true;
+      // With a label or list selected, the form opens beside its panel.
+      if (selectedLabels.length || selectedList) {
+        stylePanel.append(styleForm);
+        stylePanel.hidden = false;
+      } else {
+        styleBrowser.hidden = true;
+      }
       styleForm.hidden = false;
       draw();
       styleInputs.name.focus();
@@ -3950,6 +3991,8 @@
       styleBefore = null;
       styleForm.hidden = true;
       styleBrowser.hidden = false;
+      styleBrowser.after(styleForm);
+      stylePanel.hidden = true;
     }
 
     function applyStyleForm() {
@@ -3982,31 +4025,19 @@
       const style = { id: nextStyleId++, name: `Style ${labelStyles.length + 1}`, ...NEW_STYLE };
       labelStyles.push(style);
       adopt(style);
-      setAsideLabels();
       renderLabelStyles();
       openStyleForm(style, true);
       styleInputs.name.select();
     }
     document.getElementById('new-label-style').addEventListener('click', () => newLabelStyle());
-    // A style's form can't show while labels are selected, so opening it from
-    // a label lets go of the selection, and the back arrow restores it.
-    let labelsSetAside = [];
-    let listSetAside = null;
-    function setAsideLabels() {
-      labelsSetAside = selectedLabels;
-      listSetAside = selectedList;
-      selectedLabels = [];
-      selectedList = null;
-      draw();
-    }
     function leaveStyleForm() {
       closeStyleForm();
-      selectedLabels = labelsSetAside.filter((label) => labels.includes(label));
-      labelsSetAside = [];
-      selectedList = lists.includes(listSetAside) ? listSetAside : null;
-      listSetAside = null;
       draw();
     }
+    document.getElementById('style-panel-close').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      leaveStyleForm();
+    });
     // The slider and the field move each other; the field can go past 100%.
     const zoomScaleSlider = styleInputs['zoom-scale'].closest('.slider').querySelector('input[type="range"]');
     zoomScaleSlider.addEventListener('input', () => { styleInputs['zoom-scale'].value = zoomScaleSlider.value; });
@@ -4401,10 +4432,10 @@
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
     }
-    // The back arrow leaves a style being edited for wherever it was opened
-    // from, else the selection for the mode's own panel.
+    // The back arrow leaves a style being edited in the panel for the style
+    // list, else the selection for the mode's own panel.
     document.getElementById('panel-back').addEventListener('click', () => {
-      if (editingStyle && !labelTools.hidden) {
+      if (editingStyle && !labelTools.hidden && stylePanel.hidden) {
         leaveStyleForm();
         return;
       }
@@ -4805,8 +4836,12 @@
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
       showImagePanel();
-      // Selecting a label swaps the style list and form for its properties.
-      if (anyLabels && editingStyle) closeStyleForm();
+      // Selecting a label swaps the style list and a form in it for the
+      // label's properties; a form beside them goes once nothing is selected.
+      if ((anyLabels || selectedList) && editingStyle && stylePanel.hidden) closeStyleForm();
+      if (!stylePanel.hidden && !anyLabels && !selectedList) closeStyleForm();
+      // The style panel closes from its own corner, so the panel can't collapse under it.
+      document.getElementById('panel-close').hidden = !stylePanel.hidden;
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {

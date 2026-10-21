@@ -3940,6 +3940,7 @@
     const styleBrowser = document.getElementById('label-style-browser');
     const stylePanel = document.getElementById('style-panel');
     const stylePanelOpen = () => stylePanel.classList.contains('open');
+    let styleFormForSelection = false;
 
     function openStyleForm(style, recorded = false) {
       closeStyleForm();
@@ -3991,13 +3992,10 @@
       styleInputs['pointer-length'].value = values.pointerLength;
       styleInputs['pointer-width'].value = values.pointerWidth;
       styleInputs['pointer-end'].value = values.pointerEnd;
-      // With a label or list selected, the form opens beside its panel.
-      if (selectedLabels.length || selectedList) {
-        stylePanel.append(styleForm);
-        stylePanel.classList.add('open');
-      } else {
-        styleBrowser.hidden = true;
-      }
+      // Opened for a selection, the form goes when nothing is selected any more.
+      styleFormForSelection = !!(selectedLabels.length || selectedList);
+      stylePanel.append(styleForm);
+      stylePanel.classList.add('open');
       styleForm.hidden = false;
       draw();
       styleInputs.name.focus();
@@ -4006,9 +4004,6 @@
     function closeStyleForm() {
       editingStyle = null;
       styleBefore = null;
-      styleForm.hidden = true;
-      styleBrowser.hidden = false;
-      styleBrowser.after(styleForm);
       stylePanel.classList.remove('open');
     }
 
@@ -4191,12 +4186,15 @@
           setOpen(true);
           draw();
         });
-        // The style in use alone opens for editing when clicked, outside its menu.
+        // The style in use alone opens the list when clicked beside its
+        // preview (the preview itself opens the style for editing).
         const single = style && card(document.createElement('div'), style, '');
         if (single) {
           single.classList.add('editable');
           single.addEventListener('click', (e) => {
-            if (!e.target.closest('.style-menu, .style-swatch')) openStyleForm(style);
+            if (e.target.closest('.style-menu, .style-swatch')) return;
+            setOpen(true);
+            draw();
           });
         }
         container.replaceChildren(title, ...(single ? [single] : []), ...(chevron ? [] : [change]));
@@ -4214,7 +4212,17 @@
           pick.blur();
           draw();
         });
-        return card(document.createElement('label'), style, pick);
+        const option = card(document.createElement('label'), style, pick);
+        // The style in use, clicked again, closes the list.
+        if (pick.checked) {
+          option.addEventListener('click', (e) => {
+            if (e.target.closest('.style-menu, .style-swatch')) return;
+            e.preventDefault();
+            setOpen(false);
+            draw();
+          });
+        }
+        return option;
       }));
       const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style', innerHTML: 'New Label Style<span class="material-symbols-rounded">add</span>' });
       create.addEventListener('click', () => newLabelStyle(adopt));
@@ -4462,13 +4470,8 @@
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
     }
-    // The back arrow leaves a style being edited in the panel for the style
-    // list, else the selection for the mode's own panel.
+    // The back arrow leaves the selection for the mode's own panel.
     document.getElementById('panel-back').addEventListener('click', () => {
-      if (editingStyle && !labelTools.hidden && !stylePanelOpen()) {
-        leaveStyleForm();
-        return;
-      }
       selectedLabels = [];
       selectedPins = [];
       selectedList = null;
@@ -4751,7 +4754,7 @@
       placeListDialog();
       document.getElementById('panel-title').textContent = panelTitle();
       const selecting = hasSelection();
-      document.getElementById('panel-back').hidden = !selecting && !(editingStyle && !labelTools.hidden);
+      document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
       if (selecting && !hadSelection) setPanelOpen(true);
       hadSelection = selecting;
@@ -4866,10 +4869,8 @@
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
       showImagePanel();
-      // Selecting a label swaps the style list and a form in it for the
-      // label's properties; a form beside them goes once nothing is selected.
-      if ((anyLabels || selectedList) && editingStyle && !stylePanelOpen()) closeStyleForm();
-      if (stylePanelOpen() && !anyLabels && !selectedList) closeStyleForm();
+      // A style form opened for a selection goes once nothing is selected.
+      if (stylePanelOpen() && styleFormForSelection && !anyLabels && !selectedList) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
@@ -7887,7 +7888,7 @@
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';
         if (selectedList) return 'List';
         if (selectedShapes.length) return selectedShapes.length > 1 ? 'Images' : 'Image';
-        return editingStyle ? 'Label Style' : 'Labels';
+        return 'Labels';
       }
       if (!backgroundTools.hidden) {
         if (selectedShapes.length > 1) return 'Shapes';

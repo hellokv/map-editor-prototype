@@ -616,7 +616,7 @@
       display: flex;
       align-items: center;
       width: 64px;
-      padding-left: 2px;
+      padding-left: 6px;
       box-sizing: border-box;
       overflow: hidden;
       background: var(--map-ground, #fff);
@@ -3582,6 +3582,7 @@
     const labelBackdrop = document.createElement('canvas');
     const SWATCH_OPEN_WIDTH = 268;
     const SWATCH_HEIGHT = 40;
+    const BACKDROP_LEAD = 16;
     function captureLabelBackdrop() {
       const label = !labelTools.hidden && soleLabel();
       if (!label) return;
@@ -3593,7 +3594,9 @@
       const ratio = (view.scale * labelZoom(label) * styleOf(label).size) / PREVIEW_TEXT_SIZE;
       const w = SWATCH_OPEN_WIDTH * ratio;
       const h = SWATCH_HEIGHT * ratio;
+      // Starting a little before the label, so it isn't hard against the swatch's edge.
       const left = toScreen({ x: area.x, y: area.y + area.h / 2 });
+      left.x -= BACKDROP_LEAD * ratio;
       labelBackdrop.width = SWATCH_OPEN_WIDTH * dpr;
       labelBackdrop.height = SWATCH_HEIGHT * dpr;
       labelBackdrop.getContext('2d').drawImage(canvas, left.x * dpr, (left.y - h / 2) * dpr, w * dpr, h * dpr, 0, 0, labelBackdrop.width, labelBackdrop.height);
@@ -4029,7 +4032,7 @@
     styleForm.addEventListener('submit', (e) => e.preventDefault());
 
     // A canvas showing text drawn in a style.
-    const PREVIEW_TEXT_SIZE = 12;
+    const PREVIEW_TEXT_SIZE = 15;
     const PREVIEW_MAX_HEIGHT = 36;
     // extra carries a label's icon settings, if any.
     function stylePreview(style, text, extra = {}) {

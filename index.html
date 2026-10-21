@@ -1276,10 +1276,11 @@
             Icon
             <span class="icon-picker">
               <span id="label-icon-preview" class="material-symbols-rounded"></span>
-              <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
+              <input id="label-icon" type="text" autocomplete="off" placeholder="Search">
               <div id="icon-options" class="icon-options" hidden></div>
             </span>
             <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
+            <span id="label-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
           <div id="label-icon-side-field" class="field">
             Alignment
@@ -1367,10 +1368,11 @@
             Icon
             <span class="icon-picker">
               <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
-              <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search icons">
+              <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search">
               <div class="icon-options" hidden></div>
             </span>
             <button id="list-item-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
+            <span id="list-item-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
           <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
         </div>
@@ -4531,6 +4533,7 @@
         if (document.activeElement !== listItemPlace) listItemPlace.value = item.place ?? '';
         if (document.activeElement !== listItemText) listItemText.value = item.text;
         listItemIconClear.hidden = !item.icon;
+        document.getElementById('list-item-icon-search').hidden = !!item.icon;
         if (document.activeElement !== listItemIcon) listItemIcon.value = item.icon ?? '';
         document.getElementById('list-item-icon-preview').textContent = item.icon ?? '';
       }
@@ -4738,6 +4741,7 @@
         const iconOn = !!selectedLabel.icon;
         // Hidden text needs its icon, so then the icon can't be cleared.
         labelIconClear.hidden = !iconOn || textHidden;
+        document.getElementById('label-icon-search').hidden = iconOn;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
           field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;

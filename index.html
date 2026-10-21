@@ -1296,6 +1296,10 @@
             <input id="list-padding" type="number" min="0" step="1">
           </label>
           <label class="field">
+            Item spacing
+            <input id="list-item-gap" type="number" min="0" step="1">
+          </label>
+          <label class="field">
             Outline
             <span class="color-field"><input id="list-outline" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             <input id="list-outline-on" class="switch" type="checkbox">
@@ -2911,7 +2915,7 @@
       x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text })),
       headingStyleId: styleIdOr(LIST_HEADING_STYLE_ID), itemStyleId: styleIdOr(LIST_ITEM_STYLE_ID),
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
-      outline: null, outlineWidth: 2, shadow: null, zoomScale: 100,
+      outline: null, outlineWidth: 2, shadow: null, zoomScale: 100, itemGap: LIST_ROW_GAP,
     });
     // Like a label's, a list's zoomScale is the percent of the map's zoom it
     // follows, here about the box's centre. Its rows are laid out at their
@@ -2930,11 +2934,12 @@
       ].filter((row) => row.text.trim() || row.icon);
       const sizes = rows.map((row) => labelBox({ ...row, x: 0, y: 0 }));
       const w = Math.max(0, ...sizes.map((size) => size.w)) + 2 * list.padding;
-      const h = sizes.reduce((sum, size) => sum + size.h, 0) + LIST_ROW_GAP * Math.max(0, rows.length - 1) + 2 * list.padding;
+      const gap = list.itemGap ?? LIST_ROW_GAP;
+      const h = sizes.reduce((sum, size) => sum + size.h, 0) + gap * Math.max(0, rows.length - 1) + 2 * list.padding;
       let top = list.y + list.padding;
       const placed = rows.map((row, i) => {
         const label = { ...row, x: list.x + list.padding + sizes[i].w / 2, y: top + sizes[i].h / 2 };
-        top += sizes[i].h + LIST_ROW_GAP;
+        top += sizes[i].h + gap;
         return label;
       });
       return { box: { x: list.x, y: list.y, w, h }, rows: placed };
@@ -4225,6 +4230,7 @@
       corners: liveField('list-corners', 'corners', (input) => input.value, theList),
       radius: liveField('list-radius', 'radius', listNumber(0, 0), theList),
       padding: liveField('list-padding', 'padding', listNumber(0, 0), theList),
+      itemGap: liveField('list-item-gap', 'itemGap', listNumber(0, 0), theList),
       outlineWidth: liveField('list-outline-width', 'outlineWidth', listNumber(0, 0), theList),
       zoomScale: liveField('list-zoom-scale', 'zoomScale', listNumber(0, 0), theList),
       x: liveField('list-x', 'x', listNumber(0), theList),
@@ -4367,6 +4373,7 @@
       show(listInputs.corners, list.corners);
       show(listInputs.radius, list.radius);
       show(listInputs.padding, list.padding);
+      show(listInputs.itemGap, list.itemGap ?? LIST_ROW_GAP);
       show(listInputs.outlineWidth, list.outlineWidth);
       show(listInputs.zoomScale, list.zoomScale ?? 100);
       show(listZoomSlider, list.zoomScale ?? 100);

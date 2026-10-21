@@ -2286,11 +2286,15 @@
     });
     for (const button of labelToolButtons) {
       button.addEventListener('click', () => {
-        // The Image tool asks for a file rather than waiting for a click on the map.
+        // The Image tool shows as in use while its file dialog is open, then
+        // hands back to the cursor whether a file was picked or not.
         if (button.dataset.labelTool === 'image') {
-          setLabelTool('select');
+          setLabelTool('image');
           button.blur();
           placeImageInput.click();
+          const done = () => { if (labelTool === 'image') setLabelTool('select'); };
+          placeImageInput.addEventListener('change', done, { once: true });
+          placeImageInput.addEventListener('cancel', done, { once: true });
           return;
         }
         setLabelTool(button.dataset.labelTool);

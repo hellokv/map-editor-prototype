@@ -1048,11 +1048,6 @@
       font-size: 20px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
     }
-    #device-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
     .device-row > span:first-child {
       display: inline-flex;
       align-items: center;
@@ -1061,10 +1056,36 @@
     .device-row .device-size {
       font-weight: 400;
     }
-    #label-style-list {
+    /* Radio lists sit together in one block, divided by rules. */
+    .radio-list,
+    #label-style-list,
+    #device-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      overflow: hidden;
+      background: var(--map-ground, #fff);
+      border-radius: 6px;
+    }
+    #device-list {
+      background: #fff;
+    }
+    #panel .radio-list .style-card,
+    #panel #label-style-list .style-card,
+    #panel #device-list .field {
+      margin: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+    }
+    .radio-list > * + *,
+    #label-style-list > * + *,
+    #device-list > * + * {
+      border-top: 1px solid rgba(127, 127, 127, 0.25);
+    }
+    #panel .radio-list .style-card:hover,
+    #panel #label-style-list .style-card:hover,
+    #panel #device-list .field:hover {
+      background: rgba(127, 127, 127, 0.12);
     }
     #panel.label-look .style-card {
       margin-top: 0;
@@ -3948,7 +3969,9 @@
         return;
       }
       const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];
-      container.replaceChildren(title, ...ordered.map((style) => {
+      const options = Object.assign(document.createElement('div'), { className: 'radio-list' });
+      container.replaceChildren(title, options);
+      options.append(...ordered.map((style) => {
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: container.id, value: style.id, checked: styleIds.size === 1 && styleIds.has(style.id) });
         pick.addEventListener('change', () => {
           recordUndo();

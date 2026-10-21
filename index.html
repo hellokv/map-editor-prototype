@@ -1503,6 +1503,10 @@
           <div class="label-section">
             <div class="section-heading">Icon</div>
             <label class="field">
+              Icon color
+              <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="field">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
@@ -3421,8 +3425,14 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
+    // A style's icon is in its text color until the icon is given a color of its own.
+    let iconColorSet = false;
+    styleInputs['icon-color'].addEventListener('input', () => { iconColorSet = true; });
+    styleInputs.color.addEventListener('input', () => {
+      if (!iconColorSet) showColor(styleInputs['icon-color'], colorOf(styleInputs.color));
+    });
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
     let editingStyle = null;
@@ -3607,6 +3617,7 @@
         iconCorners: styleInputs['icon-corners'].value,
         iconRadius: Math.max(0, Number(styleInputs['icon-radius'].value) || 0),
         iconPadding: Math.max(0, Number(styleInputs['icon-padding'].value) || 0),
+        iconColor: iconColorSet ? colorOf(styleInputs['icon-color']) : undefined,
       };
     }
 
@@ -3629,6 +3640,8 @@
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
       showColor(styleInputs.color, values.color);
+      iconColorSet = values.iconColor != null;
+      showColor(styleInputs['icon-color'], values.iconColor ?? values.color);
       styleInputs['outline-on'].checked = !!values.outline;
       showColor(styleInputs.outline, values.outline ?? '#ffffff');
       styleInputs['outline-width'].value = values.outlineWidth;
@@ -5204,6 +5217,7 @@
       }
       c.fillStyle = style.color;
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
+      c.fillStyle = style.iconColor ?? style.color;
       if (label.icon) paintIcon(c, label, style, iconX, iconY, 'fillText');
     }
     function iconPaddingOf(style) {

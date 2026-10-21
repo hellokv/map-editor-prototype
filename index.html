@@ -982,6 +982,7 @@
     }
     #panel .field .slider input[type="range"] {
       width: 100%;
+      min-width: 0;
       height: 20px;
       background: none;
       appearance: none;
@@ -1130,6 +1131,18 @@
       gap: 8px;
     }
     /* The device list sits together in one block, divided by rules. */
+    /* A long name beside a slider wraps once the slider is as narrow as it goes. */
+    .field-name {
+      flex: none;
+      /* The slider's narrowest: a 44px number, a 12px gap and a 60px slider, plus the 12px gap before it. */
+      max-width: calc(100% - 128px);
+      white-space: normal;
+    }
+    .field .slider output {
+      min-width: 0;
+      text-align: left;
+      font: 15px 'National Park', system-ui, sans-serif;
+    }
     #device-list {
       display: flex;
       flex-direction: column;
@@ -1290,7 +1303,7 @@
             <textarea id="label-text" rows="1"></textarea>
           </label>
           <label id="label-hide-text-field" class="field">
-            Hide text
+            Hide Text
             <input id="label-hide-text" class="switch" type="checkbox">
           </label>
           <div class="field-pair">
@@ -1412,7 +1425,7 @@
         </div>
         <div class="label-section">
           <label class="field">
-            Background color
+            Background Color
             <span class="color-field"><input id="list-background" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
           <label class="field">
@@ -1423,7 +1436,7 @@
             </select>
           </label>
           <label class="field">
-            Corner radius
+            Corner Radius
             <input id="list-radius" type="number" min="0" step="1">
           </label>
           <label class="field">
@@ -1431,7 +1444,7 @@
             <input id="list-padding" type="number" min="0" step="1">
           </label>
           <label class="field">
-            Item spacing
+            Item Spacing
             <input id="list-item-gap" type="number" min="0" step="1">
           </label>
           <label class="field">
@@ -1440,7 +1453,7 @@
             <input id="list-outline-on" class="switch" type="checkbox">
           </label>
           <label id="list-outline-width-field" class="field">
-            Outline weight
+            Outline Weight
             <input id="list-outline-width" type="number" min="0" step="0.5">
           </label>
           <label class="field">
@@ -1451,7 +1464,7 @@
         </div>
         <div class="label-section">
           <label class="field">
-            Scale factor
+            Scale Factor
             <span class="slider"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
           </label>
           <div class="field-pair">
@@ -1472,7 +1485,7 @@
             Place
             <select id="image-place"></select>
           </label>
-          <button id="image-change" type="button">Change image</button>
+          <button id="image-change" type="button">Change Image</button>
         </div>
         <div class="group">
           <div class="row">
@@ -1493,11 +1506,11 @@
             </select>
           </label>
           <label class="row">
-            Corner radius
+            Corner Radius
             <input id="image-radius" type="number" min="0" step="1">
           </label>
           <label class="row">
-            Scale factor
+            Scale Factor
             <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span></span>
           </label>
         </div>
@@ -1543,7 +1556,7 @@
               </span>
             </label>
             <label class="field">
-              Font weight
+              Font Weight
               <select id="style-weight">
                 <option value="100">Thin</option>
                 <option value="200">Extra light</option>
@@ -1557,27 +1570,27 @@
               </select>
             </label>
             <label class="field">
-              Font size
+              Font Size
               <input id="style-size" type="number" min="4" max="200" step="1" required>
             </label>
             <label class="field">
-              Line height
+              Line Height
               <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
             </label>
             <label class="field">
-              Letter spacing
+              Letter Spacing
               <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
             </label>
             <label class="field">
-              Scale factor
+              Scale Factor
               <span class="slider"><span class="percent-field"><input id="style-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
             </label>
             <label class="field">
-              All caps
+              All Caps
               <input id="style-caps" class="switch" type="checkbox">
             </label>
             <label class="field">
-              Hide text
+              Hide Text
               <input id="style-hide-text" class="switch" type="checkbox">
             </label>
           </div>
@@ -1592,7 +1605,7 @@
               <input id="style-outline-on" class="switch" type="checkbox">
             </label>
             <label class="field">
-              Outline weight
+              Outline Weight
               <input id="style-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
             <label class="field">
@@ -1610,7 +1623,7 @@
               </span>
             </div>
             <label class="field">
-              Background color
+              Background Color
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
               <input id="style-background-on" class="switch" type="checkbox">
             </label>
@@ -1622,19 +1635,19 @@
               </select>
             </label>
             <label class="field">
-              Corner radius
+              Corner Radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
             </label>
             <label class="field">
-              Pointer length
+              Pointer Length
               <input id="style-pointer-length" type="number" min="0" max="500" step="1">
             </label>
             <label class="field">
-              Pointer weight
+              Pointer Weight
               <input id="style-pointer-width" type="number" min="0" max="50" step="0.5">
             </label>
             <label class="field">
-              Pointer end
+              Pointer End
               <select id="style-pointer-end">
                 <option value="round">Rounded</option>
                 <option value="square">Square</option>
@@ -1645,7 +1658,7 @@
           <div class="label-section">
             <div class="section-heading">Icon</div>
             <label class="field">
-              Icon color
+              Icon Color
               <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
             <div class="field">
@@ -1657,11 +1670,11 @@
               </div>
             </div>
             <label class="field">
-              Icon size
+              Icon Size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
             <label class="field">
-              Icon gap
+              Icon Gap
               <input id="style-icon-gap" type="number" min="0" max="200" step="1">
             </label>
             <div class="field">
@@ -1678,7 +1691,7 @@
               </div>
             </div>
             <label class="field">
-              Background color
+              Background Color
               <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
               <input id="style-icon-background-on" class="switch" type="checkbox">
             </label>
@@ -1688,7 +1701,7 @@
               <input id="style-icon-outline-on" class="switch" type="checkbox">
             </label>
             <label class="field">
-              Outline weight
+              Outline Weight
               <input id="style-icon-outline-width" type="number" min="0" max="50" step="0.5">
             </label>
             <label class="field">
@@ -1697,11 +1710,11 @@
               <input id="style-icon-shadow-on" class="switch" type="checkbox">
             </label>
             <label class="field">
-              Shadow gap
+              Shadow Gap
               <input id="style-icon-shadow-gap" type="number" step="0.5">
             </label>
             <label class="field">
-              Shadow size
+              Shadow Size
               <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
             </label>
             <label class="field">
@@ -1712,7 +1725,7 @@
               </select>
             </label>
             <label class="field">
-              Corner radius
+              Corner Radius
               <input id="style-icon-radius" type="number" min="0" max="200" step="1">
             </label>
             <label class="field">
@@ -1745,59 +1758,64 @@
       </div>
     </div>
     <div id="path-panel">
-      <div class="group">
-        <label class="row">
-          <span><input id="show-labels" type="checkbox" checked> Show labels</span>
+      <div class="label-section">
+        <label class="field">
+          Show Labels
+          <input id="show-labels" class="switch" type="checkbox" checked>
         </label>
-        <label class="row">
-          Snap distance
-          <span class="slider"><input id="snap-distance" type="range" min="0" max="50" value="15"><output for="snap-distance"></output></span>
+        <label class="field">
+          <span class="field-name">Snap Distance</span>
+          <span class="slider"><output for="snap-distance"></output><input id="snap-distance" type="range" min="0" max="50" value="15"></span>
         </label>
-        <label class="row">
-          Segment hover distance
-          <span class="slider"><input id="segment-distance" type="range" min="1" max="50" value="10"><output for="segment-distance"></output></span>
+        <label class="field">
+          <span class="field-name">Segment Hover Distance</span>
+          <span class="slider"><output for="segment-distance"></output><input id="segment-distance" type="range" min="1" max="50" value="10"></span>
         </label>
-        <label class="row">
-          Bend focus
-          <span class="slider"><input id="bend-focus" type="range" min="0" max="100" value="0"><output for="bend-focus"></output></span>
+        <label class="field">
+          <span class="field-name">Bend Focus</span>
+          <span class="slider"><output for="bend-focus"></output><input id="bend-focus" type="range" min="0" max="100" value="0"></span>
         </label>
-        <label class="row">
-          Nudge amount
-          <span class="slider"><input id="nudge-amount" type="range" min="1" max="20" value="1"><output for="nudge-amount"></output></span>
+        <label class="field">
+          <span class="field-name">Nudge Amount</span>
+          <span class="slider"><output for="nudge-amount"></output><input id="nudge-amount" type="range" min="1" max="20" value="1"></span>
         </label>
-        <label class="row">
-          Path color
+        <label class="field">
+          Path Color
           <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
-      <div class="group">
-        <label id="intersection-field" class="row" hidden>
-          <span><input id="intersection" type="checkbox"> Intersection</span>
+      <div class="label-section">
+        <label id="intersection-field" class="field" hidden>
+          Intersection
+          <input id="intersection" class="switch" type="checkbox">
         </label>
-        <button id="create-path" type="button" hidden>Create path</button>
-        <label id="path-visible-field" class="row" hidden>
-          <span><input id="path-visible" type="checkbox"> Visible</span>
+        <button id="create-path" class="new-style" type="button" hidden>Create Path<span class="material-symbols-rounded">add</span></button>
+        <label id="path-visible-field" class="field" hidden>
+          Visible
+          <input id="path-visible" class="switch" type="checkbox">
         </label>
         <div id="path-width-fields" hidden>
-          <label class="row">
-            Width
-            <span class="slider"><input id="path-width" type="range" min="1" max="100"><output for="path-width"></output></span>
+          <label class="field">
+            <span class="field-name">Width</span>
+            <span class="slider"><output for="path-width"></output><input id="path-width" type="range" min="1" max="100"></span>
           </label>
-          <label class="row">
-            Width color
+          <label class="field">
+            Width Color
             <span class="color-field"><input id="path-width-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
         </div>
-        <button id="destroy-path" type="button" hidden>Destroy path</button>
-        <button id="delete-bend" type="button" hidden>Delete bend</button>
-        <label id="fill-area-field" class="row" hidden>
-          <span><input id="fill-area" type="checkbox"> Fill area</span>
+        <button id="destroy-path" class="new-style" type="button" hidden>Destroy Path<span class="material-symbols-rounded">delete</span></button>
+        <button id="delete-bend" class="new-style" type="button" hidden>Delete Bend<span class="material-symbols-rounded">delete</span></button>
+        <label id="fill-area-field" class="field" hidden>
+          Fill Area
+          <input id="fill-area" class="switch" type="checkbox">
         </label>
-        <label id="fill-visible-field" class="row" hidden>
-          <span><input id="fill-visible" type="checkbox"> Visible</span>
+        <label id="fill-visible-field" class="field" hidden>
+          Visible
+          <input id="fill-visible" class="switch" type="checkbox">
         </label>
-        <label id="fill-color-field" class="row" hidden>
-          Fill color
+        <label id="fill-color-field" class="field" hidden>
+          Fill Color
           <span class="color-field"><input id="fill-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
@@ -1805,13 +1823,13 @@
     <div id="background-panel" hidden>
       <div class="label-section background-settings">
         <label class="field">
-          Show labels
+          Show Labels
           <input id="background-show-labels" class="switch" type="checkbox" checked>
         </label>
       </div>
       <div class="label-section background-settings">
         <label id="image-upload-field" class="field">
-          Background image
+          Background Image
           <input id="image-upload" type="file" accept="image/*" hidden>
           <span class="material-symbols-rounded">upload</span>
         </label>
@@ -1822,11 +1840,11 @@
           </button>
         </div>
         <label class="field">
-          Background outside
+          Background Outside
           <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
         </label>
         <label class="field">
-          Background inside
+          Background Inside
           <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
         </label>
         <label class="field">
@@ -1847,7 +1865,7 @@
           <input id="board-outline-on" class="switch" type="checkbox">
         </label>
         <label id="board-outline-width-field" class="field">
-          Outline weight
+          Outline Weight
           <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
         </label>
         <label class="field">
@@ -1858,7 +1876,7 @@
           </select>
         </label>
         <label class="field">
-          Corner radius
+          Corner Radius
           <input id="board-radius" type="number" min="0" step="1" value="0">
         </label>
         <label class="field">
@@ -1876,7 +1894,7 @@
             <input id="board-shadow-y" type="number" step="1" value="8">
           </label>
           <label class="field">
-            Shadow blur
+            Shadow Blur
             <input id="board-shadow-blur" type="number" min="0" step="1" value="24">
           </label>
         </div>
@@ -1893,12 +1911,12 @@
       </div>
       <div id="shape-properties" class="label-section" hidden>
         <label id="shape-color-field" class="field">
-          <span id="shape-color-name">Fill color</span>
+          <span id="shape-color-name">Fill Color</span>
           <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <div id="compass-fields">
           <label class="field">
-            Back star
+            Back Star
             <span class="color-field"><input id="compass-back-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
           <div class="field">
@@ -1910,11 +1928,11 @@
             </div>
           </div>
           <label class="field compass-text-field">
-            Text color
+            Text Color
             <span class="color-field"><input id="compass-text-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
           <label class="field compass-text-field">
-            Keep letters upright
+            Keep Letters Upright
             <input id="compass-upright" class="switch" type="checkbox">
           </label>
           <label class="field compass-text-field">
@@ -1939,22 +1957,22 @@
             </select>
           </label>
           <label class="field compass-text-field">
-            Text size
+            Text Size
             <input id="compass-size" type="number" min="4" step="1">
           </label>
         </div>
         <div id="shape-stripes" class="stripe-fields"></div>
         <label id="shape-radius-field" class="field">
-          Corner radius
+          Corner Radius
           <input id="shape-radius" type="number" min="0" step="1">
         </label>
         <label id="shape-outline-field" class="field">
-          Outline color
+          Outline Color
           <span class="color-field"><input id="shape-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           <input id="shape-outline-on" class="switch" type="checkbox">
         </label>
         <label id="shape-shadow-field" class="field">
-          Shadow color
+          Shadow Color
           <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           <input id="shape-shadow-on" class="switch" type="checkbox">
         </label>
@@ -1996,7 +2014,7 @@
           <input id="sketch-fill" class="switch" type="checkbox">
         </label>
         <label id="sketch-fill-color-field" class="field">
-          Fill color
+          Fill Color
           <span class="color-field"><input id="sketch-fill-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <div id="sketch-stripes" class="stripe-fields"></div>
@@ -2006,11 +2024,11 @@
           <input id="sketch-outline-on" class="switch" type="checkbox">
         </label>
         <label id="sketch-outline-width-field" class="field">
-          Outline weight
+          Outline Weight
           <input id="sketch-outline-width" type="number" min="0" max="50" step="0.5">
         </label>
         <label class="field">
-          Corner radius
+          Corner Radius
           <input id="sketch-radius" type="number" min="0" step="1">
         </label>
       </div>
@@ -2046,15 +2064,15 @@
         </label>
         <div>
           <label class="field">
-            Stripe thickness
+            Stripe Thickness
             <input type="number" min="0.5" step="0.5" value="${STRIPES.width}">
           </label>
           <label class="field">
-            Stripe spacing
+            Stripe Spacing
             <input type="number" min="0" step="0.5" value="${STRIPES.gap}">
           </label>
           <label class="field">
-            Stripe angle
+            Stripe Angle
             <span class="slider"><input type="number" step="1" value="${STRIPES.angle}"><input type="range" min="0" max="180" step="1" value="${STRIPES.angle}" aria-label="Stripe angle"></span>
           </label>
         </div>`;
@@ -4513,7 +4531,7 @@
     let listRowsKey = '';
     const listPickers = {
       heading: {
-        container: document.getElementById('list-heading-style-picker'), title: 'Heading style', open: false, rendered: '',
+        container: document.getElementById('list-heading-style-picker'), title: 'Heading Style', open: false, rendered: '',
         styleId: (list) => list.headingStyleId,
         text: (list) => list.heading,
         adopt: (list, style) => { list.headingStyleId = style.id; },
@@ -4686,7 +4704,7 @@
         const compasses = selectedShapes.filter((shape) => shape.kind === 'compass');
         const allCompasses = compasses.length === selectedShapes.length;
         const plain = selectedShapes.filter((shape) => shape.kind !== 'compass');
-        document.getElementById('shape-color-name').textContent = allCompasses ? 'Main star' : 'Fill color';
+        document.getElementById('shape-color-name').textContent = allCompasses ? 'Main Star' : 'Fill Color';
         document.getElementById('shape-radius-field').hidden = plain.every((shape) => shape.kind === 'circle');
         document.getElementById('shape-outline-field').hidden = !plain.length;
         document.getElementById('shape-stripes').hidden = !plain.length;
@@ -4730,8 +4748,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // Labels, Background and Preview have their own look, header included; images don't yet.
-      const labelLook = inPreview() || (!labelTools.hidden && !selectedShapes.length) || !backgroundTools.hidden;
+      // The panel's look, header included, everywhere but a placed image's fields.
+      const labelLook = labelTools.hidden || !selectedShapes.length;
       document.getElementById('panel').classList.toggle('label-look', labelLook);
       document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
@@ -7753,7 +7771,7 @@
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';
         if (selectedList) return 'List';
         if (selectedShapes.length) return selectedShapes.length > 1 ? 'Images' : 'Image';
-        return editingStyle ? 'Label style' : 'Labels';
+        return editingStyle ? 'Label Style' : 'Labels';
       }
       if (!backgroundTools.hidden) {
         if (selectedShapes.length > 1) return 'Shapes';

@@ -100,18 +100,23 @@
     .font-options div[aria-selected="true"] {
       background: #ddd;
     }
+    #list-item-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     .list-item-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 4px;
-      padding: 3px 6px;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 12px;
       background: #fff;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
     }
     .list-item-row .material-symbols-rounded {
-      width: 20px;
+      width: 16px;
     }
     .list-item-row[aria-selected="true"] {
       box-shadow: 0 0 0 1.5px #008FF0;
@@ -728,7 +733,7 @@
     }
     .field-pair {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 8px;
     }
     #panel .field input[type="text"],
@@ -757,9 +762,10 @@
       padding: 11px 0 9px;
       resize: none;
     }
-    #panel .field-pair input[type="number"] {
+    #panel .field-pair .field > input[type="number"] {
       flex: 1;
       width: auto;
+      min-width: 0;
     }
     #panel .field .slider input[type="number"],
     #panel .field .percent-field input {
@@ -944,6 +950,7 @@
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
     #panel.label-look .field .material-symbols-rounded,
+    #panel.label-look .list-item-row .material-symbols-rounded,
     #panel.label-look #label-pointer .material-symbols-rounded {
       font-size: 16px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
@@ -1232,86 +1239,92 @@
         </div>
       </div>
       <div id="list-properties" hidden>
-        <div class="group">
-          <label class="row">
+        <div class="label-section">
+          <label class="field">
             Heading
             <input id="list-heading" type="text">
           </label>
         </div>
-        <div id="list-heading-style-picker" class="group"></div>
-        <div class="group">
-          Items
+        <div id="list-heading-style-picker" class="label-section"></div>
+        <div class="label-section">
+          <div class="section-heading">Items</div>
           <div id="list-item-rows"></div>
-          <button id="list-add-item" type="button">Add item</button>
+          <button id="list-add-item" class="new-style" type="button">Add Item<span class="material-symbols-rounded">add</span></button>
         </div>
-        <div id="list-item-fields" class="group" hidden>
-          <label class="row">
+        <div id="list-item-fields" class="label-section" hidden>
+          <label class="field">
             Place
             <select id="list-item-place"></select>
           </label>
-          <label class="row">
-            Label
+          <label class="field">
+            Text
             <input id="list-item-text" type="text">
           </label>
-          <label class="row">
-            <span><input id="list-item-icon-on" type="checkbox"> Icon</span>
+          <label class="section-heading">
+            Icon
+            <input id="list-item-icon-on" class="switch" type="checkbox">
           </label>
-          <div id="list-item-icon-field" class="row">
-            <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
+          <div id="list-item-icon-field" class="field">
+            Image
             <span class="icon-picker">
+              <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
               <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search icons">
               <div class="icon-options" hidden></div>
             </span>
           </div>
-          <button id="list-delete-item" type="button">Delete item</button>
+          <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
         </div>
-        <div id="list-item-style-picker" class="group"></div>
-        <div class="group">
-          <label class="row">
+        <div id="list-item-style-picker" class="label-section"></div>
+        <div class="label-section">
+          <label class="field">
             Background color
             <span class="color-field"><input id="list-background" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
-          <label class="row">
+          <label class="field">
             Corners
             <select id="list-corners">
               <option value="round">Rounded</option>
               <option value="chamfer">Chamfered</option>
             </select>
           </label>
-          <label class="row">
+          <label class="field">
             Corner radius
             <input id="list-radius" type="number" min="0" step="1">
           </label>
-          <label class="row">
+          <label class="field">
             Padding
             <input id="list-padding" type="number" min="0" step="1">
           </label>
-          <label class="row">
-            <span><input id="list-outline-on" type="checkbox"> Outline</span>
+          <label class="field">
+            Outline
             <span class="color-field"><input id="list-outline" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            <input id="list-outline-on" class="switch" type="checkbox">
           </label>
-          <label id="list-outline-width-field" class="row">
+          <label id="list-outline-width-field" class="field">
             Outline weight
             <input id="list-outline-width" type="number" min="0" step="0.5">
           </label>
-          <label class="row">
-            <span><input id="list-shadow-on" type="checkbox"> Shadow</span>
+          <label class="field">
+            Shadow
             <span class="color-field"><input id="list-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
+            <input id="list-shadow-on" class="switch" type="checkbox">
           </label>
         </div>
-        <div class="group">
-          <label class="row">
+        <div class="label-section">
+          <label class="field">
             Scale factor
-            <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span></span>
+            <span class="slider"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
           </label>
-          <label class="row">
-            X
-            <input id="list-x" type="number" step="1">
-          </label>
-          <label class="row">
-            Y
-            <input id="list-y" type="number" step="1">
-          </label>
+          <div class="field-pair">
+            <label class="field">
+              X
+              <input id="list-x" type="number" step="1">
+            </label>
+            <label class="field">
+              Y
+              <input id="list-y" type="number" step="1">
+            </label>
+          </div>
         </div>
       </div>
       <div id="image-properties" hidden>
@@ -4246,8 +4259,7 @@
       if (listItemIconToggle.checked) item.icon = '';
       else delete item.icon;
       draw();
-      if (listItemIconToggle.checked) listItemIcon.focus();
-      else listItemIconToggle.blur();
+      listItemIconToggle.blur();
     });
     iconPicker(listItemIcon, listItemIcon.nextElementSibling, () => theItem()?.icon, (name) => {
       const item = theItem();
@@ -4304,6 +4316,7 @@
           open: picker.open,
           setOpen: (open) => { picker.open = open; },
           adopt: (style) => { list[picker.key] = style.id; },
+          chevron: true,
         });
       }
       const rowsKey = JSON.stringify([list.items, listItemIndex]);
@@ -4470,8 +4483,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // Labels and Background have their own look, header included; lists and images don't yet.
-      const labelLook = !inPreview() && ((!labelTools.hidden && !selectedList && !selectedShapes.length) || !backgroundTools.hidden);
+      // Labels and Background have their own look, header included; images don't yet.
+      const labelLook = !inPreview() && ((!labelTools.hidden && !selectedShapes.length) || !backgroundTools.hidden);
       document.getElementById('panel').classList.toggle('label-look', labelLook);
       document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();

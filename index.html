@@ -1002,6 +1002,48 @@
     #panel.label-look #image-preview {
       border: none;
     }
+    #label-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .level-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 40px;
+      padding: 0 12px;
+      background: #fff;
+      border-radius: 6px;
+    }
+    .level-row > button:first-of-type {
+      margin-left: auto;
+    }
+    #panel .level-row button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--label-ink);
+      font: 15px 'National Park', system-ui, sans-serif;
+    }
+    #panel .level-row button[aria-pressed="true"] {
+      background: var(--label-ink);
+      color: #fff;
+    }
+    #panel .level-row button:disabled {
+      color: #b5b5b5;
+      cursor: default;
+    }
+    #panel.label-look .level-row .material-symbols-rounded {
+      font-size: 20px;
+      font-variation-settings: 'wght' 400, 'opsz' 20;
+    }
     #label-style-list {
       display: flex;
       flex-direction: column;
@@ -1230,10 +1272,22 @@
           </div>
           <div>
             <div class="section-label">Level</div>
-            <div id="label-layers" class="level-toggles">
-              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
-              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
-              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
+            <div id="label-layers">
+              <div class="level-row">
+                Sky
+                <button type="button" data-layer="sky" aria-pressed="false" aria-label="Label on Sky"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-text-layer="sky" aria-pressed="false" aria-label="Text on Sky">Aa</button>
+              </div>
+              <div class="level-row">
+                Canopy
+                <button type="button" data-layer="canopy" aria-pressed="false" aria-label="Label on Canopy"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-text-layer="canopy" aria-pressed="false" aria-label="Text on Canopy">Aa</button>
+              </div>
+              <div class="level-row">
+                Ground
+                <button type="button" data-layer="ground" aria-pressed="false" aria-label="Label on Ground"><span class="material-symbols-rounded">label</span></button>
+                <button type="button" data-text-layer="ground" aria-pressed="false" aria-label="Text on Ground">Aa</button>
+              </div>
             </div>
           </div>
         </div>
@@ -4556,6 +4610,12 @@
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
         }
+        // Text can only show on a level the whole label shows on.
+        for (const button of labelTextLayerButtons) {
+          const layer = button.dataset.textLayer;
+          button.disabled = selectedLabels.some((label) => label.layers && !label.layers[layer]);
+          button.setAttribute('aria-pressed', !button.disabled && selectedLabels.every((label) => !label.hideTextAt?.[layer]));
+        }
         if (selectedLabels.length !== stylePickerFor.length || selectedLabels.some((label, i) => label !== stylePickerFor[i])) {
           stylePickerOpen = false;
           stylePickerFor = [...selectedLabels];
@@ -4654,6 +4714,27 @@
       draw();
     });
     const textIsHidden = (label) => !!((label.hideText || styleOf(label).hideText) && label.icon);
+    // Also hidden while the levels on show are all ones the label shows only its icon on.
+    const textHiddenNow = (label) => textIsHidden(label) || (!!label.icon && !labelTextShown(label));
+    // hideTextAt holds the levels a label shows only its icon on.
+    const labelTextLayerButtons = document.querySelectorAll('[data-text-layer]');
+    for (const button of labelTextLayerButtons) {
+      button.addEventListener('click', () => {
+        const layer = button.dataset.textLayer;
+        button.blur();
+        if (!selectedLabels.length || button.disabled) return;
+        recordUndo();
+        const hiding = selectedLabels.every((label) => !label.hideTextAt?.[layer]);
+        for (const label of selectedLabels) {
+          const at = { ...label.hideTextAt };
+          if (hiding) at[layer] = true;
+          else delete at[layer];
+          if (Object.keys(at).length) label.hideTextAt = at;
+          else delete label.hideTextAt;
+        }
+        draw();
+      });
+    }
     const labelHideTextToggle = document.getElementById('label-hide-text');
     labelHideTextToggle.addEventListener('change', () => {
       const label = soleLabel();
@@ -4966,7 +5047,7 @@
     function labelLayout(label, zoom = 1) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
-      const hidden = textIsHidden(label);
+      const hidden = textHiddenNow(label);
       const texts = hidden ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
@@ -5044,7 +5125,7 @@
         const { endX, endY } = pointerLine(label, style, labelZoom(label));
         return { x: endX, y: endY };
       }
-      if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
+      if (style.iconShape !== 'pin' || !textHiddenNow(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
       return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
     }
@@ -5080,7 +5161,10 @@
     // Labels, background shapes and pen points each carry layers (a pen
     // shape's points all share theirs). Anything without is on every layer.
     const onShownLayer = (item) => !item.layers || layerSelect.value === 'All' || shownLayers().some((layer) => item.layers[layer]);
-    const labelShown = onShownLayer;
+    // Whether a label's text is on any level on show; without an icon, a
+    // label whose text is off is off altogether.
+    const labelTextShown = (label) => layerSelect.value === 'All' || shownLayers().some((layer) => (!label.layers || label.layers[layer]) && !label.hideTextAt?.[layer]);
+    const labelShown = (label) => onShownLayer(label) && (!!label.icon || labelTextShown(label));
     // Something new goes on the layers being shown, so it stays in view.
     function newLayers() {
       const layers = shownLayers().length ? shownLayers() : LAYERS;
@@ -5368,7 +5452,7 @@
       drawLists();
       // The label being typed is drawn like a real one in the style it will get.
       const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
-      const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false };
+      const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false, hideTextAt: undefined };
       const shown = labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0);
       for (const label of typing ? [...shown, typing] : shown) {
         ctx.globalAlpha = label === typing ? 1 : labelAlpha(label);

@@ -4161,7 +4161,19 @@
     // button. adopt gives a picked style to whatever the picker is for. With
     // chevron, a chevron beside the title opens and closes the list instead.
     // backdrop, an image URL, replaces the swatches' plain map color.
-    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null }) {
+    // Opening or closing eases the picker's height between the two.
+    const PICKER_EASE_MS = 200;
+    function renderStylePicker(container, options) {
+      const toggled = container.dataset.open !== undefined && container.dataset.open !== String(options.open);
+      const from = container.offsetHeight;
+      buildStylePicker(container, options);
+      container.dataset.open = options.open;
+      if (!toggled) return;
+      const to = container.offsetHeight;
+      const frame = (height) => ({ height: `${height}px`, boxSizing: 'border-box', overflow: 'hidden' });
+      container.animate([frame(from), frame(to)], { duration: PICKER_EASE_MS, easing: 'ease' });
+    }
+    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null }) {
       if (chevron) {
         const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
         const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });

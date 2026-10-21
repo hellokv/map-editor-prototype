@@ -1035,6 +1035,40 @@
     input.switch:disabled::after {
       color: #c4c4c4;
     }
+    /* A hide-text checkbox shown as the levels' eye: open on black while the
+       text shows, crossed out once it's hidden. */
+    input.eye {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin: 0;
+      border-radius: 6px;
+      background: var(--label-ink, #000);
+      appearance: none;
+      cursor: pointer;
+    }
+    input.eye::after {
+      content: 'visibility';
+      font: 20px/1 'Material Symbols Rounded';
+      font-variation-settings: 'wght' 400, 'opsz' 20;
+      color: #fff;
+    }
+    input.eye:checked {
+      background: none;
+    }
+    input.eye:checked::after {
+      content: 'visibility_off';
+      color: var(--label-ink, #000);
+    }
+    input.eye:disabled {
+      cursor: default;
+    }
+    input.eye:disabled::after {
+      color: #b5b5b5;
+    }
     .icon-buttons {
       display: flex;
       gap: 12px;
@@ -1455,7 +1489,7 @@
           </label>
           <label id="label-hide-text-field" class="field">
             Hide Text
-            <input id="label-hide-text" class="switch" type="checkbox">
+            <input id="label-hide-text" class="eye" type="checkbox">
           </label>
           <div class="field-pair">
             <label class="field">
@@ -1742,7 +1776,7 @@
             </label>
             <label class="field">
               Hide Text
-              <input id="style-hide-text" class="switch" type="checkbox">
+              <input id="style-hide-text" class="eye" type="checkbox">
             </label>
           </div>
           <div class="label-section">

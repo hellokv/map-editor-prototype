@@ -1336,6 +1336,9 @@
         <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
+        <button type="button" data-label-tool="pan" aria-label="Pan" aria-pressed="false">
+          <span class="material-symbols-rounded">pan_tool</span>
+        </button>
         <button type="button" data-label-tool="add" aria-label="New label" aria-pressed="false">
           <span class="material-symbols-rounded">new_label</span>
         </button>
@@ -2266,11 +2269,16 @@
     // 'pin' drops one pin for the selected label, from the panel's button.
     function setLabelTool(name) {
       labelTool = name;
-      for (const button of labelToolButtons) {
-        button.setAttribute('aria-pressed', button.dataset.labelTool === name);
-      }
+      showLabelTool();
       addPinButton.setAttribute('aria-pressed', name === 'pin');
       updateCursor();
+    }
+    // Holding space shows the pan tool as the one in use until it's let go.
+    function showLabelTool() {
+      const shown = spaceHeld ? 'pan' : labelTool;
+      for (const button of labelToolButtons) {
+        button.setAttribute('aria-pressed', button.dataset.labelTool === shown);
+      }
     }
     addPinButton.addEventListener('click', () => {
       setLabelTool(labelTool === 'pin' ? 'select' : 'pin');
@@ -2286,6 +2294,7 @@
           return;
         }
         setLabelTool(button.dataset.labelTool);
+        button.blur();
         // Adding a label starts from the main panel, with nothing selected.
         if (button.dataset.labelTool === 'add') {
           selectedLabels = [];
@@ -7259,7 +7268,7 @@
     }
 
     function updateCursor() {
-      if (spaceHeld || drag?.spacePan || inPreview()) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (spaceHeld || drag?.spacePan || inPreview() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = labelCursor();
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = iconCursor('list_alt_add', '#000000', 'crosshair');
@@ -7277,12 +7286,16 @@
       const down = e.type === 'keydown';
       if (spaceHeld === down) return;
       spaceHeld = down;
+      showLabelTool();
       draw();
       updateCursor();
     };
     document.addEventListener('keydown', trackSpace);
     document.addEventListener('keyup', trackSpace);
-    window.addEventListener('blur', () => { spaceHeld = false; });
+    window.addEventListener('blur', () => {
+      spaceHeld = false;
+      showLabelTool();
+    });
 
     // Movement below this many pixels counts as a click rather than a pan.
     const CLICK_SLOP = 4;
@@ -7416,8 +7429,8 @@
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
-      // Preview has nothing to edit, so any drag there pans.
-      if (spaceHeld || inPreview()) {
+      // Preview has nothing to edit, so any drag there pans, as with the pan tool.
+      if (spaceHeld || inPreview() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         updateCursor();
         return;

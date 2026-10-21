@@ -4318,10 +4318,10 @@
         draw();
       });
     }
-    // Layers: true for each of sky, canopy and ground something's on. It
-    // stays on at least one. A layer button shows pressed when everything
-    // selected is on that layer; pressing it then takes them all off it,
-    // except those it's the last layer of, and otherwise puts them all on it.
+    // Layers: true for each of sky, canopy and ground something's on; with
+    // none, it shows only when all layers are. A layer button shows pressed
+    // when everything selected is on that layer; pressing it then takes them
+    // all off it, and otherwise puts them all on it.
     const layerButtons = document.querySelectorAll('[data-layer]');
     // What the layer buttons act on: selected labels or images, or in
     // background mode selected shapes and every point of a selected pen shape.
@@ -4335,7 +4335,7 @@
         const items = layerItems();
         for (const item of items) item.layers ??= Object.fromEntries(LAYERS.map((each) => [each, true]));
         const removing = items.every((item) => item.layers[layer]);
-        const changing = items.filter((item) => (removing ? Object.keys(item.layers).length > 1 : !item.layers[layer]));
+        const changing = items.filter((item) => !!item.layers[layer] === removing);
         button.blur();
         if (!changing.length) return;
         recordUndo();

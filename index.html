@@ -1483,14 +1483,11 @@
             Place
             <select id="label-place"></select>
           </label>
-          <label class="field">
-            Text
+          <div class="field">
+            <label for="label-text">Text</label>
             <textarea id="label-text" rows="1"></textarea>
-          </label>
-          <label id="label-hide-text-field" class="field">
-            Hide Text
-            <input id="label-hide-text" class="eye" type="checkbox">
-          </label>
+            <input id="label-hide-text" class="eye" type="checkbox" aria-label="Hide text">
+          </div>
           <div class="field-pair">
             <label class="field">
               X
@@ -5067,7 +5064,7 @@
         // Text can only be hidden behind an icon, which then has to stay,
         // and sits plainly inside the label: no outside, offset or gap.
         const textHidden = textIsHidden(selectedLabel);
-        document.getElementById('label-hide-text-field').hidden = !selectedLabel.icon;
+        labelHideTextToggle.hidden = !selectedLabel.icon;
         labelHideTextToggle.checked = textHidden;
         // A style that hides text hides it for all its labels.
         labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;

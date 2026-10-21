@@ -606,7 +606,8 @@
       display: flex;
       align-items: center;
     }
-    .style-card.editable {
+    .style-card.editable,
+    .style-swatch {
       cursor: pointer;
     }
     :is(#panel, #style-panel) .style-menu > button {
@@ -4144,6 +4145,11 @@
       // A label that is only its icon sits in the middle; text starts at the left.
       swatch.classList.toggle('centered', preview.dataset.iconOnly === 'true');
       swatch.append(preview);
+      // The preview opens the style for editing; the rest of the card picks it.
+      swatch.addEventListener('click', (e) => {
+        e.preventDefault();
+        openStyleForm(style);
+      });
       card.append(swatch, pick, Object.assign(document.createElement('span'), { className: 'style-option-name', textContent: style.name }), menu);
       return card;
     }
@@ -4190,7 +4196,7 @@
         if (single) {
           single.classList.add('editable');
           single.addEventListener('click', (e) => {
-            if (!e.target.closest('.style-menu')) openStyleForm(style);
+            if (!e.target.closest('.style-menu, .style-swatch')) openStyleForm(style);
           });
         }
         container.replaceChildren(title, ...(single ? [single] : []), ...(chevron ? [] : [change]));

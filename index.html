@@ -1441,6 +1441,10 @@
               All caps
               <input id="style-caps" class="switch" type="checkbox">
             </label>
+            <label class="field">
+              Hide text
+              <input id="style-hide-text" class="switch" type="checkbox">
+            </label>
           </div>
           <div class="label-section">
             <label class="field">
@@ -3432,7 +3436,7 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // A style's icon is in its text color until the icon is given a color of its own.
     let iconColorSet = false;
@@ -3602,6 +3606,7 @@
         iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
+        hideText: styleInputs['hide-text'].checked,
         color: colorOf(styleInputs.color),
         outline: styleInputs['outline-on'].checked ? colorOf(styleInputs.outline) : null,
         outlineWidth: Math.max(0, Number(styleInputs['outline-width'].value) || 0),
@@ -3646,6 +3651,7 @@
       styleInputs['icon-size'].value = values.iconSize;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
+      styleInputs['hide-text'].checked = !!values.hideText;
       showColor(styleInputs.color, values.color);
       iconColorSet = values.iconColor != null;
       showColor(styleInputs['icon-color'], values.iconColor ?? values.color);
@@ -3708,6 +3714,7 @@
         }
       }
       Object.assign(editingStyle, values);
+      for (const label of labels) if (label.styleId === editingStyle.id) giveIconIfHidingText(label);
       renderLabelStyles();
       draw();
     }
@@ -3809,6 +3816,12 @@
     function setLabelStyle(label, style) {
       label.styleId = style.id;
       for (const key of STYLE_OVERRIDES) delete label[key];
+      giveIconIfHidingText(label);
+    }
+    // Text can only hide behind an icon, so a label in a style that hides
+    // text gets its icon turned on, as pets if it had none.
+    function giveIconIfHidingText(label) {
+      if (styleOf(label).hideText && !label.icon) label.icon = 'pets';
     }
     // Previews show the style's own values, not the label's overrides or
     // offset, and leave out text the label hides.
@@ -4581,6 +4594,8 @@
         const textHidden = textIsHidden(selectedLabel);
         document.getElementById('label-hide-text-field').hidden = !selectedLabel.icon;
         labelHideTextToggle.checked = textHidden;
+        // A style that hides text hides it for all its labels.
+        labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = selectedLabel.icon != null;
         labelIconToggle.checked = iconOn;
@@ -4638,7 +4653,7 @@
       labelPlaceSelect.blur();
       draw();
     });
-    const textIsHidden = (label) => !!(label.hideText && label.icon);
+    const textIsHidden = (label) => !!((label.hideText || styleOf(label).hideText) && label.icon);
     const labelHideTextToggle = document.getElementById('label-hide-text');
     labelHideTextToggle.addEventListener('change', () => {
       const label = soleLabel();
@@ -4820,6 +4835,7 @@
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
         if (editingLabel.place) created.place = editingLabel.place;
         created.layers = newLayers();
+        giveIconIfHidingText(created);
         labels.push(created);
       }
       editingLabel = null;

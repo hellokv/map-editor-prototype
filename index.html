@@ -4304,6 +4304,9 @@
       }
       if (listItemIndex >= list.items.length) listItemIndex = -1;
       for (const picker of Object.values(listPickers)) {
+        // The list's previews sit on the list's own background, not the map's.
+        picker.container.style.setProperty('--map-ground', list.background);
+        picker.container.style.setProperty('--map-ink', isLight(list.background) ? '#000' : '#fff');
         const styleId = styleOf({ styleId: list[picker.key] }).id;
         const text = picker === listPickers.heading ? list.heading : list.items.find((item) => item.text)?.text ?? 'Item';
         const key = JSON.stringify([text, styleId, picker.open, labelStyles, loadedFontCount, picker.container.clientWidth]);

@@ -25,6 +25,9 @@
       position: relative;
       flex: 1;
       min-width: 0;
+      /* Clip, not hidden: focusing a field in the style panel as it slides in
+         would otherwise scroll the map area to it. */
+      overflow: clip;
     }
     #canvas {
       display: block;
@@ -349,7 +352,7 @@
       transition: margin-right 0.25s ease, visibility 0s 0.25s;
     }
     /* A label style edited for a selected label opens in a panel of its own
-       beside the label's, closed from its top right. */
+       that slides in over the map beside the label's, closed from its top right. */
     #style-panel-header {
       display: flex;
       align-items: center;
@@ -376,7 +379,21 @@
       background: rgba(0, 0, 0, 0.06);
     }
     #style-panel {
-      border-left: 1px solid var(--label-rule);
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      bottom: 20px;
+      z-index: 6;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+      transform: translateX(calc(100% + 20px));
+      visibility: hidden;
+      transition: transform 0.25s ease, visibility 0s 0.25s;
+    }
+    #style-panel.open {
+      transform: none;
+      visibility: visible;
+      transition: transform 0.25s ease, visibility 0s;
     }
     .group {
       padding: 6px 0;
@@ -1224,6 +1241,12 @@
 </head>
 <body>
   <div id="canvas-area">
+    <div id="style-panel" class="label-look">
+      <div id="style-panel-header">
+        <h2>Label Style</h2>
+        <button id="style-panel-close" type="button" aria-label="Close label style"><span class="material-symbols-rounded">close</span></button>
+      </div>
+    </div>
     <canvas id="canvas"></canvas>
     <textarea id="label-input" rows="1" hidden></textarea>
     <div id="place-suggestions" hidden></div>
@@ -2080,12 +2103,6 @@
           <input id="sketch-radius" type="number" min="0" step="1">
         </label>
       </div>
-    </div>
-  </div>
-  <div id="style-panel" class="label-look" hidden>
-    <div id="style-panel-header">
-      <h2>Label Style</h2>
-      <button id="style-panel-close" type="button" aria-label="Close label style"><span class="material-symbols-rounded">close</span></button>
     </div>
   </div>
   <script src="google-fonts.js"></script>
@@ -3923,6 +3940,7 @@
 
     const styleBrowser = document.getElementById('label-style-browser');
     const stylePanel = document.getElementById('style-panel');
+    const stylePanelOpen = () => stylePanel.classList.contains('open');
 
     function openStyleForm(style, recorded = false) {
       closeStyleForm();
@@ -3977,7 +3995,7 @@
       // With a label or list selected, the form opens beside its panel.
       if (selectedLabels.length || selectedList) {
         stylePanel.append(styleForm);
-        stylePanel.hidden = false;
+        stylePanel.classList.add('open');
       } else {
         styleBrowser.hidden = true;
       }
@@ -3992,7 +4010,7 @@
       styleForm.hidden = true;
       styleBrowser.hidden = false;
       styleBrowser.after(styleForm);
-      stylePanel.hidden = true;
+      stylePanel.classList.remove('open');
     }
 
     function applyStyleForm() {
@@ -4435,7 +4453,7 @@
     // The back arrow leaves a style being edited in the panel for the style
     // list, else the selection for the mode's own panel.
     document.getElementById('panel-back').addEventListener('click', () => {
-      if (editingStyle && !labelTools.hidden && stylePanel.hidden) {
+      if (editingStyle && !labelTools.hidden && !stylePanelOpen()) {
         leaveStyleForm();
         return;
       }
@@ -4838,10 +4856,8 @@
       showImagePanel();
       // Selecting a label swaps the style list and a form in it for the
       // label's properties; a form beside them goes once nothing is selected.
-      if ((anyLabels || selectedList) && editingStyle && stylePanel.hidden) closeStyleForm();
-      if (!stylePanel.hidden && !anyLabels && !selectedList) closeStyleForm();
-      // The style panel closes from its own corner, so the panel can't collapse under it.
-      document.getElementById('panel-close').hidden = !stylePanel.hidden;
+      if ((anyLabels || selectedList) && editingStyle && !stylePanelOpen()) closeStyleForm();
+      if (stylePanelOpen() && !anyLabels && !selectedList) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {

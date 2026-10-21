@@ -4955,7 +4955,10 @@
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
         }
         // Text can only show on a level the whole label shows on.
+        // Text can only be hidden behind an icon, so without one there's no text toggle.
+        const allHaveIcons = selectedLabels.every((label) => label.icon);
         for (const button of labelTextLayerButtons) {
+          button.hidden = !allHaveIcons;
           const layer = button.dataset.textLayer;
           button.disabled = selectedLabels.some((label) => label.layers && !label.layers[layer]);
           button.setAttribute('aria-pressed', !button.disabled && selectedLabels.every((label) => !label.hideTextAt?.[layer]));

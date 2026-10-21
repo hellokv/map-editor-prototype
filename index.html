@@ -1048,6 +1048,19 @@
       font-size: 20px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
     }
+    #device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .device-row > span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .device-row .device-size {
+      font-weight: 400;
+    }
     #label-style-list {
       display: flex;
       flex-direction: column;
@@ -1635,23 +1648,23 @@
       </div>
     </div>
     <div id="preview-panel" hidden>
-      <div class="group">
-        Device
+      <div class="label-section">
+        <div class="section-heading">Device</div>
         <div id="device-list"></div>
       </div>
-      <div class="group">
-        <label class="row">
+      <div class="label-section">
+        <label class="field">
           Zoom
-          <span class="slider"><input type="range" min="10" max="600" step="1" value="100" aria-label="Zoom"><span class="percent-field"><input id="preview-zoom" type="number" step="1" value="100"></span></span>
+          <span class="slider"><span class="percent-field"><input id="preview-zoom" type="number" step="1" value="100"></span><input type="range" min="10" max="600" step="1" value="100" aria-label="Zoom"></span>
         </label>
-        <label class="row">
+        <label class="field">
           Blur
-          <span class="slider"><input type="range" min="0" max="40" step="1" value="5" aria-label="Blur"><span class="percent-field px"><input id="preview-blur" type="number" min="0" step="1" value="5"></span></span>
+          <span class="slider"><span class="percent-field px"><input id="preview-blur" type="number" min="0" step="1" value="5"></span><input type="range" min="0" max="40" step="1" value="5" aria-label="Blur"></span>
         </label>
       </div>
-      <div class="group">
-        <button id="map-save" type="button">Save map file</button>
-        <button id="map-load" type="button">Load map file</button>
+      <div class="label-section">
+        <button id="map-save" class="new-style" type="button">Save Map File<span class="material-symbols-rounded">download</span></button>
+        <button id="map-load" class="new-style" type="button">Load Map File<span class="material-symbols-rounded">upload</span></button>
         <input id="map-file" type="file" accept=".json,application/json" hidden>
       </div>
     </div>
@@ -2141,7 +2154,7 @@
     let previewDevice = DEVICES[0];
     document.getElementById('device-list').replaceChildren(...DEVICES.map((device) => {
       const row = document.createElement('label');
-      row.className = 'row';
+      row.className = 'field device-row';
       const pick = Object.assign(document.createElement('input'), { type: 'radio', name: 'device', checked: device === previewDevice });
       pick.addEventListener('change', () => {
         previewDevice = device;
@@ -4604,8 +4617,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // Labels and Background have their own look, header included; images don't yet.
-      const labelLook = !inPreview() && ((!labelTools.hidden && !selectedShapes.length) || !backgroundTools.hidden);
+      // Labels, Background and Preview have their own look, header included; images don't yet.
+      const labelLook = inPreview() || (!labelTools.hidden && !selectedShapes.length) || !backgroundTools.hidden;
       document.getElementById('panel').classList.toggle('label-look', labelLook);
       document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();

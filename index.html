@@ -744,8 +744,9 @@
       overflow: clip;
     }
     .style-swatch:hover {
-      /* The card's 4px right padding included. */
-      width: calc(100% + 4px);
+      /* Half the card, or the preview's own width when wider, up to the whole
+         card with its 4px right padding. */
+      width: min(calc(100% + 4px), max(50%, var(--open-width, 50%)));
       border-radius: 6px;
     }
     .style-swatch:hover::after {
@@ -4221,6 +4222,8 @@
       // A label that is only its icon sits in the middle; text starts at the left.
       swatch.classList.toggle('centered', preview.dataset.iconOnly === 'true');
       swatch.append(preview);
+      // The preview's width with the swatch's 6px padding on each side.
+      swatch.style.setProperty('--open-width', `${parseFloat(preview.style.width) + 12}px`);
       // The preview opens the style for editing; the rest of the card picks it.
       swatch.addEventListener('click', (e) => {
         e.preventDefault();

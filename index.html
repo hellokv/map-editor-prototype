@@ -689,8 +689,10 @@
     .style-swatch {
       transition: width 0.2s ease, border-radius 0.2s;
     }
+    /* Clip, not hidden: clicking the swatch focuses the radio pushed out of
+       view, and a hidden overflow would scroll the card to it. */
     .style-card:has(.style-swatch:hover) {
-      overflow: hidden;
+      overflow: clip;
     }
     .style-swatch:hover {
       /* The card's 4px right padding included. */

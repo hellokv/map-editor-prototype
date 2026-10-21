@@ -5657,7 +5657,16 @@
     }
     function drawPointer(label, style, zoom) {
       const [dx, dy] = POINTER_DIRECTIONS[label.pointer];
-      const { startX, startY, endX, endY } = pointerLine(label, style, zoom);
+      let { startX, startY, endX, endY } = pointerLine(label, style, zoom);
+      // Where the box is smaller than the whole label, its text hidden on the
+      // levels on show, the pointer leaves that box but still ends in place.
+      const { box, frame } = labelLayout(label, zoom);
+      if (box !== frame) {
+        const radius = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+        const inset = style.corners === 'chamfer' ? radius / 2 : radius;
+        startX = box.x + box.w / 2 + dx * (box.w / 2 - inset);
+        startY = box.y + box.h / 2 + dy * (box.h / 2 - inset);
+      }
       const lineWidth = style.pointerWidth;
       // The line's cap and sides would bulge past the box's edges
       // where it leaves the box, so with a box the line reaches deeper inside.
@@ -5831,14 +5840,7 @@
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
         ctx.save();
         zoomAboutLabel(ctx, label);
-        // A pointer leaves the whole label's edge, so it fades with the text.
-        const textAlpha = labelLayout(label, k).textAlpha;
-        if (label.pointer && textAlpha > 0) {
-          ctx.save();
-          ctx.globalAlpha *= textAlpha;
-          drawPointer(label, style, k);
-          ctx.restore();
-        }
+        if (label.pointer) drawPointer(label, style, k);
         paintLabel(ctx, label, style, k);
         ctx.restore();
       }

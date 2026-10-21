@@ -906,6 +906,26 @@
       padding: 6px 8px;
       font: 13px 'National Park', system-ui, sans-serif;
     }
+    /* A label's own value for a setting its style has can go back to the
+       style's with a reset button, in a column of its own so the sliders beside
+       one line up with those without. */
+    #label-icon-size-field .slider,
+    #label-icon-gap-field .slider,
+    #label-icon-offset-field .slider {
+      grid-template-columns: 44px minmax(60px, 110px) 16px;
+      gap: 10px;
+    }
+    #panel .field .reset {
+      display: flex;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      color: var(--label-ink);
+    }
+    #panel .field .reset:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
     .field-pair {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1470,11 +1490,11 @@
           </div>
           <label id="label-icon-size-field" class="field">
             Size
-            <span class="slider"><input id="label-icon-size" type="number" min="4" max="200" step="1"><input type="range" min="4" max="120" step="1" aria-label="Icon size"></span>
+            <span class="slider"><input id="label-icon-size" type="number" min="4" max="200" step="1"><input type="range" min="4" max="120" step="1" aria-label="Icon size"><button type="button" class="reset" data-reset="iconSize" aria-label="Reset to the style's icon size"><span class="material-symbols-rounded">replay</span></button></span>
           </label>
           <label id="label-icon-gap-field" class="field">
             Gap
-            <span class="slider"><input id="label-icon-gap" type="number" min="0" max="200" step="1"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"></span>
+            <span class="slider"><input id="label-icon-gap" type="number" min="0" max="200" step="1"><input type="range" min="0" max="60" step="1" aria-label="Icon gap"><button type="button" class="reset" data-reset="iconGap" aria-label="Reset to the style's icon gap"><span class="material-symbols-rounded">replay</span></button></span>
           </label>
           <label id="label-icon-offset-field" class="field">
             Offset
@@ -4336,6 +4356,18 @@
       e.target.dispatchEvent(new Event('change', { bubbles: true }));
     }, true);
     const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
+    const labelResetButtons = document.querySelectorAll('[data-reset]');
+    for (const button of labelResetButtons) {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        button.blur();
+        const label = soleLabel();
+        if (!label || label[button.dataset.reset] === undefined) return;
+        recordUndo();
+        delete label[button.dataset.reset];
+        draw();
+      });
+    }
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     // Each of these number fields shares a .slider with a slider; moving
@@ -5021,6 +5053,7 @@
         }
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
+        for (const button of labelResetButtons) button.style.visibility = selectedLabel[button.dataset.reset] === undefined ? 'hidden' : 'visible';
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn || textHidden;
         // The offset only applies to an icon outside the label.

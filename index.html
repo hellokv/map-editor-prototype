@@ -629,14 +629,9 @@
     .style-swatch canvas {
       flex: none;
     }
-    .style-swatch:not(.centered)::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: 10px;
-      background: linear-gradient(to right, transparent, var(--map-ground, #fff));
+    /* The preview fades out over the swatch's last 10px, whatever is behind it. */
+    .style-swatch:not(.centered) canvas {
+      mask-image: linear-gradient(to right, #000 48px, transparent 58px);
     }
     #panel .style-card .style-menu > button:hover {
       background: rgba(0, 0, 0, 0.06);
@@ -3384,6 +3379,7 @@
         for (const group of groups) {
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
+        captureLabelBackdrop();
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
         if (!labelTools.hidden) {
           drawPins();
@@ -3555,6 +3551,23 @@
 
       drawMarquee();
       updatePanel();
+    }
+
+    // The map behind the selected label, caught before labels are drawn over
+    // it, for its style previews: from the label's left edge, in the
+    // previews' proportions, as they show the start of a label.
+    const labelBackdrop = document.createElement('canvas');
+    function captureLabelBackdrop() {
+      const label = !labelTools.hidden && soleLabel();
+      if (!label) return;
+      const dpr = window.devicePixelRatio || 1;
+      const area = labelArea(label);
+      const top = toScreen({ x: area.x, y: area.y });
+      const h = area.h * view.scale;
+      const w = h * (64 / 40);
+      labelBackdrop.width = Math.max(1, Math.round(w * dpr));
+      labelBackdrop.height = Math.max(1, Math.round(h * dpr));
+      labelBackdrop.getContext('2d').drawImage(canvas, top.x * dpr, top.y * dpr, w * dpr, h * dpr, 0, 0, labelBackdrop.width, labelBackdrop.height);
     }
 
     const createPathButton = document.getElementById('create-path');
@@ -4067,7 +4080,8 @@
     // whole list to pick from, that style first. Mixed styles show only the
     // button. adopt gives a picked style to whatever the picker is for. With
     // chevron, a chevron beside the title opens and closes the list instead.
-    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false }) {
+    // backdrop, an image URL, replaces the swatches' plain map color.
+    function renderStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null }) {
       if (chevron) {
         const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
         const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });
@@ -4080,7 +4094,11 @@
         heading.append(toggle);
         title = heading;
       }
-      const card = (element, style, pick) => styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true, adopt }));
+      const card = (element, style, pick) => {
+        const made = styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true, adopt }));
+        if (backdrop) Object.assign(made.querySelector('.style-swatch').style, { backgroundImage: `url(${backdrop})`, backgroundSize: 'cover' });
+        return made;
+      };
       if (!open) {
         const style = styleIds.size === 1 ? labelStyles.find((each) => styleIds.has(each.id)) : null;
         const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Change style' });
@@ -4774,7 +4792,9 @@
         }
         const source = selectedLabels[0];
         const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
-        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds]]);
+        // The backdrop follows the label around the map and the map's zoom.
+        const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
+        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
           renderStylePicker(labelStylePicker, {
@@ -4786,6 +4806,7 @@
             setOpen: (open) => { stylePickerOpen = open; },
             adopt: adoptForLabels,
             chevron: true,
+            backdrop: backdropKey && labelBackdrop.toDataURL(),
           });
         }
       }

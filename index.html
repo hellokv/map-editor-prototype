@@ -1260,6 +1260,7 @@
             Text
             <input id="list-item-text" type="text">
           </label>
+          <div id="list-item-style-picker"></div>
           <label class="section-heading">
             Icon
             <input id="list-item-icon-on" class="switch" type="checkbox">
@@ -1274,7 +1275,6 @@
           </div>
           <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
         </div>
-        <div id="list-item-style-picker" class="label-section"></div>
         <div class="label-section">
           <label class="field">
             Background color
@@ -2911,9 +2911,11 @@
     const LIST_HEADING_STYLE_ID = 4;
     const LIST_ITEM_STYLE_ID = 5;
     const styleIdOr = (id) => (labelStyles.some((style) => style.id === id) ? id : labelStyles[0].id);
+    // Each item has its own style; lists saved before that share the list's itemStyleId.
+    const itemStyleIdOf = (list, item) => item.styleId ?? list.itemStyleId ?? styleIdOr(LIST_ITEM_STYLE_ID);
     const newList = (p) => ({
-      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text })),
-      headingStyleId: styleIdOr(LIST_HEADING_STYLE_ID), itemStyleId: styleIdOr(LIST_ITEM_STYLE_ID),
+      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text, styleId: styleIdOr(LIST_ITEM_STYLE_ID) })),
+      headingStyleId: styleIdOr(LIST_HEADING_STYLE_ID),
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
       outline: null, outlineWidth: 2, shadow: null, zoomScale: 100, itemGap: LIST_ROW_GAP,
     });
@@ -2930,7 +2932,7 @@
     function listLayout(list) {
       const rows = [
         { text: list.heading, styleId: list.headingStyleId },
-        ...list.items.map(({ text, icon }) => ({ text, icon, styleId: list.itemStyleId })),
+        ...list.items.map((item) => ({ text: item.text, icon: item.icon, styleId: itemStyleIdOf(list, item) })),
       ].filter((row) => row.text.trim() || row.icon);
       const sizes = rows.map((row) => labelBox({ ...row, x: 0, y: 0 }));
       const w = Math.max(0, ...sizes.map((size) => size.w)) + 2 * list.padding;
@@ -4052,8 +4054,7 @@
       const list = newList({ x: area.x, y: area.y });
       const ordered = [...selectedLabels].sort((a, b) => a.y - b.y);
       list.heading = '';
-      list.items = ordered.map(({ text, icon, place }) => ({ text, ...(icon ? { icon } : {}), ...(place ? { place } : {}) }));
-      list.itemStyleId = styleOf(selectedLabels[0]).id;
+      list.items = ordered.map((label) => ({ text: label.text, styleId: styleOf(label).id, ...(label.icon ? { icon: label.icon } : {}), ...(label.place ? { place: label.place } : {}) }));
       lists.push(list);
       for (const label of selectedLabels) labels.splice(labels.indexOf(label), 1);
       selectedLabels = [];
@@ -4291,7 +4292,8 @@
     document.getElementById('list-add-item').addEventListener('click', (e) => {
       if (!selectedList) return;
       recordUndo();
-      selectedList.items.push({ text: 'New item' });
+      const last = selectedList.items.at(-1);
+      selectedList.items.push({ text: 'New item', styleId: last ? itemStyleIdOf(selectedList, last) : styleIdOr(LIST_ITEM_STYLE_ID) });
       listItemIndex = selectedList.items.length - 1;
       e.currentTarget.blur();
       draw();
@@ -4308,9 +4310,22 @@
     let listPanelFor = null;
     let listRowsKey = '';
     const listPickers = {
-      heading: { container: document.getElementById('list-heading-style-picker'), key: 'headingStyleId', title: 'Heading style', open: false, rendered: '' },
-      item: { container: document.getElementById('list-item-style-picker'), key: 'itemStyleId', title: 'Item style', open: false, rendered: '' },
+      heading: {
+        container: document.getElementById('list-heading-style-picker'), title: 'Heading style', open: false, rendered: '',
+        styleId: (list) => list.headingStyleId,
+        text: (list) => list.heading,
+        adopt: (list, style) => { list.headingStyleId = style.id; },
+      },
+      // The open item's own style.
+      item: {
+        container: document.getElementById('list-item-style-picker'), title: 'Style', open: false, rendered: '',
+        styleId: (list) => itemStyleIdOf(list, theItem()),
+        text: () => theItem().text,
+        icon: () => theItem().icon,
+        adopt: (list, style) => { theItem().styleId = style.id; },
+      },
     };
+    let listItemPickerFor = -1;
     function showListPanel() {
       listProperties.hidden = !selectedList || labelTools.hidden;
       if (listProperties.hidden) return;
@@ -4322,22 +4337,30 @@
         for (const picker of Object.values(listPickers)) picker.open = false;
       }
       if (listItemIndex >= list.items.length) listItemIndex = -1;
+      // Opening another item shuts its style picker.
+      if (listItemIndex !== listItemPickerFor) {
+        listItemPickerFor = listItemIndex;
+        listPickers.item.open = false;
+      }
       for (const picker of Object.values(listPickers)) {
+        if (picker === listPickers.item && !theItem()) continue;
         // The list's previews sit on the list's own background, not the map's.
         picker.container.style.setProperty('--map-ground', list.background);
         picker.container.style.setProperty('--map-ink', isLight(list.background) ? '#000' : '#fff');
-        const styleId = styleOf({ styleId: list[picker.key] }).id;
-        const text = picker === listPickers.heading ? list.heading : list.items.find((item) => item.text)?.text ?? 'Item';
-        const key = JSON.stringify([text, styleId, picker.open, labelStyles, loadedFontCount, picker.container.clientWidth]);
+        const styleId = styleOf({ styleId: picker.styleId(list) }).id;
+        const text = picker.text(list);
+        const icon = picker.icon?.();
+        const key = JSON.stringify([text, icon, styleId, picker.open, labelStyles, loadedFontCount, picker.container.clientWidth]);
         if (key === picker.rendered) continue;
         picker.rendered = key;
         renderStylePicker(picker.container, {
           title: picker.title,
           text,
+          iconSettings: { icon },
           styleIds: new Set([styleId]),
           open: picker.open,
           setOpen: (open) => { picker.open = open; },
-          adopt: (style) => { list[picker.key] = style.id; },
+          adopt: (style) => picker.adopt(list, style),
           chevron: true,
         });
       }

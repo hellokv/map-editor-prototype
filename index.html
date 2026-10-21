@@ -3038,7 +3038,7 @@
     // Each item has its own style; lists saved before that share the list's itemStyleId.
     const itemStyleIdOf = (list, item) => item.styleId ?? list.itemStyleId ?? styleIdOr(LIST_ITEM_STYLE_ID);
     const newList = (p) => ({
-      x: p.x, y: p.y, heading: 'Key', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text, styleId: styleIdOr(LIST_ITEM_STYLE_ID) })),
+      x: p.x, y: p.y, heading: 'List', items: ['Item 1', 'Item 2', 'Item 3'].map((text) => ({ text, styleId: styleIdOr(LIST_ITEM_STYLE_ID) })),
       headingStyleId: styleIdOr(LIST_HEADING_STYLE_ID),
       background: '#ffffff', corners: 'round', radius: 8, padding: 16,
       outline: null, outlineWidth: 2, shadow: null, zoomScale: 100, itemGap: LIST_ROW_GAP,

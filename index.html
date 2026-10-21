@@ -598,11 +598,8 @@
       display: flex;
       align-items: center;
     }
-    .style-edit {
-      visibility: hidden;
-    }
-    .style-card:hover .style-edit {
-      visibility: visible;
+    .style-card.editable {
+      cursor: pointer;
     }
     :is(#panel, #style-panel) .style-menu > button {
       display: flex;
@@ -3815,11 +3812,9 @@
       for (const items of document.querySelectorAll('.style-menu [role="menu"]')) items.hidden = true;
     }
     // A style's ⋮ menu. A clone made while labels are selected is given to them.
-    // With editButton, Edit is an icon beside the menu, shown while the card
-    // is hovered, rather than an item in it.
     // adopt gives a style to whatever the menu's picker is for.
     const adoptForLabels = (style) => { for (const label of selectedLabels) setLabelStyle(label, style); };
-    function styleMenu(style, { deletable = false, editButton = false, adopt = adoptForLabels } = {}) {
+    function styleMenu(style, { deletable = false, adopt = adoptForLabels } = {}) {
       const menu = document.createElement('span');
       menu.className = 'style-menu';
       const toggle = document.createElement('button');
@@ -3829,16 +3824,9 @@
       const items = document.createElement('div');
       items.setAttribute('role', 'menu');
       items.hidden = true;
-      const edit = Object.assign(document.createElement('button'), { type: 'button' });
-      if (editButton) {
-        edit.className = 'style-edit';
-        edit.setAttribute('aria-label', 'Edit');
-        edit.innerHTML = '<span class="material-symbols-rounded">edit</span>';
-      } else {
-        edit.textContent = 'Edit';
-      }
+      const edit = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit' });
       const clone = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Clone' });
-      items.append(...(editButton ? [] : [edit]), clone);
+      items.append(edit, clone);
       if (deletable) {
         const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
         remove.addEventListener('click', () => {
@@ -3849,7 +3837,7 @@
         });
         items.append(remove);
       }
-      menu.append(...(editButton ? [edit] : []), toggle, items);
+      menu.append(toggle, items);
       // Inside a picker option's label, a click would otherwise also pick the style.
       menu.addEventListener('click', (e) => e.preventDefault());
       toggle.addEventListener('click', () => {
@@ -3894,7 +3882,7 @@
           setLabelTool('add');
           pick.blur();
         });
-        return styleCard(row, style, pick, stylePreview(style, style.name), styleMenu(style, { deletable: i > 0, editButton: true }));
+        return styleCard(row, style, pick, stylePreview(style, style.name), styleMenu(style, { deletable: i > 0 }));
       }));
     }
 
@@ -4176,7 +4164,7 @@
         title = heading;
       }
       const card = (element, style, pick) => {
-        const made = styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], editButton: true, adopt }));
+        const made = styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], adopt }));
         if (backdrop) Object.assign(made.querySelector('.style-swatch').style, { backgroundImage: `url(${backdrop})`, backgroundSize: `${SWATCH_OPEN_WIDTH}px ${SWATCH_HEIGHT}px`, backgroundPosition: 'left center' });
         return made;
       };
@@ -4187,7 +4175,15 @@
           setOpen(true);
           draw();
         });
-        container.replaceChildren(title, ...(style ? [card(document.createElement('div'), style, '')] : []), ...(chevron ? [] : [change]));
+        // The style in use alone opens for editing when clicked, outside its menu.
+        const single = style && card(document.createElement('div'), style, '');
+        if (single) {
+          single.classList.add('editable');
+          single.addEventListener('click', (e) => {
+            if (!e.target.closest('.style-menu')) openStyleForm(style);
+          });
+        }
+        container.replaceChildren(title, ...(single ? [single] : []), ...(chevron ? [] : [change]));
         return;
       }
       const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];

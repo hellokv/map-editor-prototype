@@ -211,8 +211,7 @@
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-    #view-menu button,
-    #layers-close {
+    #view-menu button {
       display: flex;
       padding: 2px;
       border: none;
@@ -220,12 +219,10 @@
       background: none;
       cursor: pointer;
     }
-    #view-menu button:hover,
-    #layers-close:hover {
+    #view-menu button:hover {
       background: #eee;
     }
-    #view-menu .percent-field input,
-    .zoom-field input {
+    #view-menu .percent-field input {
       box-sizing: border-box;
       width: 64px;
       padding: 2px 18px 2px 6px;
@@ -243,65 +240,108 @@
       justify-content: center;
       background: rgba(0, 0, 0, 0.3);
     }
+    /* The layers dialog in the panels' look. */
     #layers-modal [role="dialog"] {
-      position: relative;
-      padding: 28px 24px 24px;
-      background: #e3e6ee;
+      overflow: hidden;
+      background: #f4f1ee;
       border-radius: 8px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-      font: 15px system-ui, sans-serif;
-      color: #2b3441;
+      font: 15px 'National Park', system-ui, sans-serif;
+      color: #000;
+    }
+    #layers-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 0 12px 0 16px;
+      border-bottom: 1px solid #000;
+    }
+    #layers-header h2 {
+      flex: 1;
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
     }
     #layers-close {
-      position: absolute;
-      top: 6px;
-      right: 6px;
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      cursor: pointer;
+    }
+    #layers-close:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    #layers-close .material-symbols-rounded {
+      font-size: 24px;
+      font-variation-settings: 'wght' 300, 'opsz' 24;
     }
     #layer-zoom-grid {
       display: grid;
-      grid-template-columns: 130px 130px 130px;
+      grid-template-columns: 90px 140px 140px;
       gap: 8px;
+      padding: 16px;
     }
     #layer-zoom-grid > div:nth-child(-n + 3) {
+      font-size: 12px;
       font-weight: 600;
-      font-size: 17px;
     }
     .layer-name {
       display: flex;
       align-items: center;
+      font-size: 12px;
+      font-weight: 600;
     }
     .zoom-field {
       display: flex;
       align-items: center;
-      border: 2px solid #a3abb8;
+      height: 40px;
+      padding: 0 8px 0 12px;
       border-radius: 6px;
       background: #fff;
     }
     .zoom-field:has(input:disabled) {
-      border-color: #cdd2da;
-      background: #f6f7f9;
+      background: none;
+      box-shadow: inset 0 0 0 1px #dcd8d3;
     }
     .zoom-field .percent-field {
       flex: 1;
     }
     .zoom-field input {
+      box-sizing: border-box;
       width: 100%;
-      padding: 8px 22px 8px 10px;
+      padding: 0 18px 0 0;
       border: none;
       background: none;
       font: inherit;
       outline: none;
+      appearance: textfield;
+    }
+    .zoom-field input::-webkit-inner-spin-button,
+    .zoom-field input::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
     }
     .zoom-field input:disabled {
-      color: #a3abb8;
+      color: #9a9a9a;
     }
     .zoom-field button {
       display: flex;
-      padding: 4px;
+      padding: 2px;
       border: none;
+      border-radius: 4px;
       background: none;
-      color: #6b7585;
+      color: #000;
       cursor: pointer;
+    }
+    .zoom-field button:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    .zoom-field button .material-symbols-rounded {
+      font-size: 16px;
+      font-variation-settings: 'wght' 400, 'opsz' 20;
     }
     #auto-layers {
       font: 12px system-ui, sans-serif;
@@ -1350,7 +1390,10 @@
     </div>
     <div id="layers-modal" hidden>
       <div role="dialog" aria-label="Layer zoom levels">
-        <button id="layers-close" type="button" aria-label="Close"><span class="material-symbols-rounded">close</span></button>
+        <div id="layers-header">
+          <h2>Layers</h2>
+          <button id="layers-close" type="button" aria-label="Close"><span class="material-symbols-rounded">close</span></button>
+        </div>
         <div id="layer-zoom-grid">
           <div>Layer</div><div>Min</div><div>Max</div>
         </div>

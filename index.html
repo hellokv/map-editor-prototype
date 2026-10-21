@@ -1281,13 +1281,6 @@
             </span>
             <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
           </div>
-          <div id="label-icon-placement-field" class="field">
-            Placement
-            <div id="label-icon-placement" class="icon-buttons">
-              <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">collapse_content</span></button>
-              <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">expand_content</span></button>
-            </div>
-          </div>
           <div id="label-icon-side-field" class="field">
             Alignment
             <div id="label-icon-side" class="icon-buttons">
@@ -1620,6 +1613,14 @@
               Icon color
               <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
             </label>
+            <div class="field">
+              Placement
+              <input id="style-icon-outside" type="checkbox" hidden>
+              <div class="icon-buttons">
+                <button type="button" data-icon-placement="inside" aria-label="Icon inside label"><span class="material-symbols-rounded">collapse_content</span></button>
+                <button type="button" data-icon-placement="outside" aria-label="Icon outside label"><span class="material-symbols-rounded">expand_content</span></button>
+              </div>
+            </div>
             <label class="field">
               Icon size
               <input id="style-icon-size" type="number" min="4" max="200" step="1">
@@ -3555,8 +3556,25 @@
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
+    // The placement buttons stand for the hidden checkbox the form reads.
+    const placementButtons = document.querySelectorAll('[data-icon-placement]');
+    function showIconPlacement() {
+      for (const button of placementButtons) {
+        button.setAttribute('aria-pressed', (button.dataset.iconPlacement === 'outside') === styleInputs['icon-outside'].checked);
+      }
+    }
+    for (const button of placementButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        const outside = button.dataset.iconPlacement === 'outside';
+        if (outside === styleInputs['icon-outside'].checked) return;
+        styleInputs['icon-outside'].checked = outside;
+        showIconPlacement();
+        styleForm.dispatchEvent(new Event('input'));
+      });
+    }
     // A style's icon is in its text color until the icon is given a color of its own.
     let iconColorSet = false;
     styleInputs['icon-color'].addEventListener('input', () => { iconColorSet = true; });
@@ -3724,6 +3742,7 @@
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
         hideText: styleInputs['hide-text'].checked,
+        iconOutside: styleInputs['icon-outside'].checked,
         color: colorOf(styleInputs.color),
         outline: styleInputs['outline-on'].checked ? colorOf(styleInputs.outline) : null,
         outlineWidth: Math.max(0, Number(styleInputs['outline-width'].value) || 0),
@@ -3769,6 +3788,8 @@
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
       styleInputs['hide-text'].checked = !!values.hideText;
+      styleInputs['icon-outside'].checked = !!values.iconOutside;
+      showIconPlacement();
       showColor(styleInputs.color, values.color);
       iconColorSet = values.iconColor != null;
       showColor(styleInputs['icon-color'], values.iconColor ?? values.color);
@@ -3944,9 +3965,10 @@
     function giveIconIfHidingText(label) {
       if (styleOf(label).hideText && !label.icon) label.icon = 'pets';
     }
-    // Previews show the style's own values, not the label's overrides or
-    // offset, and leave out text the label hides.
-    const ICON_SETTINGS = ['icon', 'iconSide', 'iconOutside', 'hideText'];
+    // Previews show the style's own values, not the label's overrides,
+    // offset or icon side (the icon is always on the left), and leave out
+    // text the label hides.
+    const ICON_SETTINGS = ['icon', 'hideText'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     // A style's card: its radio, its name beside its preview, and its menu,
     // on the map's background color (set by updatePanel).
@@ -4048,18 +4070,6 @@
       e.target.dispatchEvent(new Event('change', { bubbles: true }));
     }, true);
     const labelIconOffsetInput = liveField('label-icon-offset', 'iconOffset', (input) => Number(input.value) || 0, soleLabel);
-    const placementButtons = document.querySelectorAll('[data-icon-placement]');
-    for (const button of placementButtons) {
-      button.addEventListener('click', () => {
-        const label = soleLabel();
-        button.blur();
-        if (!label || (button.dataset.iconPlacement === 'outside') === !!label.iconOutside) return;
-        recordUndo();
-        if (button.dataset.iconPlacement === 'outside') label.iconOutside = true;
-        else delete label.iconOutside;
-        draw();
-      });
-    }
     const labelIconGapInput = liveField('label-icon-gap', 'iconGap', (input) => (input.value === '' ? undefined : Math.max(0, Number(input.value) || 0)), soleLabel);
     const labelIconSizeInput = liveField('label-icon-size', 'iconSize', (input) => (input.value === '' ? undefined : Math.max(4, Number(input.value) || 4)), soleLabel);
     // Each of these number fields shares a .slider with a slider; moving
@@ -4744,12 +4754,8 @@
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         show(labelIconSizeInput, selectedLabel.iconSize ?? '');
         document.getElementById('label-icon-gap-field').hidden = !iconOn || textHidden;
-        document.getElementById('label-icon-placement-field').hidden = !iconOn || textHidden;
         // The offset only applies to an icon outside the label.
-        document.getElementById('label-icon-offset-field').hidden = !iconOn || !selectedLabel.iconOutside || textHidden;
-        for (const button of placementButtons) {
-          button.setAttribute('aria-pressed', button.dataset.iconPlacement === (selectedLabel.iconOutside ? 'outside' : 'inside'));
-        }
+        document.getElementById('label-icon-offset-field').hidden = !iconOn || !styleOf(selectedLabel).iconOutside || textHidden;
         show(labelIconOffsetInput, textHidden ? 0 : selectedLabel.iconOffset ?? 0);
         labelIconGapInput.placeholder = styleOf(selectedLabel).iconGap;
         show(labelIconGapInput, textHidden ? 0 : selectedLabel.iconGap ?? '');
@@ -4807,7 +4813,7 @@
       recordUndo();
       if (labelHideTextToggle.checked) {
         label.hideText = true;
-        for (const key of ['iconOutside', 'iconOffset', 'iconGap']) delete label[key];
+        for (const key of ['iconOffset', 'iconGap']) delete label[key];
       } else {
         delete label.hideText;
       }
@@ -5100,7 +5106,7 @@
     // plus any icon outside it.
     //
     // The icon sits on the label's iconSide of the text (left when absent),
-    // the icon gap from the text, or from the box when iconOutside. Outside,
+    // the icon gap from the text, or from the box when its style's iconOutside. Outside,
     // its iconOffset slides it along that side by a percentage of the icon's
     // drawn size, from -200 to 200: down to up for left and right, left to
     // right for top and bottom. Hidden text is kept on the label for accessibility but takes
@@ -5122,7 +5128,7 @@
       const th = texts.length ? style.size + (texts.length - 1) * step : 0;
       // An icon with a backdrop takes the backdrop's room.
       const s = label.icon ? style.iconSize + 2 * iconPaddingOf(style) : 0;
-      const outside = s && label.iconOutside && !hidden;
+      const outside = s && style.iconOutside && !hidden;
       const gap = s && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
       const side = label.iconSide ?? 'left';
       const across = side === 'left' || side === 'right';

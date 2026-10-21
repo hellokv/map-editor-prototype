@@ -816,14 +816,14 @@
       cursor: pointer;
     }
     input.switch::after,
-    #panel #label-layers button::after {
+    #panel .level-toggles button::after {
       content: 'toggle_off';
       font: 32px/1 'Material Symbols Rounded';
       font-variation-settings: 'wght' 200, 'opsz' 32;
       color: #9a9a9a;
     }
     input.switch:checked::after,
-    #panel #label-layers button[aria-pressed="true"]::after {
+    #panel .level-toggles button[aria-pressed="true"]::after {
       content: 'toggle_on';
       color: var(--label-ink, #000);
     }
@@ -872,13 +872,13 @@
       background: var(--label-ink);
       color: #fff;
     }
-    #label-layers {
+    .level-toggles {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
     /* Each level is a row with its toggle icon, drawn on the button itself. */
-    #panel #label-layers button {
+    #panel .level-toggles button {
       position: relative;
       display: flex;
       align-items: center;
@@ -891,7 +891,7 @@
       font: inherit;
       text-align: left;
     }
-    #panel #label-layers button::after {
+    #panel .level-toggles button::after {
       position: absolute;
       right: 12px;
     }
@@ -971,6 +971,29 @@
     }
     #panel.label-look .label-section > button.new-style {
       margin: 0;
+    }
+    /* Groups of fields within a section keep the section's spacing. */
+    .label-section :is(#board-shadow-fields, #compass-fields, #shape-single-fields, .stripe-fields, .stripe-fields > div) {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #panel .field .toggle-group button {
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      font: inherit;
+    }
+    #panel .field .toggle-group button[aria-pressed="true"] {
+      background: var(--label-ink);
+      color: #fff;
+    }
+    #image-upload-field {
+      cursor: pointer;
+    }
+    #panel.label-look #image-preview {
+      border: none;
     }
     #label-style-list {
       display: flex;
@@ -1200,7 +1223,7 @@
           </div>
           <div>
             <div class="section-label">Level</div>
-            <div id="label-layers">
+            <div id="label-layers" class="level-toggles">
               <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
               <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
               <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
@@ -1608,98 +1631,105 @@
       </div>
     </div>
     <div id="background-panel" hidden>
-      <div class="group background-settings">
-        <label class="row">
-          <span><input id="background-show-labels" type="checkbox" checked> Show labels</span>
+      <div class="label-section background-settings">
+        <label class="field">
+          Show labels
+          <input id="background-show-labels" class="switch" type="checkbox" checked>
         </label>
       </div>
-      <div class="group background-settings">
-        <input id="image-upload" type="file" accept="image/*">
+      <div class="label-section background-settings">
+        <label id="image-upload-field" class="field">
+          Background image
+          <input id="image-upload" type="file" accept="image/*" hidden>
+          <span class="material-symbols-rounded">upload</span>
+        </label>
         <div id="image-preview" hidden>
           <img alt="Background image">
           <button id="image-delete" type="button" aria-label="Delete image">
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
-        <label class="row">
+        <label class="field">
           Background outside
           <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
         </label>
-        <label class="row">
+        <label class="field">
           Background inside
           <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
         </label>
-        <label class="row">
+        <label class="field">
           Width
           <input id="board-width" type="number" min="100" step="1" value="1500">
         </label>
-        <label class="row">
+        <label class="field">
           Height
           <input id="board-height" type="number" min="100" step="1" value="1500">
         </label>
-        <label class="row">
+        <label class="field">
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">
         </label>
-        <label class="row">
-          <span><input id="board-outline-on" type="checkbox"> Outline</span>
+        <label class="field">
+          Outline
           <span class="color-field"><input id="board-outline" type="color" value="#c8c8c8"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          <input id="board-outline-on" class="switch" type="checkbox">
         </label>
-        <label id="board-outline-width-field" class="row">
+        <label id="board-outline-width-field" class="field">
           Outline weight
           <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
         </label>
-        <label class="row">
+        <label class="field">
           Corners
           <select id="board-corners">
             <option value="round">Rounded</option>
             <option value="chamfer">Chamfered</option>
           </select>
         </label>
-        <label class="row">
+        <label class="field">
           Corner radius
           <input id="board-radius" type="number" min="0" step="1" value="0">
         </label>
-        <label class="row">
-          <span><input id="board-shadow-on" type="checkbox"> Shadow</span>
+        <label class="field">
+          Shadow
           <span class="color-field"><input id="board-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
+          <input id="board-shadow-on" class="switch" type="checkbox">
         </label>
         <div id="board-shadow-fields">
-          <label class="row">
+          <label class="field">
             Shadow X
             <input id="board-shadow-x" type="number" step="1" value="0">
           </label>
-          <label class="row">
+          <label class="field">
             Shadow Y
             <input id="board-shadow-y" type="number" step="1" value="8">
           </label>
-          <label class="row">
+          <label class="field">
             Shadow blur
             <input id="board-shadow-blur" type="number" min="0" step="1" value="24">
           </label>
         </div>
       </div>
-      <div id="background-layers" class="group" hidden>
-        <div class="row">
-          Layers
-          <div class="layer-toggles">
+      <div id="background-layers" class="label-section" hidden>
+        <div>
+          <div class="section-label">Layers</div>
+          <div class="level-toggles">
             <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
             <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
             <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
           </div>
         </div>
       </div>
-      <div id="shape-properties" class="group" hidden>
-        <label id="shape-color-field" class="row">
+      <div id="shape-properties" class="label-section" hidden>
+        <label id="shape-color-field" class="field">
           <span id="shape-color-name">Fill color</span>
           <span class="color-field"><input id="shape-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <div id="compass-fields">
-          <label class="row">
+          <label class="field">
             Back star
             <span class="color-field"><input id="compass-back-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
-          <div class="row">
+          <div class="field">
             Directions
             <div id="compass-directions" class="toggle-group">
               <button type="button" data-directions="none" aria-pressed="false">None</button>
@@ -1707,21 +1737,22 @@
               <button type="button" data-directions="all" aria-pressed="false">All</button>
             </div>
           </div>
-          <label class="row compass-text-field">
+          <label class="field compass-text-field">
             Text color
             <span class="color-field"><input id="compass-text-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
-          <label class="row compass-text-field">
-            <span><input id="compass-upright" type="checkbox"> Keep letters upright</span>
+          <label class="field compass-text-field">
+            Keep letters upright
+            <input id="compass-upright" class="switch" type="checkbox">
           </label>
-          <label class="row compass-text-field">
+          <label class="field compass-text-field">
             Font
             <span class="font-picker">
               <input id="compass-font" type="text" autocomplete="off">
               <div class="font-options" hidden></div>
             </span>
           </label>
-          <label class="row compass-text-field">
+          <label class="field compass-text-field">
             Weight
             <select id="compass-weight">
               <option value="100">Thin</option>
@@ -1735,74 +1766,78 @@
               <option value="900">Black</option>
             </select>
           </label>
-          <label class="row compass-text-field">
+          <label class="field compass-text-field">
             Text size
             <input id="compass-size" type="number" min="4" step="1">
           </label>
         </div>
         <div id="shape-stripes" class="stripe-fields"></div>
-        <label id="shape-radius-field" class="row">
+        <label id="shape-radius-field" class="field">
           Corner radius
           <input id="shape-radius" type="number" min="0" step="1">
         </label>
-        <label id="shape-outline-field" class="row">
-          <span><input id="shape-outline-on" type="checkbox"> Outline color</span>
+        <label id="shape-outline-field" class="field">
+          Outline color
           <span class="color-field"><input id="shape-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          <input id="shape-outline-on" class="switch" type="checkbox">
         </label>
-        <label id="shape-shadow-field" class="row">
-          <span><input id="shape-shadow-on" type="checkbox"> Shadow color</span>
+        <label id="shape-shadow-field" class="field">
+          Shadow color
           <span class="color-field"><input id="shape-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          <input id="shape-shadow-on" class="switch" type="checkbox">
         </label>
 
         <div id="shape-single-fields">
-          <label class="row">
+          <label class="field">
             X
             <input id="shape-x" type="number" step="1">
           </label>
-          <label class="row">
+          <label class="field">
             Y
             <input id="shape-y" type="number" step="1">
           </label>
-          <label class="row shape-box-field">
+          <label class="field shape-box-field">
             Width
             <input id="shape-w" type="number" min="1" step="1">
           </label>
-          <label class="row shape-box-field">
+          <label class="field shape-box-field">
             Height
             <input id="shape-h" type="number" min="1" step="1">
           </label>
-          <label id="compass-box-field" class="row">
+          <label id="compass-box-field" class="field">
             Size
             <input id="compass-box-size" type="number" min="1" step="1">
           </label>
-          <label class="row">
+          <label class="field">
             Rotation
             <input id="shape-rotation" type="number" step="1">
           </label>
-          <label id="shape-sides-field" class="row">
+          <label id="shape-sides-field" class="field">
             Sides
             <input id="shape-sides" type="number" min="3" max="20" step="1">
           </label>
         </div>
       </div>
-      <div id="sketch-area-fields" class="group" hidden>
-        <label class="row">
-          <span><input id="sketch-fill" type="checkbox"> Fill</span>
+      <div id="sketch-area-fields" class="label-section" hidden>
+        <label class="field">
+          Fill
+          <input id="sketch-fill" class="switch" type="checkbox">
         </label>
-        <label id="sketch-fill-color-field" class="row">
+        <label id="sketch-fill-color-field" class="field">
           Fill color
           <span class="color-field"><input id="sketch-fill-color" type="color" value="#d9cfb4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <div id="sketch-stripes" class="stripe-fields"></div>
-        <label class="row">
-          <span><input id="sketch-outline-on" type="checkbox"> Outline</span>
+        <label class="field">
+          Outline
           <span class="color-field"><input id="sketch-outline" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          <input id="sketch-outline-on" class="switch" type="checkbox">
         </label>
-        <label id="sketch-outline-width-field" class="row">
+        <label id="sketch-outline-width-field" class="field">
           Outline weight
           <input id="sketch-outline-width" type="number" min="0" max="50" step="0.5">
         </label>
-        <label class="row">
+        <label class="field">
           Corner radius
           <input id="sketch-radius" type="number" min="0" step="1">
         </label>
@@ -1832,25 +1867,26 @@
     const STRIPES = { color: '#ffffff', width: 4, gap: 8, angle: 45 };
     function stripeFields(container) {
       container.innerHTML = `
-        <label class="row">
-          <span><input type="checkbox"> Stripes</span>
+        <label class="field">
+          Stripes
           <span class="color-field"><input type="color" value="${STRIPES.color}"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          <input class="switch" type="checkbox">
         </label>
         <div>
-          <label class="row">
+          <label class="field">
             Stripe thickness
             <input type="number" min="0.5" step="0.5" value="${STRIPES.width}">
           </label>
-          <label class="row">
+          <label class="field">
             Stripe spacing
             <input type="number" min="0" step="0.5" value="${STRIPES.gap}">
           </label>
-          <label class="row">
+          <label class="field">
             Stripe angle
-            <span class="slider"><input type="range" min="0" max="180" step="1" value="${STRIPES.angle}" aria-label="Stripe angle"><input type="number" step="1" value="${STRIPES.angle}"></span>
+            <span class="slider"><input type="number" step="1" value="${STRIPES.angle}"><input type="range" min="0" max="180" step="1" value="${STRIPES.angle}" aria-label="Stripe angle"></span>
           </label>
         </div>`;
-      const [toggle, color, , width, gap, angleSlider, angle] = container.querySelectorAll('input');
+      const [color, , toggle, width, gap, angle, angleSlider] = container.querySelectorAll('input');
       const fields = { toggle, color, width, gap, angle, details: container.lastElementChild };
       angleSlider.addEventListener('input', () => {
         angle.value = angleSlider.value;
@@ -4434,8 +4470,8 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // Labels mode has its own look, header included, but not yet for lists and images.
-      const labelLook = !labelTools.hidden && !inPreview() && !selectedList && !selectedShapes.length;
+      // Labels and Background have their own look, header included; lists and images don't yet.
+      const labelLook = !inPreview() && ((!labelTools.hidden && !selectedList && !selectedShapes.length) || !backgroundTools.hidden);
       document.getElementById('panel').classList.toggle('label-look', labelLook);
       document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
@@ -7184,7 +7220,7 @@
       img.onload = () => {
         backgroundImage = img;
         previewImg.src = img.src;
-        upload.hidden = true;
+        upload.closest('.field').hidden = true;
         preview.hidden = false;
         draw();
       };
@@ -7208,7 +7244,7 @@
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
-      upload.hidden = false;
+      upload.closest('.field').hidden = false;
       draw();
     }
     document.getElementById('image-delete').addEventListener('click', clearBackgroundImage);

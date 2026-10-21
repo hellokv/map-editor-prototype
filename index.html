@@ -137,6 +137,14 @@
       font: 13px sans-serif;
       white-space: nowrap;
     }
+    /* Headers stay at the top while their panel scrolls under them. */
+    #panel-header,
+    #style-panel-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: inherit;
+    }
     #panel-header {
       display: flex;
       align-items: center;

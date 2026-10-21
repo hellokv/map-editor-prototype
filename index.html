@@ -731,6 +731,18 @@
       appearance: none;
       margin: 0;
     }
+    #panel .field .field-clear {
+      flex: none;
+      display: flex;
+      margin-left: -6px;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+    }
+    #panel .field .field-clear:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
     .field-pair {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1254,17 +1266,14 @@
         </div>
         <div id="label-style-picker" class="label-section"></div>
         <div class="label-section label-single">
-          <label class="section-heading">
-            Icon
-            <input id="label-icon-on" class="switch" type="checkbox">
-          </label>
           <div id="label-icon-field" class="field">
-            Image
+            Icon
             <span class="icon-picker">
               <span id="label-icon-preview" class="material-symbols-rounded"></span>
               <input id="label-icon" type="text" autocomplete="off" placeholder="Search icons">
               <div id="icon-options" class="icon-options" hidden></div>
             </span>
+            <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
           </div>
           <div id="label-icon-placement-field" class="field">
             Placement
@@ -1355,17 +1364,14 @@
             <input id="list-item-text" type="text">
           </label>
           <div id="list-item-style-picker"></div>
-          <label class="section-heading">
-            Icon
-            <input id="list-item-icon-on" class="switch" type="checkbox">
-          </label>
           <div id="list-item-icon-field" class="field">
-            Image
+            Icon
             <span class="icon-picker">
               <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
               <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search icons">
               <div class="icon-options" hidden></div>
             </span>
+            <button id="list-item-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
           </div>
           <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
         </div>
@@ -4377,7 +4383,6 @@
     const listItemFields = document.getElementById('list-item-fields');
     const listItemPlace = document.getElementById('list-item-place');
     const listItemText = liveField('list-item-text', 'text', (input) => input.value, theItem);
-    const listItemIconToggle = document.getElementById('list-item-icon-on');
     const listItemIcon = document.getElementById('list-item-icon');
     listItemPlace.replaceChildren(
       Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
@@ -4397,15 +4402,14 @@
       listItemPlace.blur();
       draw();
     });
-    // An item's icon is '' while switched on with none picked yet.
-    listItemIconToggle.addEventListener('change', () => {
+    const listItemIconClear = document.getElementById('list-item-icon-clear');
+    listItemIconClear.addEventListener('click', () => {
       const item = theItem();
-      if (!item) return;
+      listItemIconClear.blur();
+      if (!item?.icon) return;
       recordUndo();
-      if (listItemIconToggle.checked) item.icon = '';
-      else delete item.icon;
+      delete item.icon;
       draw();
-      listItemIconToggle.blur();
     });
     iconPicker(listItemIcon, listItemIcon.nextElementSibling, () => theItem()?.icon, (name) => {
       const item = theItem();
@@ -4510,9 +4514,7 @@
       if (item) {
         if (document.activeElement !== listItemPlace) listItemPlace.value = item.place ?? '';
         if (document.activeElement !== listItemText) listItemText.value = item.text;
-        const iconOn = item.icon !== undefined;
-        listItemIconToggle.checked = iconOn;
-        document.getElementById('list-item-icon-field').hidden = !iconOn;
+        listItemIconClear.hidden = !item.icon;
         if (document.activeElement !== listItemIcon) listItemIcon.value = item.icon ?? '';
         document.getElementById('list-item-icon-preview').textContent = item.icon ?? '';
       }
@@ -4717,14 +4719,13 @@
         // A style that hides text hides it for all its labels.
         labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
-        const iconOn = selectedLabel.icon != null;
-        labelIconToggle.checked = iconOn;
-        labelIconToggle.disabled = textHidden;
+        const iconOn = !!selectedLabel.icon;
+        // Hidden text needs its icon, so then the icon can't be cleared.
+        labelIconClear.hidden = !iconOn || textHidden;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
           field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;
         }
-        document.getElementById('label-icon-field').hidden = !iconOn;
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
@@ -4807,20 +4808,18 @@
       labelHideTextToggle.blur();
       draw();
     });
-    // A label's icon is a Material Symbols name; '' while switched on with
-    // none picked yet, and absent when off.
-    const labelIconToggle = document.getElementById('label-icon-on');
+    // A label's icon is a Material Symbols name, absent (or, from before, '') for none.
     const labelIconInput = document.getElementById('label-icon');
     const labelIconPreview = document.getElementById('label-icon-preview');
     const iconOptions = document.getElementById('icon-options');
-    labelIconToggle.addEventListener('change', () => {
+    const labelIconClear = document.getElementById('label-icon-clear');
+    labelIconClear.addEventListener('click', () => {
       const label = soleLabel();
-      if (!label) return;
+      labelIconClear.blur();
+      if (!label?.icon) return;
       recordUndo();
-      if (labelIconToggle.checked) label.icon = '';
-      else delete label.icon;
+      delete label.icon;
       draw();
-      labelIconToggle.blur();
     });
     // Listing every icon at once makes the list slow to open.
     const MAX_ICON_OPTIONS = 300;

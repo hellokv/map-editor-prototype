@@ -2246,18 +2246,31 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const radius = Math.min(frame.w, frame.h) * 0.13;
       // Everything outside the phone is blurred, from a copy of the canvas
-      // drawn back through a blur filter, then dimmed.
-      blurCopy.width = canvas.width;
-      blurCopy.height = canvas.height;
-      blurCopy.getContext('2d').drawImage(canvas, 0, 0);
+      // drawn back through a blur filter, then dimmed. The copy's edges are
+      // stretched outwards by a margin first: a blur near an edge otherwise
+      // takes in nothing past it and lets the sharp map show through.
+      const blur = Math.max(0, Number(previewBlurInput.value) || 0) * dpr;
+      const m = Math.ceil(blur * 3);
+      const w = canvas.width;
+      const h = canvas.height;
+      blurCopy.width = w + 2 * m;
+      blurCopy.height = h + 2 * m;
+      const copy = blurCopy.getContext('2d');
+      copy.drawImage(canvas, m, m);
+      if (m) {
+        copy.drawImage(canvas, 0, 0, w, 1, m, 0, w, m);
+        copy.drawImage(canvas, 0, h - 1, w, 1, m, m + h, w, m);
+        copy.drawImage(blurCopy, m, 0, 1, h + 2 * m, 0, 0, m, h + 2 * m);
+        copy.drawImage(blurCopy, m + w - 1, 0, 1, h + 2 * m, m + w, 0, m, h + 2 * m);
+      }
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
       ctx.clip('evenodd');
-      ctx.filter = `blur(${Math.max(0, Number(previewBlurInput.value) || 0) * dpr}px)`;
+      ctx.filter = `blur(${blur}px)`;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(blurCopy, 0, 0);
+      ctx.drawImage(blurCopy, -m, -m);
       ctx.restore();
       ctx.beginPath();
       ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);

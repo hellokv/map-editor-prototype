@@ -360,6 +360,32 @@
     }
     /* Under Automatic, the levels the zoom shows, in the canvas's bottom
        left corner like a split screen panel's name. */
+    /* Stacked: the background and the three levels as planes in perspective,
+       background at the bottom, sky at the top. */
+    #stack-view {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      perspective: 2400px;
+      pointer-events: none;
+    }
+    #stack-view .stack {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      transform: translateY(16%) rotateX(58deg) rotateZ(-32deg) scale3d(0.55, 0.55, 0.55);
+    }
+    #stack-view canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-sizing: border-box;
+    }
+    #stack-view canvas.level {
+      background: rgba(255, 255, 255, 0.06);
+    }
     #auto-layers {
       position: absolute;
       left: 12px;
@@ -1470,6 +1496,7 @@
       </div>
     </div>
     <canvas id="canvas"></canvas>
+    <div id="stack-view" hidden><div class="stack"></div></div>
     <textarea id="label-input" rows="1" hidden></textarea>
     <div id="place-suggestions" hidden></div>
     <div id="crossing-dialog" hidden>
@@ -1552,6 +1579,7 @@
         <option>Ground</option>
         <option>Automatic</option>
         <option>Split Screen</option>
+        <option>Stacked</option>
       </select>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
       <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
@@ -3775,7 +3803,9 @@
         autoLayers.textContent = names.join(', ') || 'None';
       }
       if (layerSelect.value === 'Split Screen') paintSplit();
+      else if (layerSelect.value === 'Stacked') paintStack();
       else paintView();
+      stackView.hidden = layerSelect.value !== 'Stacked' || inPreview();
       updatePanel();
     }
 
@@ -3902,28 +3932,78 @@
       ctx.restore();
     }
 
+    // Stacked paints the map once per plane on the canvas and copies each
+    // into a plane of its own: the background alone, then each level's
+    // elements alone. Dragging pans the map in all of them.
+    const stackView = document.getElementById('stack-view');
+    const STACK_PLANES = [
+      { part: 'background', layer: 'All' },
+      { part: 'level', layer: 'Ground' },
+      { part: 'level', layer: 'Canopy' },
+      { part: 'level', layer: 'Sky' },
+    ];
+    // The plane being painted, while it's painted.
+    let stackPart = null;
+    const STACK_GAP = 220;
+    const stackPlanes = STACK_PLANES.map(({ part }, i) => {
+      const plane = Object.assign(document.createElement('canvas'), { className: part });
+      plane.style.transform = `translateZ(${i * STACK_GAP}px)`;
+      stackView.firstElementChild.append(plane);
+      return plane;
+    });
+    const stackOn = () => layerSelect.value === 'Stacked' && !inPreview();
+    function paintStack() {
+      stackView.style.background = colorOf(canvasColor);
+      for (const [i, { part, layer }] of STACK_PLANES.entries()) {
+        stackPart = part;
+        layerOverride = layer;
+        paintView();
+        const plane = stackPlanes[i];
+        plane.width = canvas.width;
+        plane.height = canvas.height;
+        plane.getContext('2d').drawImage(canvas, 0, 0);
+      }
+      stackPart = null;
+      layerOverride = null;
+    }
+
+    // The paths' filled areas and their widths, as the map shows them.
+    function drawPaths() {
+      for (const area of computeAreas()) {
+        const fill = fillOf(area.points);
+        if (!fill?.visible) continue;
+        ctx.fillStyle = fill.color;
+        traceArea(area);
+        ctx.fill();
+      }
+      for (const group of groups) {
+        if (group.visible && group.width > 0) strokeGroupWidth(group);
+      }
+    }
     function paintView() {
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      ctx.fillStyle = colorOf(canvasColor);
-      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      if (stackPart !== 'level') {
+        ctx.fillStyle = colorOf(canvasColor);
+        ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      }
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
       // The box's fill casts its shadow. Canvas shadows are in device
       // pixels, so they're scaled with the map.
       ctx.save();
-      if (board.shadow) {
+      if (board.shadow && stackPart !== 'level') {
         ctx.shadowColor = board.shadow;
         ctx.shadowOffsetX = board.shadowX * view.scale * dpr;
         ctx.shadowOffsetY = board.shadowY * view.scale * dpr;
         ctx.shadowBlur = board.shadowBlur * view.scale * dpr;
       }
       ctx.fillStyle = colorOf(boardColor);
-      ctx.fill(boardShape());
+      if (stackPart !== 'level') ctx.fill(boardShape());
       ctx.restore();
-      if (backgroundImage) {
+      if (backgroundImage && stackPart !== 'level') {
         // As large as fits inside the padded box, centred, never stretched,
         // and cut to the box's rounded corners.
         const roomW = Math.max(0, board.w - 2 * board.padding);
@@ -3936,20 +4016,18 @@
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
         ctx.restore();
       }
-      drawShapes();
-      drawSketchFills();
-      if (board.outline) strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
+      if (stackPart !== 'background') {
+        drawShapes();
+        drawSketchFills();
+      }
+      if (board.outline && stackPart !== 'level') strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
+      if (stackPart) {
+        if (stackPart === 'background') drawPaths();
+        else drawLabels();
+        return;
+      }
       if (pathTools.hidden) {
-        for (const area of computeAreas()) {
-          const fill = fillOf(area.points);
-          if (!fill?.visible) continue;
-          ctx.fillStyle = fill.color;
-          traceArea(area);
-          ctx.fill();
-        }
-        for (const group of groups) {
-          if (group.visible && group.width > 0) strokeGroupWidth(group);
-        }
+        drawPaths();
         if (!layerOverride) captureLabelBackdrop();
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
         if (!labelTools.hidden) {
@@ -6569,7 +6647,8 @@
       // which leaves text sitting high in most fonts.
       ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
-      drawLists();
+      // Stacked, lists have no level of their own and sit on the ground.
+      if (stackPart !== 'level' || layerOverride === 'Ground') drawLists();
       const typing = editingLabel && typingLabel();
       const shown = labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0);
       for (const label of typing ? [...shown, typing] : shown) {
@@ -7985,7 +8064,7 @@
     }
 
     function updateCursor() {
-      if (spaceHeld || drag?.spacePan || inPreview() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (spaceHeld || drag?.spacePan || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8147,7 +8226,7 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      if (spaceHeld || inPreview() || (!labelTools.hidden && labelTool === 'pan')) {
+      if (spaceHeld || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         updateCursor();
         return;

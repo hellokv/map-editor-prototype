@@ -373,7 +373,6 @@
       position: absolute;
       inset: 0;
       transform-style: preserve-3d;
-      transform: translateY(16%) rotateX(58deg) rotateZ(-32deg) scale3d(0.55, 0.55, 0.55);
     }
     #stack-view canvas {
       position: absolute;
@@ -3945,6 +3944,21 @@
     // The plane being painted, while it's painted.
     let stackPart = null;
     const STACK_GAP = 220;
+    // How the planes are laid down: tilted back, turned and shrunk.
+    const STACK_TILT = 58;
+    const STACK_TURN = -32;
+    const STACK_SCALE = 0.55;
+    stackView.firstElementChild.style.transform = `translateY(11%) rotateX(${STACK_TILT}deg) rotateZ(${STACK_TURN}deg) scale3d(${STACK_SCALE}, ${STACK_SCALE}, ${STACK_SCALE})`;
+    // A drag on screen, taken back through the tilt, turn and shrink so the
+    // map follows the pointer across the planes.
+    function stackDrag(dx, dy) {
+      const y = dy / Math.cos((STACK_TILT * Math.PI) / 180);
+      const turn = (-STACK_TURN * Math.PI) / 180;
+      return {
+        x: (dx * Math.cos(turn) - y * Math.sin(turn)) / STACK_SCALE,
+        y: (dx * Math.sin(turn) + y * Math.cos(turn)) / STACK_SCALE,
+      };
+    }
     const stackPlanes = STACK_PLANES.map(({ part }, i) => {
       const plane = Object.assign(document.createElement('canvas'), { className: part });
       plane.style.transform = `translateZ(${i * STACK_GAP}px)`;
@@ -8436,8 +8450,11 @@
           setSelectionItems([...drag.base, ...inside.filter((item) => !drag.base.some((b) => sameItem(b, item)))]);
         }
       } else if (drag) {
-        view.x += e.clientX - drag.x;
-        view.y += e.clientY - drag.y;
+        const dx = e.clientX - drag.x;
+        const dy = e.clientY - drag.y;
+        const move = stackOn() ? stackDrag(dx, dy) : { x: dx, y: dy };
+        view.x += move.x;
+        view.y += move.y;
         drag.x = e.clientX;
         drag.y = e.clientY;
       }

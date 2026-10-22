@@ -522,15 +522,16 @@
     #style-panel #style-panel-close:hover {
       background: rgba(0, 0, 0, 0.06);
     }
+    /* Inset like the zoom menu. */
     #style-panel {
       position: absolute;
-      top: 20px;
-      right: 20px;
-      bottom: 20px;
+      top: 8px;
+      right: 8px;
+      bottom: 8px;
       z-index: 6;
       border-radius: 8px;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
-      transform: translateX(calc(100% + 20px));
+      transform: translateX(calc(100% + 8px));
       visibility: hidden;
       transition: transform 0.25s ease, visibility 0s 0.25s;
     }
@@ -544,7 +545,7 @@
       transition: right 0.25s ease;
     }
     #canvas-area:has(#style-panel.open) #view-menu {
-      right: calc(20px + 300px + 12px);
+      right: calc(8px + 300px + 8px);
     }
     .group {
       padding: 6px 0;

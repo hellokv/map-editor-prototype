@@ -6192,9 +6192,9 @@
     const LAYERS = ['sky', 'canopy', 'ground'];
     const layerZoom = { sky: { min: 10, max: 75 }, canopy: { min: 76, max: 100 }, ground: { min: 101, max: 600 } };
     const layerSelect = document.getElementById('layer-select');
-    // Split screen paints each panel with its own setting; anything else,
-    // clicking included, goes by all of them.
-    const layerMode = () => layerOverride ?? (layerSelect.value === 'Split Screen' ? 'All' : layerSelect.value);
+    // Split screen paints each panel with its own setting; clicking, and
+    // what's added by clicking, goes by the active panel's.
+    const layerMode = () => layerOverride ?? (splitOn() && panelViews ? SPLIT_PANELS[activePanel] : layerSelect.value);
     function shownLayers() {
       if (layerMode() === 'All') return LAYERS;
       if (layerMode() === 'Automatic') {

@@ -3751,9 +3751,9 @@
     }
 
     // Split screen shows the map four times, each a quarter of the canvas
-    // showing one level, or all of them, at the same zoom. Each quarter is
+    // showing one level, or the levels the zoom picks, at the same zoom. Each quarter is
     // centred on what the whole canvas would centre on.
-    const SPLIT_PANELS = ['Sky', 'Canopy', 'Ground', 'All'];
+    const SPLIT_PANELS = ['Sky', 'Canopy', 'Ground', 'Automatic'];
     // The layer setting a quarter is painted with, while it's painted.
     let layerOverride = null;
     // How far a quarter's map is moved from the whole canvas's, while it's painted.

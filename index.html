@@ -1051,7 +1051,7 @@
       font-size: 15px;
       font-weight: 600;
     }
-    :is(#panel, #style-panel) .section-heading .chevron {
+    :is(#panel, #style-panel) .section-heading button {
       display: flex;
       padding: 0;
       border: none;
@@ -1778,13 +1778,12 @@
       </div>
       <div id="label-styles">
         <div id="label-style-browser" class="label-section">
+          <div class="section-heading">Label Styles<button id="new-label-style" type="button" aria-label="New label style"><span class="material-symbols-rounded">add</span></button></div>
           <div id="label-style-list"></div>
-          <button id="new-label-style" class="new-style" type="button">New Label Style<span class="material-symbols-rounded">add</span></button>
         </div>
         <div class="label-section">
-          <div class="section-heading">Icon Styles</div>
+          <div class="section-heading">Icon Styles<button id="new-icon-style" type="button" aria-label="New icon style"><span class="material-symbols-rounded">add</span></button></div>
           <div id="icon-style-list"></div>
-          <button id="new-icon-style" class="new-style" type="button">New Icon Style<span class="material-symbols-rounded">add</span></button>
         </div>
         <form id="label-style-form" hidden>
           <div class="label-section">

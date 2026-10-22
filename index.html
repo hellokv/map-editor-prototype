@@ -370,6 +370,7 @@
       border-radius: 6px;
       box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
       font: 600 12px/28px 'National Park', system-ui, sans-serif;
+      cursor: pointer;
     }
     #canvas-area #view-menu select {
       background-color: #f4f1ee;
@@ -3692,6 +3693,13 @@
 
     const zoomInput = document.getElementById('zoom-input');
     const autoLayers = document.getElementById('auto-layers');
+    // Clicking the levels Automatic shows switches to the first of them.
+    autoLayers.addEventListener('click', () => {
+      const [layer] = shownLayers();
+      if (!layer) return;
+      layerSelect.value = layer[0].toUpperCase() + layer.slice(1);
+      layerSelect.dispatchEvent(new Event('change'));
+    });
     // In preview, the zoom as the device draws it, per its own pixels.
     const zoomPercent = () => Math.round((inPreview() ? view.scale / previewFrame().k : view.scale) * 100);
     const inPreview = () => !document.getElementById('preview-panel').hidden;

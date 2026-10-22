@@ -962,6 +962,44 @@
     #panel .field .reset:hover {
       background: rgba(0, 0, 0, 0.06);
     }
+    /* Fields that belong together, as one block divided by thin rules. */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .field-group > .field {
+      border-radius: 0;
+    }
+    /* An icon style's color, until one is picked, is the label's own. */
+    #icon-color-field .original,
+    #icon-color-field.unset :is(.opacity, .percent) {
+      display: none;
+    }
+    #icon-color-field.unset .original {
+      display: inline;
+      margin-left: 8px;
+      color: #888;
+      font: 15px 'National Park', system-ui, sans-serif;
+    }
+    #icon-color-field.unset input[type="color"]::-webkit-color-swatch {
+      background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 8px 8px !important;
+    }
+    #icon-color-field.unset input[type="color"]::-moz-color-swatch {
+      background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 8px 8px !important;
+    }
+    .field .mixed {
+      margin-left: auto;
+      font: 15px 'National Park', system-ui, sans-serif;
+    }
+    :is(#panel, #style-panel) #icon-padding-sides {
+      padding: 2px;
+    }
+    #icon-padding-side-fields svg {
+      flex: none;
+    }
     .field-pair {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1983,68 +2021,106 @@
           <div class="label-section">
             <label class="field">
               Color
-              <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <span id="icon-color-field" class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity"><span class="percent">%</span><span class="original">Original</span></span>
+              <button id="icon-color-clear" class="field-clear" type="button" aria-label="Use the original color"><span class="material-symbols-rounded">close</span></button>
             </label>
             <label class="field">
               Size
-              <input id="style-icon-size" type="number" min="4" max="200" step="1">
+              <span class="slider"><input id="style-icon-size" type="number" min="4" max="200" step="1"><input type="range" min="4" max="120" step="1" aria-label="Size"></span>
             </label>
             <div class="field">
-              Shape
-              <select id="style-icon-shape" hidden>
-                <option value="square">Square</option>
-                <option value="circle">Circle</option>
-                <option value="pin">Pin</option>
-              </select>
-              <div class="icon-buttons shape-buttons">
-                <button type="button" data-icon-shape="square" aria-label="Square"><span class="material-symbols-rounded">crop_square</span></button>
-                <button type="button" data-icon-shape="circle" aria-label="Circle"><span class="material-symbols-rounded">circle</span></button>
-                <button type="button" data-icon-shape="pin" aria-label="Pin"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 19.35C14.0333 17.4833 15.5417 15.7875 16.525 14.2625C17.5083 12.7375 18 11.3833 18 10.2C18 8.38333 17.4208 6.89583 16.2625 5.7375C15.1042 4.57917 13.6833 4 12 4C10.3167 4 8.89583 4.57917 7.7375 5.7375C6.57917 6.89583 6 8.38333 6 10.2C6 11.3833 6.49167 12.7375 7.475 14.2625C8.45833 15.7875 9.96667 17.4833 12 19.35ZM11.3 21.2C11.0667 21.1167 10.8583 20.9917 10.675 20.825C9.59167 19.825 8.63333 18.85 7.8 17.9C6.96667 16.95 6.27083 16.0292 5.7125 15.1375C5.15417 14.2458 4.72917 13.3875 4.4375 12.5625C4.14583 11.7375 4 10.95 4 10.2C4 7.7 4.80417 5.70833 6.4125 4.225C8.02083 2.74167 9.88333 2 12 2C14.1167 2 15.9792 2.74167 17.5875 4.225C19.1958 5.70833 20 7.7 20 10.2C20 10.95 19.8542 11.7375 19.5625 12.5625C19.2708 13.3875 18.8458 14.2458 18.2875 15.1375C17.7292 16.0292 17.0333 16.95 16.2 17.9C15.3667 18.85 14.4083 19.825 13.325 20.825C13.1417 20.9917 12.9333 21.1167 12.7 21.2C12.4667 21.2833 12.2333 21.325 12 21.325C11.7667 21.325 11.5333 21.2833 11.3 21.2Z"/></svg></button>
-              </div>
-            </div>
-            <label class="field">
-              Background Color
-              <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-              <input id="style-icon-background-on" class="switch" type="checkbox">
-            </label>
-            <label class="field">
-              Outline
-              <span class="color-field"><input id="style-icon-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-              <input id="style-icon-outline-on" class="switch" type="checkbox">
-            </label>
-            <label class="field">
-              Outline Weight
-              <input id="style-icon-outline-width" type="number" min="0" max="50" step="0.5">
-            </label>
-            <label class="field">
-              Shadow
-              <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-              <input id="style-icon-shadow-on" class="switch" type="checkbox">
-            </label>
-            <label class="field">
-              Shadow Gap
-              <input id="style-icon-shadow-gap" type="number" step="0.5">
-            </label>
-            <label class="field">
-              Shadow Size
-              <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
-            </label>
-            <div class="field">
-              Corners
-              <select id="style-icon-corners">
-                <option value="square">Square</option>
-                <option value="round">Rounded</option>
-                <option value="chamfer">Chamfered</option>
-              </select>
-            </div>
-            <label class="field">
-              Corner Radius
-              <input id="style-icon-radius" type="number" min="0" max="200" step="1">
-            </label>
-            <label class="field">
               Padding
               <input id="style-icon-padding" type="number" min="0" max="200" step="1">
-            </label>
+              <span id="icon-padding-mixed" class="mixed">Mixed</span>
+              <div class="icon-buttons"><button id="icon-padding-sides" type="button" aria-label="Pad each side"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M8.68375 8.68375C8.85608 8.51125 8.94225 8.30258 8.94225 8.05775C8.94225 7.81292 8.85608 7.60425 8.68375 7.43175C8.51125 7.25925 8.30258 7.173 8.05775 7.173C7.81292 7.173 7.60425 7.25925 7.43175 7.43175C7.25925 7.60425 7.173 7.81292 7.173 8.05775C7.173 8.30258 7.25925 8.51125 7.43175 8.68375C7.60425 8.85608 7.81292 8.94225 8.05775 8.94225C8.30258 8.94225 8.51125 8.85608 8.68375 8.68375ZM8.68377 12.6261C8.85611 12.4536 8.94227 12.245 8.94227 12.0001C8.94227 11.7553 8.85611 11.5466 8.68377 11.3741C8.51127 11.2016 8.30261 11.1154 8.05777 11.1154C7.81294 11.1154 7.60427 11.2016 7.43177 11.3741C7.25944 11.5466 7.17327 11.7553 7.17327 12.0001C7.17327 12.245 7.25944 12.4536 7.43177 12.6261C7.60427 12.7985 7.81294 12.8846 8.05777 12.8846C8.30261 12.8846 8.51127 12.7985 8.68377 12.6261ZM16.5682 8.68375C16.7407 8.51125 16.827 8.30258 16.827 8.05775C16.827 7.81292 16.7407 7.60425 16.5682 7.43175C16.3958 7.25925 16.1871 7.173 15.9423 7.173C15.6974 7.173 15.4888 7.25925 15.3163 7.43175C15.1439 7.60425 15.0577 7.81292 15.0577 8.05775C15.0577 8.30258 15.1439 8.51125 15.3163 8.68375C15.4888 8.85608 15.6974 8.94225 15.9423 8.94225C16.1871 8.94225 16.3958 8.85608 16.5682 8.68375ZM5.30775 20.5C4.80258 20.5 4.375 20.325 4.025 19.975C3.675 19.625 3.5 19.1974 3.5 18.6923V5.30775C3.5 4.80258 3.675 4.375 4.025 4.025C4.375 3.675 4.80258 3.5 5.30775 3.5H18.6923C19.1974 3.5 19.625 3.675 19.975 4.025C20.325 4.375 20.5 4.80258 20.5 5.30775V18.6923C20.5 19.1974 20.325 19.625 19.975 19.975C19.625 20.325 19.1974 20.5 18.6923 20.5H5.30775ZM5.30775 19H18.6923C18.7692 19 18.8398 18.9679 18.9038 18.9038C18.9679 18.8398 19 18.7693 19 18.6923V5.30775C19 5.23075 18.9679 5.16025 18.9038 5.09625C18.8398 5.03208 18.7692 5 18.6923 5H5.30775C5.23075 5 5.16025 5.03208 5.09625 5.09625C5.03208 5.16025 5 5.23075 5 5.30775V18.6923C5 18.7693 5.03208 18.8398 5.09625 18.9038C5.16025 18.9679 5.23075 19 5.30775 19Z" fill="currentColor"/><path d="M8.05775 8.94225C7.81292 8.94225 7.60425 8.85608 7.43175 8.68375C7.25925 8.51125 7.173 8.30258 7.173 8.05775C7.173 7.81292 7.25925 7.60425 7.43175 7.43175C7.60425 7.25925 7.81292 7.173 8.05775 7.173C8.30258 7.173 8.51125 7.25925 8.68375 7.43175C8.85608 7.60425 8.94225 7.81292 8.94225 8.05775C8.94225 8.30258 8.85608 8.51125 8.68375 8.68375C8.51125 8.85608 8.30258 8.94225 8.05775 8.94225Z" fill="currentColor"/><path d="M8.05777 12.8846C7.81294 12.8846 7.60427 12.7985 7.43177 12.6261C7.25944 12.4536 7.17327 12.245 7.17327 12.0001C7.17327 11.7553 7.25944 11.5466 7.43177 11.3741C7.60427 11.2016 7.81294 11.1154 8.05777 11.1154C8.30261 11.1154 8.51127 11.2016 8.68377 11.3741C8.85611 11.5466 8.94227 11.7553 8.94227 12.0001C8.94227 12.245 8.85611 12.4536 8.68377 12.6261C8.51127 12.7985 8.30261 12.8846 8.05777 12.8846Z" fill="currentColor"/><path d="M8.0575 16.827C7.81267 16.827 7.604 16.7408 7.4315 16.5683C7.25917 16.3958 7.173 16.1871 7.173 15.9423C7.173 15.6974 7.25917 15.4888 7.4315 15.3163C7.604 15.1439 7.81267 15.0578 8.0575 15.0578C8.30233 15.0578 8.511 15.1439 8.6835 15.3163C8.856 15.4888 8.94225 15.6974 8.94225 15.9423C8.94225 16.1871 8.856 16.3958 8.6835 16.5683C8.511 16.7408 8.30233 16.827 8.0575 16.827Z" fill="currentColor"/><path d="M15.9414 12.8885C15.6966 12.8885 15.4879 12.8024 15.3154 12.63C15.1431 12.4575 15.0569 12.2489 15.0569 12.004C15.0569 11.7592 15.1431 11.5505 15.3154 11.378C15.4879 11.2055 15.6966 11.1193 15.9414 11.1193C16.1862 11.1193 16.3949 11.2055 16.5674 11.378C16.7397 11.5505 16.8259 11.7592 16.8259 12.004C16.8259 12.2489 16.7397 12.4575 16.5674 12.63C16.3949 12.8024 16.1862 12.8885 15.9414 12.8885Z" fill="currentColor"/><path d="M15.9411 16.8309C15.6963 16.8309 15.4876 16.7447 15.3151 16.5722C15.1428 16.3997 15.0566 16.191 15.0566 15.9462C15.0566 15.7013 15.1428 15.4927 15.3151 15.3202C15.4876 15.1478 15.6963 15.0617 15.9411 15.0617C16.186 15.0617 16.3946 15.1478 16.5671 15.3202C16.7396 15.4927 16.8259 15.7013 16.8259 15.9462C16.8259 16.191 16.7396 16.3997 16.5671 16.5722C16.3946 16.7447 16.186 16.8309 15.9411 16.8309Z" fill="currentColor"/><path d="M12.8835 15.9462C12.8835 16.191 12.7973 16.3997 12.625 16.5722C12.4525 16.7445 12.2438 16.8307 11.999 16.8307C11.7542 16.8307 11.5455 16.7445 11.373 16.5722C11.2005 16.3997 11.1143 16.191 11.1143 15.9462C11.1143 15.7013 11.2005 15.4927 11.373 15.3202C11.5455 15.1478 11.7542 15.0617 11.999 15.0617C12.2438 15.0617 12.4525 15.1478 12.625 15.3202C12.7973 15.4927 12.8835 15.7013 12.8835 15.9462Z" fill="currentColor"/><path d="M12.8835 8.05578C12.8835 8.30061 12.7973 8.50928 12.625 8.68178C12.4525 8.85411 12.2438 8.94028 11.999 8.94028C11.7542 8.94028 11.5455 8.85411 11.373 8.68178C11.2005 8.50928 11.1143 8.30061 11.1143 8.05578C11.1143 7.81094 11.2005 7.60228 11.373 7.42978C11.5455 7.25744 11.7542 7.17128 11.999 7.17128C12.2438 7.17128 12.4525 7.25744 12.625 7.42978C12.7973 7.60228 12.8835 7.81094 12.8835 8.05578Z" fill="currentColor"/></svg></button></div>
+            </div>
+            <div id="icon-padding-side-fields" class="field-pair">
+              <label class="field">
+                <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M8.7125 15.2875C8.52083 15.0958 8.28333 15 8 15C7.71667 15 7.47917 15.0958 7.2875 15.2875C7.09583 15.4792 7 15.7167 7 16C7 16.2833 7.09583 16.5208 7.2875 16.7125C7.47917 16.9042 7.71667 17 8 17C8.28333 17 8.52083 16.9042 8.7125 16.7125C8.90417 16.5208 9 16.2833 9 16C9 15.7167 8.90417 15.4792 8.7125 15.2875ZM8.7125 11.2875C8.52083 11.0958 8.28333 11 8 11C7.71667 11 7.47917 11.0958 7.2875 11.2875C7.09583 11.4792 7 11.7167 7 12C7 12.2833 7.09583 12.5208 7.2875 12.7125C7.47917 12.9042 7.71667 13 8 13C8.28333 13 8.52083 12.9042 8.7125 12.7125C8.90417 12.5208 9 12.2833 9 12C9 11.7167 8.90417 11.4792 8.7125 11.2875ZM8.7125 7.2875C8.52083 7.09583 8.28333 7 8 7C7.71667 7 7.47917 7.09583 7.2875 7.2875C7.09583 7.47917 7 7.71667 7 8C7 8.28333 7.09583 8.52083 7.2875 8.7125C7.47917 8.90417 7.71667 9 8 9C8.28333 9 8.52083 8.90417 8.7125 8.7125C8.90417 8.52083 9 8.28333 9 8C9 7.71667 8.90417 7.47917 8.7125 7.2875ZM21 19C21 19.55 20.8042 20.0208 20.4125 20.4125C20.0208 20.8042 19.55 21 19 21H5C4.45 21 3.97917 20.8042 3.5875 20.4125C3.19583 20.0208 3 19.55 3 19L3 5C3 4.45 3.19583 3.97917 3.5875 3.5875C3.97917 3.19583 4.45 3 5 3H19C19.55 3 20.0208 3.19583 20.4125 3.5875C20.8042 3.97917 21 4.45 21 5V19ZM19 19V5L5 5L5 19H19Z" fill="currentColor"/></svg>
+                <input id="style-icon-padding-left" type="number" min="0" max="200" step="1" aria-label="Padding left">
+              </label>
+              <label class="field">
+                <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M8.7125 8.7125C8.90417 8.52083 9 8.28333 9 8C9 7.71667 8.90417 7.47917 8.7125 7.2875C8.52083 7.09583 8.28333 7 8 7C7.71667 7 7.47917 7.09583 7.2875 7.2875C7.09583 7.47917 7 7.71667 7 8C7 8.28333 7.09583 8.52083 7.2875 8.7125C7.47917 8.90417 7.71667 9 8 9C8.28333 9 8.52083 8.90417 8.7125 8.7125ZM12.7125 8.7125C12.9042 8.52083 13 8.28333 13 8C13 7.71667 12.9042 7.47917 12.7125 7.2875C12.5208 7.09583 12.2833 7 12 7C11.7167 7 11.4792 7.09583 11.2875 7.2875C11.0958 7.47917 11 7.71667 11 8C11 8.28333 11.0958 8.52083 11.2875 8.7125C11.4792 8.90417 11.7167 9 12 9C12.2833 9 12.5208 8.90417 12.7125 8.7125ZM16.7125 8.7125C16.9042 8.52083 17 8.28333 17 8C17 7.71667 16.9042 7.47917 16.7125 7.2875C16.5208 7.09583 16.2833 7 16 7C15.7167 7 15.4792 7.09583 15.2875 7.2875C15.0958 7.47917 15 7.71667 15 8C15 8.28333 15.0958 8.52083 15.2875 8.7125C15.4792 8.90417 15.7167 9 16 9C16.2833 9 16.5208 8.90417 16.7125 8.7125ZM5 21C4.45 21 3.97917 20.8042 3.5875 20.4125C3.19583 20.0208 3 19.55 3 19V5C3 4.45 3.19583 3.97917 3.5875 3.5875C3.97917 3.19583 4.45 3 5 3H19C19.55 3 20.0208 3.19583 20.4125 3.5875C20.8042 3.97917 21 4.45 21 5V19C21 19.55 20.8042 20.0208 20.4125 20.4125C20.0208 20.8042 19.55 21 19 21H5ZM5 19H19V5H5V19Z" fill="currentColor"/></svg>
+                <input id="style-icon-padding-top" type="number" min="0" max="200" step="1" aria-label="Padding top">
+              </label>
+              <label class="field">
+                <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15.2875 8.7125C15.4792 8.90417 15.7167 9 16 9C16.2833 9 16.5208 8.90417 16.7125 8.7125C16.9042 8.52083 17 8.28333 17 8C17 7.71667 16.9042 7.47917 16.7125 7.2875C16.5208 7.09583 16.2833 7 16 7C15.7167 7 15.4792 7.09583 15.2875 7.2875C15.0958 7.47917 15 7.71667 15 8C15 8.28333 15.0958 8.52083 15.2875 8.7125ZM15.2875 12.7125C15.4792 12.9042 15.7167 13 16 13C16.2833 13 16.5208 12.9042 16.7125 12.7125C16.9042 12.5208 17 12.2833 17 12C17 11.7167 16.9042 11.4792 16.7125 11.2875C16.5208 11.0958 16.2833 11 16 11C15.7167 11 15.4792 11.0958 15.2875 11.2875C15.0958 11.4792 15 11.7167 15 12C15 12.2833 15.0958 12.5208 15.2875 12.7125ZM15.2875 16.7125C15.4792 16.9042 15.7167 17 16 17C16.2833 17 16.5208 16.9042 16.7125 16.7125C16.9042 16.5208 17 16.2833 17 16C17 15.7167 16.9042 15.4792 16.7125 15.2875C16.5208 15.0958 16.2833 15 16 15C15.7167 15 15.4792 15.0958 15.2875 15.2875C15.0958 15.4792 15 15.7167 15 16C15 16.2833 15.0958 16.5208 15.2875 16.7125ZM3 5C3 4.45 3.19583 3.97917 3.5875 3.5875C3.97917 3.19583 4.45 3 5 3L19 3C19.55 3 20.0208 3.19583 20.4125 3.5875C20.8042 3.97917 21 4.45 21 5V19C21 19.55 20.8042 20.0208 20.4125 20.4125C20.0208 20.8042 19.55 21 19 21H5C4.45 21 3.97917 20.8042 3.5875 20.4125C3.19583 20.0208 3 19.55 3 19V5ZM5 5L5 19H19V5L5 5Z" fill="currentColor"/></svg>
+                <input id="style-icon-padding-right" type="number" min="0" max="200" step="1" aria-label="Padding right">
+              </label>
+              <label class="field">
+                <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15.2875 15.2875C15.0958 15.4792 15 15.7167 15 16C15 16.2833 15.0958 16.5208 15.2875 16.7125C15.4792 16.9042 15.7167 17 16 17C16.2833 17 16.5208 16.9042 16.7125 16.7125C16.9042 16.5208 17 16.2833 17 16C17 15.7167 16.9042 15.4792 16.7125 15.2875C16.5208 15.0958 16.2833 15 16 15C15.7167 15 15.4792 15.0958 15.2875 15.2875ZM11.2875 15.2875C11.0958 15.4792 11 15.7167 11 16C11 16.2833 11.0958 16.5208 11.2875 16.7125C11.4792 16.9042 11.7167 17 12 17C12.2833 17 12.5208 16.9042 12.7125 16.7125C12.9042 16.5208 13 16.2833 13 16C13 15.7167 12.9042 15.4792 12.7125 15.2875C12.5208 15.0958 12.2833 15 12 15C11.7167 15 11.4792 15.0958 11.2875 15.2875ZM7.2875 15.2875C7.09583 15.4792 7 15.7167 7 16C7 16.2833 7.09583 16.5208 7.2875 16.7125C7.47917 16.9042 7.71667 17 8 17C8.28333 17 8.52083 16.9042 8.7125 16.7125C8.90417 16.5208 9 16.2833 9 16C9 15.7167 8.90417 15.4792 8.7125 15.2875C8.52083 15.0958 8.28333 15 8 15C7.71667 15 7.47917 15.0958 7.2875 15.2875ZM19 3C19.55 3 20.0208 3.19583 20.4125 3.5875C20.8042 3.97917 21 4.45 21 5L21 19C21 19.55 20.8042 20.0208 20.4125 20.4125C20.0208 20.8042 19.55 21 19 21L5 21C4.45 21 3.97917 20.8042 3.5875 20.4125C3.19583 20.0208 3 19.55 3 19L3 5C3 4.45 3.19583 3.97917 3.5875 3.5875C3.97917 3.19583 4.45 3 5 3L19 3ZM19 5L5 5L5 19H19L19 5Z" fill="currentColor"/></svg>
+                <input id="style-icon-padding-bottom" type="number" min="0" max="200" step="1" aria-label="Padding bottom">
+              </label>
+            </div>
+          </div>
+          <div class="label-section">
+            <div class="field-group">
+              <label class="field">
+                Background
+                <input id="style-icon-background-on" class="switch" type="checkbox">
+              </label>
+              <label class="field">
+                Background Color
+                <span class="color-field"><input id="style-icon-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              </label>
+              <div class="field">
+                Shape
+                <select id="style-icon-shape" hidden>
+                  <option value="square">Square</option>
+                  <option value="circle">Circle</option>
+                  <option value="pin">Pin</option>
+                </select>
+                <div class="icon-buttons shape-buttons">
+                  <button type="button" data-icon-shape="square" aria-label="Square"><span class="material-symbols-rounded">crop_square</span></button>
+                  <button type="button" data-icon-shape="circle" aria-label="Circle"><span class="material-symbols-rounded">circle</span></button>
+                  <button type="button" data-icon-shape="pin" aria-label="Pin"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 19.35C14.0333 17.4833 15.5417 15.7875 16.525 14.2625C17.5083 12.7375 18 11.3833 18 10.2C18 8.38333 17.4208 6.89583 16.2625 5.7375C15.1042 4.57917 13.6833 4 12 4C10.3167 4 8.89583 4.57917 7.7375 5.7375C6.57917 6.89583 6 8.38333 6 10.2C6 11.3833 6.49167 12.7375 7.475 14.2625C8.45833 15.7875 9.96667 17.4833 12 19.35ZM11.3 21.2C11.0667 21.1167 10.8583 20.9917 10.675 20.825C9.59167 19.825 8.63333 18.85 7.8 17.9C6.96667 16.95 6.27083 16.0292 5.7125 15.1375C5.15417 14.2458 4.72917 13.3875 4.4375 12.5625C4.14583 11.7375 4 10.95 4 10.2C4 7.7 4.80417 5.70833 6.4125 4.225C8.02083 2.74167 9.88333 2 12 2C14.1167 2 15.9792 2.74167 17.5875 4.225C19.1958 5.70833 20 7.7 20 10.2C20 10.95 19.8542 11.7375 19.5625 12.5625C19.2708 13.3875 18.8458 14.2458 18.2875 15.1375C17.7292 16.0292 17.0333 16.95 16.2 17.9C15.3667 18.85 14.4083 19.825 13.325 20.825C13.1417 20.9917 12.9333 21.1167 12.7 21.2C12.4667 21.2833 12.2333 21.325 12 21.325C11.7667 21.325 11.5333 21.2833 11.3 21.2Z"/></svg></button>
+                </div>
+              </div>
+              <div class="field">
+                Corners
+                <select id="style-icon-corners">
+                  <option value="square">Square</option>
+                  <option value="round">Rounded</option>
+                  <option value="chamfer">Chamfered</option>
+                </select>
+              </div>
+              <label class="field">
+                Corner Radius
+                <input id="style-icon-radius" type="number" min="0" max="200" step="1">
+              </label>
+            </div>
+            <div class="field-group">
+              <label class="field">
+                Outline
+                <input id="style-icon-outline-on" class="switch" type="checkbox">
+              </label>
+              <label class="field">
+                Outline Color
+                <span class="color-field"><input id="style-icon-outline" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              </label>
+              <label class="field">
+                Outline Weight
+                <input id="style-icon-outline-width" type="number" min="0" max="50" step="0.5">
+              </label>
+            </div>
+            <div class="field-group">
+              <label class="field">
+                Shadow
+                <input id="style-icon-shadow-on" class="switch" type="checkbox">
+              </label>
+              <label class="field">
+                Shadow Color
+                <span class="color-field"><input id="style-icon-shadow" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              </label>
+              <label class="field">
+                Shadow Gap
+                <input id="style-icon-shadow-gap" type="number" step="0.5">
+              </label>
+              <label class="field">
+                Shadow Size
+                <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
+              </label>
+            </div>
           </div>
         </form>
       </div>
@@ -3972,7 +4048,7 @@
     const isIconStyle = (style) => iconStyles.includes(style);
     const stylesWith = (style) => (isIconStyle(style) ? iconStyles : labelStyles);
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Every Corners select is shown as buttons that set it, and a square
     // corner has no radius to set.
@@ -4039,9 +4115,42 @@
         iconStyleForm.dispatchEvent(new Event('change'));
       });
     }
-    // An icon style has no color of its own until one is picked.
+    // An icon style has no color of its own until one is picked, and can be
+    // cleared back to none.
     let iconColorSet = false;
-    styleInputs['icon-color'].addEventListener('input', () => { iconColorSet = true; });
+    const iconColorClear = document.getElementById('icon-color-clear');
+    function showIconColor() {
+      document.getElementById('icon-color-field').classList.toggle('unset', !iconColorSet);
+      iconColorClear.hidden = !iconColorSet;
+    }
+    styleInputs['icon-color'].addEventListener('input', () => {
+      iconColorSet = true;
+      showIconColor();
+    });
+    iconColorClear.addEventListener('click', (e) => {
+      e.preventDefault();
+      iconColorSet = false;
+      showIconColor();
+      iconStyleForm.dispatchEvent(new Event('input'));
+    });
+    // Padding is one value for every side, or with the sides button, one each.
+    const PADDING_SIDES = ['top', 'right', 'bottom', 'left'];
+    const paddingSidesButton = document.getElementById('icon-padding-sides');
+    paddingSidesButton.addEventListener('click', () => {
+      paddingSidesButton.blur();
+      const sides = paddingSidesButton.getAttribute('aria-pressed') !== 'true';
+      paddingSidesButton.setAttribute('aria-pressed', sides);
+      if (sides) for (const side of PADDING_SIDES) styleInputs[`icon-padding-${side}`].value = styleInputs['icon-padding'].value;
+      showToggledFields();
+      iconStyleForm.dispatchEvent(new Event('input'));
+    });
+    // A slider and the number beside it move each other.
+    for (const slider of iconStyleForm.querySelectorAll('.slider input[type="range"]')) {
+      const field = slider.previousElementSibling;
+      slider.addEventListener('input', () => { field.value = slider.value; });
+      slider.addEventListener('change', () => slider.blur());
+      field.addEventListener('input', () => { slider.value = field.value; });
+    }
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
     let editingStyle = null;
@@ -4235,6 +4344,9 @@
         iconCorners: styleInputs['icon-corners'].value,
         iconRadius: Math.max(0, Number(styleInputs['icon-radius'].value) || 0),
         iconPadding: Math.max(0, Number(styleInputs['icon-padding'].value) || 0),
+        iconPaddingSides: paddingSidesButton.getAttribute('aria-pressed') === 'true'
+          ? Object.fromEntries(PADDING_SIDES.map((side) => [side, Math.max(0, Number(styleInputs[`icon-padding-${side}`].value) || 0)]))
+          : null,
         iconColor: iconColorSet ? colorOf(styleInputs['icon-color']) : undefined,
       };
     }
@@ -4312,6 +4424,10 @@
       styleInputs['icon-corners'].value = values.iconCorners;
       styleInputs['icon-radius'].value = values.iconRadius;
       styleInputs['icon-padding'].value = values.iconPadding;
+      paddingSidesButton.setAttribute('aria-pressed', !!values.iconPaddingSides);
+      for (const side of PADDING_SIDES) styleInputs[`icon-padding-${side}`].value = values.iconPaddingSides?.[side] ?? values.iconPadding;
+      showIconColor();
+      for (const slider of iconStyleForm.querySelectorAll('.slider input[type="range"]')) slider.value = slider.previousElementSibling.value;
     }
 
     function closeStyleForm() {
@@ -4403,14 +4519,27 @@
       styleInputs.outline.parentElement.hidden = !styleInputs['outline-on'].checked;
       styleInputs['outline-width'].closest('.field').hidden = !styleInputs['outline-on'].checked;
       styleInputs.shadow.parentElement.hidden = !styleInputs['shadow-on'].checked;
-      for (const key of ['icon-background', 'icon-outline', 'icon-shadow']) styleInputs[key].parentElement.hidden = !styleInputs[`${key}-on`].checked;
-      styleInputs['icon-outline-width'].closest('.field').hidden = !styleInputs['icon-outline-on'].checked;
+      // An icon style's settings for its background, outline and shadow
+      // show while each is on.
+      const field = (key) => styleInputs[key].closest('.field');
+      const background = styleInputs['icon-background-on'].checked;
+      const shadow = styleInputs['icon-shadow-on'].checked;
+      for (const key of ['icon-outline', 'icon-outline-width']) field(key).hidden = !styleInputs['icon-outline-on'].checked;
+      field('icon-shadow').hidden = !shadow;
+      field('icon-background').hidden = !background;
+      field('icon-shape').hidden = !background;
       // Only a square backdrop has corners to shape; a pin's radius rounds its point.
       const iconShape = styleInputs['icon-shape'].value;
-      styleInputs['icon-corners'].closest('.field').hidden = iconShape !== 'square';
-      styleInputs['icon-radius'].closest('.field').hidden = iconShape === 'circle' || (iconShape === 'square' && styleInputs['icon-corners'].value === 'square');
+      field('icon-corners').hidden = !background || iconShape !== 'square';
+      field('icon-radius').hidden = !background || iconShape === 'circle' || (iconShape === 'square' && styleInputs['icon-corners'].value === 'square');
       // A pin's shadow lies on the ground below it.
-      for (const key of ['icon-shadow-gap', 'icon-shadow-size']) styleInputs[key].closest('.field').hidden = iconShape !== 'pin' || !styleInputs['icon-shadow-on'].checked;
+      for (const key of ['icon-shadow-gap', 'icon-shadow-size']) field(key).hidden = iconShape !== 'pin' || !shadow;
+      // Only a square backdrop can pad its sides differently.
+      const sides = iconShape === 'square' && paddingSidesButton.getAttribute('aria-pressed') === 'true';
+      paddingSidesButton.parentElement.hidden = iconShape !== 'square';
+      styleInputs['icon-padding'].hidden = sides;
+      document.getElementById('icon-padding-mixed').hidden = !sides;
+      document.getElementById('icon-padding-side-fields').hidden = !sides;
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
@@ -5574,7 +5703,7 @@
     let nextStyleId = 6;
     // A label's icon is drawn in an icon style of its own, picked apart from its
     // label style. Without an iconColor, the icon takes the label's text color.
-    const NEW_ICON_STYLE = { iconSize: 24, iconShape: 'square', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
+    const NEW_ICON_STYLE = { iconSize: 24, iconShape: 'square', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconCorners: 'round', iconRadius: 0, iconPadding: 0, iconPaddingSides: null };
     const ICON_STYLE_KEYS = ['iconColor', ...Object.keys(NEW_ICON_STYLE)];
     const iconStyles = [
       { id: 1, name: 'Icon', ...NEW_ICON_STYLE },
@@ -5804,10 +5933,12 @@
       ctx.restore();
       const tw = Math.max(0, ...widths);
       const th = texts.length ? style.size + (texts.length - 1) * step : 0;
-      // An icon with a backdrop takes the backdrop's room.
-      const s = label.icon ? style.iconSize + 2 * iconPaddingOf(style) : 0;
-      const outside = s && style.iconOutside && !hidden;
-      const gap = s && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
+      // An icon with a backdrop takes the backdrop's room, sw across and sh down.
+      const room = iconRoom(style);
+      const sw = label.icon ? room.w : 0;
+      const sh = label.icon ? room.h : 0;
+      const outside = sw && style.iconOutside && !hidden;
+      const gap = sw && (tw || outside) ? label.iconGap ?? style.iconGap : 0;
       const side = label.iconSide ?? 'left';
       const across = side === 'left' || side === 'right';
       const offset = outside ? label.iconOffset ?? 0 : 0;
@@ -5815,23 +5946,23 @@
       const pad = (r) => ({ x: r.x - style.paddingX, y: r.y - style.paddingY, w: r.w + 2 * style.paddingX, h: r.h + 2 * style.paddingY });
       // A pin beside text takes the room of its whole height, head to point
       // or shadow, and that height is what's centred on the text.
-      const pinBeside = s && across && !outside && texts.length && style.iconShape === 'pin' && (style.iconBackground || style.iconOutline);
-      const head = s / 2;
+      const pinBeside = sw && across && !outside && texts.length && style.iconShape === 'pin' && (style.iconBackground || style.iconOutline);
+      const head = sh / 2;
       let below = head;
       if (pinBeside) {
         below = head * PIN_REACH;
         if (style.iconShadow) below += style.iconShadowGap / zoom + head * 0.7 * (style.iconShadowSize / 100) * GROUND_SHADOW_SQUASH;
       }
-      const iconRect = (icon) => ({ x: icon.x - head, y: icon.y - head, w: s, h: head + below });
+      const iconRect = (icon) => ({ x: icon.x - sw / 2, y: icon.y - head, w: sw, h: head + below });
       // Laid out around the text's centre at (0, 0), then moved onto the spot.
       const text = { x: -tw / 2, y: -th / 2, w: tw, h: th };
       // Where the icon goes beside a rect: past its side, then slid along it.
       const beside = (r) => {
         if (across) {
-          const x = side === 'left' ? r.x - gap - s / 2 : r.x + r.w + gap + s / 2;
+          const x = side === 'left' ? r.x - gap - sw / 2 : r.x + r.w + gap + sw / 2;
           return { x, y: r.y + r.h / 2 - reach - (below - head) / 2 };
         }
-        const y = side === 'top' ? r.y - gap - s / 2 : r.y + r.h + gap + s / 2;
+        const y = side === 'top' ? r.y - gap - sh / 2 : r.y + r.h + gap + sh / 2;
         return { x: r.x + r.w / 2 + reach, y };
       };
       let box;
@@ -5840,7 +5971,7 @@
         box = pad(text);
         icon = beside(box);
       } else {
-        if (s) icon = beside(text);
+        if (sw) icon = beside(text);
         box = pad(icon ? unionRect(text, iconRect(icon)) : text);
       }
       const dx = label.x - (box.x + box.w / 2);
@@ -5848,14 +5979,14 @@
       box = { ...box, x: box.x + dx, y: box.y + dy };
       const iconX = icon ? icon.x + dx : label.x;
       const iconY = icon ? icon.y + dy : label.y;
-      const bounds = outside ? unionRect(box, { x: iconX - s / 2, y: iconY - s / 2, w: s, h: s }) : box;
+      const bounds = outside ? unionRect(box, { x: iconX - sw / 2, y: iconY - sh / 2, w: sw, h: sh }) : box;
       const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
       // On levels where only the label's icon shows, the icon keeps its place
       // in the whole label, in a box of its own; frame is still the whole label.
       // While the text fades, the box moves between the two.
       const textAlpha = label.icon && !hidden ? labelTextAlpha(label) : 1;
       if (textAlpha < 1) {
-        const iconBox = pad({ x: iconX - head, y: iconY - head, w: s, h: s });
+        const iconBox = pad({ x: iconX - sw / 2, y: iconY - head, w: sw, h: sh });
         const mix = (r) => ({
           x: iconBox.x + (r.x - iconBox.x) * textAlpha,
           y: iconBox.y + (r.y - iconBox.y) * textAlpha,
@@ -5888,7 +6019,7 @@
       }
       if (style.iconShape !== 'pin' || !textIsHidden(label) || !(style.iconBackground || style.iconOutline)) return label;
       const { iconX, iconY } = labelLayout(label);
-      return { x: iconX, y: iconY + ((style.iconSize + 2 * iconPaddingOf(style)) / 2) * PIN_REACH };
+      return { x: iconX, y: iconY + (iconRoom(style).h / 2) * PIN_REACH };
     }
     function zoomedRect(label, r) {
       const k = labelZoom(label);
@@ -6113,6 +6244,10 @@
       const { lines, iconX, iconY, textX: textMiddle, textAlpha } = labelLayout(label, zoom);
       const alpha = c.globalAlpha;
       if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY, zoom);
+      // The icon sits off its room's centre by the difference in padding either side.
+      const pad = iconPaddingOf(style);
+      const glyphX = iconX + (pad.left - pad.right) / 2;
+      const glyphY = iconY + (pad.top - pad.bottom) / 2;
       // Centred text would be pulled left by the trailing gap after its last letter.
       const textX = textMiddle + style.letterSpacing / 2;
       c.letterSpacing = `${style.letterSpacing}px`;
@@ -6123,7 +6258,7 @@
         c.globalAlpha = alpha * textAlpha;
         for (const line of lines) c.strokeText(line.text, textX, line.y + baseline);
         c.globalAlpha = alpha;
-        if (label.icon) paintIcon(c, label, style, iconX, iconY, 'strokeText');
+        if (label.icon) paintIcon(c, label, style, glyphX, glyphY, 'strokeText');
         c.shadowColor = 'transparent';
       }
       c.fillStyle = style.color;
@@ -6131,10 +6266,20 @@
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
       c.globalAlpha = alpha;
       c.fillStyle = style.iconColor ?? style.color;
-      if (label.icon) paintIcon(c, label, style, iconX, iconY, 'fillText');
+      if (label.icon) paintIcon(c, label, style, glyphX, glyphY, 'fillText');
     }
+    // Padding around an icon with a backdrop, per side; only a square
+    // backdrop takes sides of their own.
     function iconPaddingOf(style) {
-      return style.iconBackground || style.iconOutline ? style.iconPadding ?? 0 : 0;
+      if (!style.iconBackground && !style.iconOutline) return { top: 0, right: 0, bottom: 0, left: 0 };
+      if (style.iconShape === 'square' && style.iconPaddingSides) return style.iconPaddingSides;
+      const all = style.iconPadding ?? 0;
+      return { top: all, right: all, bottom: all, left: all };
+    }
+    // An icon's room: its size plus its padding across and down.
+    function iconRoom(style) {
+      const pad = iconPaddingOf(style);
+      return { w: style.iconSize + pad.left + pad.right, h: style.iconSize + pad.top + pad.bottom };
     }
     // How tall a pin's ground shadow is for its width.
     const GROUND_SHADOW_SQUASH = 0.25;
@@ -6161,9 +6306,9 @@
     // size the label draws its icon at. A pin's point hangs below. Its
     // shadow takes the blur and drop set up for the label's.
     function paintIconBackdrop(c, style, x, y, zoom) {
-      const size = style.iconSize + 2 * iconPaddingOf(style);
-      const r = size / 2;
-      let box = { x: x - r, y: y - r, w: size, h: size };
+      const { w, h } = iconRoom(style);
+      const r = w / 2;
+      let box = { x: x - w / 2, y: y - h / 2, w, h };
       let shape;
       if (style.iconShape === 'circle') {
         shape = new Path2D();

@@ -7395,32 +7395,6 @@
     const clampX = (v) => Math.min(board.w, Math.max(0, v));
     const clampY = (v) => Math.min(board.h, Math.max(0, v));
 
-    // Cursors drawn in a color, made once per color.
-    const cursorCache = new Map();
-    function coloredCursor(key, color, paint, fallback) {
-      const id = `${key} ${color}`;
-      if (!cursorCache.has(id)) {
-        const icon = document.createElement('canvas');
-        icon.width = icon.height = 24;
-        paint(icon.getContext('2d'), color);
-        cursorCache.set(id, `url(${icon.toDataURL()}) 12 12, ${fallback}`);
-      }
-      return cursorCache.get(id);
-    }
-    // A tool's menu icon as its cursor, once the icon font can draw it.
-    let iconFontLoaded = false;
-    document.fonts.load('300 24px "Material Symbols Rounded"', 'add_circle').then(() => {
-      iconFontLoaded = true;
-      updateCursor();
-    });
-    const iconCursor = (icon, color, fallback) => (iconFontLoaded ? coloredCursor(icon, color, (c) => {
-      c.font = '300 24px "Material Symbols Rounded"';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillStyle = color;
-      c.fillText(icon, 12, 12);
-    }, fallback) : fallback);
-
     // The pin cursor's hotspot is the tip of the pin.
     let pinCursor = 'crosshair';
     document.fonts.load('300 24px "Material Symbols Rounded"', 'add_location').then(() => {
@@ -7595,9 +7569,9 @@
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' || backgroundTool === 'segments' ? 'crosshair' : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
+      else if (!backgroundTools.hidden) canvas.style.cursor = ['shapes', 'segments', 'compass'].includes(backgroundTool) ? 'crosshair' : shapeHandleCursor();
       else if (!labelTools.hidden) canvas.style.cursor = shapeHandleCursor();
-      else canvas.style.cursor = addTarget() ? 'crosshair' : '';
+      else canvas.style.cursor = !pathTools.hidden && tool === 'add' ? 'crosshair' : '';
     }
 
     // Holding space turns every press on the canvas into a pan.

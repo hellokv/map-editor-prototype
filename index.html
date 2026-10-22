@@ -129,13 +129,25 @@
       position: absolute;
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
+      gap: 8px;
+      padding: 6px 6px 6px 12px;
       background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font: 13px sans-serif;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      font: 600 12px 'National Park', system-ui, sans-serif;
       white-space: nowrap;
+    }
+    :is(#crossing-dialog, #list-dialog) button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #f4f1ee;
+      font: inherit;
+      cursor: pointer;
+    }
+    :is(#crossing-dialog, #list-dialog) button:first-of-type {
+      background: #000;
+      color: #fff;
     }
     /* Headers stay at the top while their panel scrolls under them. */
     #panel-header,
@@ -208,27 +220,30 @@
       gap: 4px;
       padding: 4px;
       background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      font: 13px 'National Park', system-ui, sans-serif;
     }
     #view-menu button {
       display: flex;
-      padding: 2px;
+      padding: 4px;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       background: none;
       cursor: pointer;
     }
     #view-menu button:hover {
-      background: #eee;
+      background: rgba(0, 0, 0, 0.06);
     }
     #view-menu .percent-field input {
       box-sizing: border-box;
       width: 64px;
-      padding: 2px 18px 2px 6px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font: 13px system-ui, sans-serif;
+      height: 32px;
+      padding: 0 18px 0 8px;
+      border: none;
+      border-radius: 6px;
+      background: #f4f1ee;
+      font: inherit;
       appearance: textfield;
     }
     #layers-modal {
@@ -347,13 +362,18 @@
       font: 12px system-ui, sans-serif;
       color: #666;
     }
-    #view-menu select {
-      padding: 2px 4px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      background: #fff;
-      font: 13px system-ui, sans-serif;
+    #canvas-area #view-menu select {
+      background-color: #f4f1ee;
     }
+    #view-menu select {
+      height: 32px;
+      padding: 0 8px;
+      border: none;
+      border-radius: 6px;
+      font: inherit;
+    }
+    /* Floating menus over the map: white, rounded, shadowed, the selected
+       button black like the panels'. */
     #mode-menu,
     #shape-menu {
       position: absolute;
@@ -361,26 +381,36 @@
       left: 8px;
       display: flex;
       flex-direction: column;
+      gap: 2px;
+      padding: 4px;
       background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
     }
     #mode-menu button,
     #shape-menu button {
       display: flex;
       padding: 4px;
       border: none;
+      border-radius: 6px;
       background: none;
+      color: #000;
       cursor: pointer;
+    }
+    #mode-menu button:hover,
+    #shape-menu button:hover {
+      background: rgba(0, 0, 0, 0.06);
     }
     #mode-menu button[aria-pressed="true"],
     #shape-menu button[aria-pressed="true"] {
-      background: #ddd;
+      background: #000;
+      color: #fff;
     }
     #mode-menu hr {
-      margin: 2px 4px;
+      align-self: stretch;
+      margin: 2px 2px;
       border: none;
-      border-top: 1px solid #ddd;
+      border-top: 1px solid #dcd8d3;
     }
     :is(#panel, #style-panel) {
       flex: none;

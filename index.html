@@ -5548,8 +5548,9 @@
       const toggle = document.getElementById('label-styles-toggle');
       toggle.setAttribute('aria-label', anyOpen ? 'Close styles' : 'Change styles');
       toggle.firstElementChild.textContent = anyOpen ? 'expand_less' : 'expand_more';
-      labelStylePicker.hidden = !shownStyleLists.label;
-      iconStylePicker.hidden = !shownStyleLists.icon;
+      // A list opened on its own replaces the other's card while it's open.
+      labelStylePicker.hidden = !shownStyleLists.label || (both && iconStylePickerOpen && !stylePickerOpen);
+      iconStylePicker.hidden = !shownStyleLists.icon || (both && stylePickerOpen && !iconStylePickerOpen);
       const source = selectedLabels[0];
       const labelStyleIds = new Set(selectedLabels.filter((label) => label.styleId !== null).map((label) => styleOf(label).id));
       const iconStyleIds = new Set(selectedLabels.filter((label) => label.icon).map((label) => iconStyleOf(label).id));

@@ -1111,12 +1111,13 @@
     .label-columns {
       display: grid;
       grid-template-columns: max-content 1fr;
-      gap: 24px;
+      gap: 12px;
     }
+    /* Square, and as tall as the three level rows beside it. */
     #label-pointer {
       display: grid;
-      grid-template-columns: repeat(3, 32px);
-      grid-auto-rows: 32px;
+      grid-template-columns: repeat(3, 40px);
+      grid-auto-rows: 40px;
       gap: 2px;
     }
     :is(#panel, #style-panel) #label-pointer button {
@@ -1272,7 +1273,7 @@
       align-items: center;
       gap: 12px;
       height: 40px;
-      padding: 0 12px;
+      padding: 0 10px;
       background: #fff;
       border-radius: 6px;
       font-size: 12px;

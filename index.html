@@ -3872,11 +3872,11 @@
     }
     // Entering split screen, every panel starts centred on what the whole
     // canvas was; leaving, the whole canvas centres on the active panel's.
-    // Each level's panel starts at a zoom inside its range: sky at 80% of the
+    // Each level's panel starts at a zoom inside its range: sky at 50% of the
     // top of its range, ground at 120% of the bottom of its, canopy midway.
     // Automatic keeps the zoom there was.
     function splitStartZoom(name) {
-      const percent = { Sky: layerZoom.sky.max * 0.8, Canopy: (layerZoom.canopy.min + layerZoom.canopy.max) / 2, Ground: layerZoom.ground.min * 1.2 }[name];
+      const percent = { Sky: layerZoom.sky.max * 0.5, Canopy: (layerZoom.canopy.min + layerZoom.canopy.max) / 2, Ground: layerZoom.ground.min * 1.2 }[name];
       return percent && Math.min(MAX_SCALE * 100, Math.max(MIN_SCALE * 100, percent));
     }
     function setSplit(on) {

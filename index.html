@@ -933,7 +933,8 @@
       font-size: 24px;
       font-variation-settings: 'wght' 400, 'opsz' 24;
     }
-    :is(#panel, #style-panel) .shape-buttons button {
+    /* Shape and corner choices sit close around their icons. */
+    :is(#panel, #style-panel) .icon-buttons.shape-buttons button {
       padding: 2px;
     }
     :is(#panel, #style-panel) .icon-buttons.with-text button {
@@ -4056,7 +4057,7 @@
     const CORNER_EDGES = { square: 'M12 4H20V12', round: 'M12 4H14C17.3137 4 20 6.68629 20 10V12', chamfer: 'M12 4H15L20 9V12' };
     const cornerPickers = [...document.querySelectorAll('select[id$="corners"]')].map((select) => {
       select.hidden = true;
-      const buttons = Object.assign(document.createElement('div'), { className: 'icon-buttons' });
+      const buttons = Object.assign(document.createElement('div'), { className: 'icon-buttons shape-buttons' });
       for (const option of select.options) {
         const button = Object.assign(document.createElement('button'), { type: 'button' });
         button.dataset.corners = option.value;

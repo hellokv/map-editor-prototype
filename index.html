@@ -383,12 +383,17 @@
     #stack-view .plane {
       position: absolute;
     }
+    /* The invisible border keeps Chrome compositing each plane's canvas
+       with the page; handed to the GPU on its own, the canvas's see-through
+       parts show as solid white. */
     #stack-view canvas {
       display: block;
       width: 100%;
       height: 100%;
+      border: 1px solid transparent;
+      box-sizing: border-box;
     }
-    #stack-view canvas.level {
+    #stack-view .plane:has(canvas.level) {
       background: rgba(255, 255, 255, 0.06);
     }
     /* Where a plane's name sits: its left corner as the stack turns. */

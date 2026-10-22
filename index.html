@@ -1068,6 +1068,9 @@
     .style-picker .section-label {
       margin-bottom: 0;
     }
+    #label-icon-style-picker > .section-label {
+      margin-top: 16px;
+    }
     :is(#panel, #style-panel) .kind-tabs button {
       height: 36px;
       padding: 0 12px;
@@ -1297,8 +1300,11 @@
       color: #000;
       font: 600 12px 'National Park', system-ui, sans-serif;
     }
-    :is(#panel, #style-panel).label-look .label-section > button.new-style {
+    :is(#panel, #style-panel).label-look :is(.label-section, .style-picker) > button.new-style {
       margin: 0;
+    }
+    :is(#panel, #style-panel) button.add-style:hover {
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
     }
     /* Groups of fields within a section keep the section's spacing. */
     .label-section :is(#board-shadow-fields, #compass-fields, #shape-single-fields, .stripe-fields, .stripe-fields > div) {
@@ -4546,7 +4552,7 @@
         return option;
       }));
       const icons = styles === iconStyles;
-      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style', innerHTML: `New ${icons ? 'Icon' : 'Label'} Style<span class="material-symbols-rounded">add</span>` });
+      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style add-style', innerHTML: `New ${icons ? 'Icon' : 'Label'} Style<span class="material-symbols-rounded">add</span>` });
       create.addEventListener('click', () => (icons ? newIconStyle : newLabelStyle)(adopt));
       container.append(create);
     }
@@ -5243,15 +5249,16 @@
         const textHidden = textIsHidden(selectedLabel);
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = !!selectedLabel.icon;
-        // A style that hides text needs its labels' icons, so they can't be cleared.
-        labelIconClear.hidden = !iconOn || !!styleOf(selectedLabel).hideText;
-        document.getElementById('label-icon-search').hidden = iconOn;
+        // While searching, the field shows the search, not the icon in use.
+        const searching = document.activeElement === labelIconInput;
+        labelIconClear.hidden = !iconOn || searching;
+        document.getElementById('label-icon-search').hidden = iconOn && !searching;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
           field.closest('.slider').querySelector('input[type="range"]').disabled = textHidden;
         }
         show(labelIconInput, selectedLabel.icon ?? '');
-        labelIconPreview.textContent = selectedLabel.icon ?? '';
+        labelIconPreview.textContent = searching ? '' : selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
         document.getElementById('label-icon-section').hidden = !iconOn;
         // With its text hidden a label is just its icon, so where the icon sits doesn't apply.
@@ -5420,15 +5427,14 @@
     const labelIconPreview = document.getElementById('label-icon-preview');
     const iconOptions = document.getElementById('icon-options');
     const labelIconClear = document.getElementById('label-icon-clear');
+    // Clearing the field starts a new search; left without a pick, the
+    // field goes back to the label's icon.
     labelIconClear.addEventListener('click', () => {
-      const label = soleLabel();
-      labelIconClear.blur();
-      if (!label?.icon || styleOf(label).hideText) return;
-      recordUndo();
-      // Text can only hide behind an icon, so without one it shows again.
-      for (const key of ['icon', 'hideText', 'hideTextAt']) delete label[key];
-      draw();
+      labelIconInput.value = '';
+      labelIconInput.focus();
     });
+    labelIconInput.addEventListener('focus', () => draw());
+    labelIconInput.addEventListener('blur', () => draw());
     // Listing every icon at once makes the list slow to open.
     const MAX_ICON_OPTIONS = 300;
     // Searchable icon list for a text input and the list element given:

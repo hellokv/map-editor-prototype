@@ -1051,6 +1051,10 @@
       font-size: 15px;
       font-weight: 600;
     }
+.heading-actions {
+      display: flex;
+      gap: 8px;
+    }
     :is(#panel, #style-panel) .section-heading button {
       display: flex;
       padding: 0;
@@ -4074,20 +4078,32 @@
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',
           name: 'current-label-style',
-          checked: style === currentStyle(),
+          checked: !currentIconStyle() && style === currentStyle(),
           title: 'Use for new labels',
         });
         // Picking a style, even the current one, is getting ready to add a label in it.
         pick.addEventListener('click', () => {
           currentStyleId = style.id;
+          currentIconStyleId = null;
           setLabelTool('add');
           pick.blur();
         });
         return styleCard(row, style, pick, previewOf(style, style.name), styleMenu(style, { deletable: i > 0 }));
       }));
       iconStyleList.replaceChildren(...iconStyles.map((style, i) => {
-        const row = Object.assign(document.createElement('div'), { className: 'row' });
-        return styleCard(row, style, '', previewOf(style, style.name), styleMenu(style, { deletable: i > 0, adopt: () => {} }));
+        const row = Object.assign(document.createElement('label'), { className: 'row' });
+        const pick = Object.assign(document.createElement('input'), {
+          type: 'radio',
+          name: 'current-label-style',
+          checked: style === currentIconStyle(),
+          title: 'Use for new labels',
+        });
+        pick.addEventListener('click', () => {
+          currentIconStyleId = style.id;
+          setLabelTool('add');
+          pick.blur();
+        });
+        return styleCard(row, style, pick, previewOf(style, style.name), styleMenu(style, { deletable: i > 0, adopt: () => {} }));
       }));
     }
 
@@ -4315,7 +4331,7 @@
     // A label style shows text in it, with the label's icon settings in
     // extra, if any; an icon style shows just an icon in it.
     function previewOf(style, text, extra = {}) {
-      if (isIconStyle(style)) return stylePreview({ ...extra, text, icon: extra.icon || 'pets', hideText: true, iconStyleId: style.id, baseStyle: NEW_STYLE });
+      if (isIconStyle(style)) return stylePreview({ ...extra, text, icon: extra.icon || 'pets', iconStyleId: style.id, styleId: null });
       return stylePreview({ ...extra, text, styleId: style.id });
     }
     function stylePreview(label) {
@@ -4358,7 +4374,7 @@
     // A new style brings its own values, so the label's own value for the
     // style's setting goes.
     function setLabelStyle(label, style) {
-      label.styleId = style.id;
+      label.styleId = style?.id ?? null;
       delete label.iconGap;
       giveIconIfHidingText(label);
     }
@@ -4419,7 +4435,8 @@
       const frame = (height) => ({ height: `${height}px`, boxSizing: 'border-box', overflow: 'hidden' });
       container.animate([frame(from), frame(to)], { duration: PICKER_EASE_MS, easing: 'ease' });
     }
-    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null, styles = labelStyles }) {
+    // remove, if given, takes the style off whatever the picker is for.
+    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null, styles = labelStyles, remove = null }) {
       if (chevron) {
         const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
         const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });
@@ -4429,7 +4446,19 @@
           setOpen(!open);
           draw();
         });
-        heading.append(toggle);
+        const actions = Object.assign(document.createElement('span'), { className: 'heading-actions' });
+        if (remove) {
+          const removeButton = Object.assign(document.createElement('button'), { type: 'button', innerHTML: '<span class="material-symbols-rounded">close</span>' });
+          removeButton.setAttribute('aria-label', 'Remove style');
+          removeButton.addEventListener('click', () => {
+            recordUndo();
+            remove();
+            draw();
+          });
+          actions.append(removeButton);
+        }
+        actions.append(toggle);
+        heading.append(actions);
         title = heading;
       }
       const card = (element, style, pick) => {
@@ -5165,7 +5194,9 @@
         const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
         // The backdrop follows the label around the map and the map's zoom.
         const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
-        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey]);
+        // A label can lose its label style if it has an icon to be instead.
+        const removable = selectedLabels.every((label) => label.icon && label.styleId !== null);
+        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey, removable]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
           renderStylePicker(labelStylePicker, {
@@ -5178,6 +5209,7 @@
             adopt: adoptForLabels,
             chevron: true,
             backdrop: backdropKey && labelBackdrop.toDataURL(),
+            remove: removable && (() => { for (const label of selectedLabels) setLabelStyle(label, null); }),
           });
         }
       }
@@ -5426,14 +5458,18 @@
       { ...NEW_ICON_STYLE, id: 2, name: 'Pin', iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
     ];
     let nextIconStyleId = 3;
-    // The style new labels are created in, picked in the style list.
+    // The style new labels are created in, picked in the style lists: a label
+    // style, or an icon style for labels that are just an icon.
     let currentStyleId = 1;
+    let currentIconStyleId = null;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];
+    const currentIconStyle = () => iconStyles.find((style) => style.id === currentIconStyleId) ?? null;
     const iconStyleOf = (label) => iconStyles.find((style) => style.id === label.iconStyleId) ?? iconStyles[0];
+    // A label without a label style (styleId null) is just its icon.
+    const NO_LABEL_STYLE = { ...NEW_STYLE, id: null, hideText: true };
     // How a label is drawn: its label style with its icon style's settings.
-    // A preview can draw in a baseStyle that isn't one of the label styles.
     function styleOf(label) {
-      const look = { ...(label.baseStyle ?? labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0]) };
+      const look = { ...(label.styleId === null ? NO_LABEL_STYLE : labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0]) };
       const icon = iconStyleOf(label);
       for (const key of ICON_STYLE_KEYS) look[key] = icon[key];
       return look;
@@ -7930,7 +7966,13 @@
         const p = toBackground(s.x, s.y);
         if (labelTool === 'add') {
           // New label places one label, then hands back to the cursor tool.
-          if (inBackground(p)) {
+          if (inBackground(p) && currentIconStyle()) {
+            recordUndo();
+            const label = { x: p.x, y: p.y, text: '', styleId: null, iconStyleId: currentIconStyle().id, icon: 'pets', pins: [], layers: newLayers() };
+            labels.push(label);
+            selectedLabels = [label];
+            setLabelTool('select');
+          } else if (inBackground(p)) {
             startLabel(p);
             setLabelTool('select');
           }

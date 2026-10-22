@@ -985,10 +985,34 @@
       min-width: 40px;
       max-width: 150px;
     }
+    /* The search's list hangs below the whole field, across its width. */
+    .field:has(.icon-picker) {
+      position: relative;
+    }
+    .field .icon-picker {
+      position: static;
+    }
     .field .icon-options {
-      top: 100%;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: 320px;
+      border: none;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
       text-align: left;
+      font-size: 15px;
       font-weight: 400;
+    }
+    .field .icon-options div {
+      gap: 10px;
+      padding: 6px 12px;
+    }
+    /* The search's icons, and the one picked beside the field, at full size. */
+    :is(#panel, #style-panel).label-look .field .icon-options .material-symbols-rounded,
+    :is(#panel, #style-panel).label-look .field .icon-picker > .material-symbols-rounded {
+      font-size: 24px;
+      font-variation-settings: 'wght' 300, 'opsz' 24;
     }
     .section-heading {
       display: flex;

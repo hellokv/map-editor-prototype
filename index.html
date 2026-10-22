@@ -1540,6 +1540,7 @@
         <option>Canopy</option>
         <option>Ground</option>
         <option>Automatic</option>
+        <option>Split Screen</option>
       </select>
       <span id="auto-layers" hidden></span>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
@@ -3744,6 +3745,75 @@
         const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
         autoLayers.textContent = names.join(', ') || 'None';
       }
+      if (layerSelect.value === 'Split Screen') paintSplit();
+      else paintView();
+      updatePanel();
+    }
+
+    // Split screen shows the map four times, each a quarter of the canvas
+    // showing one level, or all of them, at the same zoom. Each quarter is
+    // centred on what the whole canvas would centre on.
+    const SPLIT_PANELS = ['Sky', 'Canopy', 'Ground', 'All'];
+    // The layer setting a quarter is painted with, while it's painted.
+    let layerOverride = null;
+    // How far a quarter's map is moved from the whole canvas's, while it's painted.
+    let paintShift = { x: 0, y: 0 };
+    const splitPanels = () => {
+      const w = canvas.clientWidth / 2;
+      const h = canvas.clientHeight / 2;
+      return SPLIT_PANELS.map((name, i) => {
+        const x = (i % 2) * w;
+        const y = Math.floor(i / 2) * h;
+        return { name, x, y, w, h, shift: { x: x - w / 2, y: y - h / 2 } };
+      });
+    };
+    function paintSplit() {
+      const dpr = window.devicePixelRatio || 1;
+      const home = { ...view };
+      for (const panel of splitPanels()) {
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.beginPath();
+        ctx.rect(panel.x, panel.y, panel.w, panel.h);
+        ctx.clip();
+        layerOverride = panel.name;
+        paintShift = panel.shift;
+        view.x = home.x + panel.shift.x;
+        view.y = home.y + panel.shift.y;
+        paintView();
+        view.x = home.x;
+        view.y = home.y;
+        ctx.restore();
+        // The panel's level, named in its bottom left corner.
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.font = "600 12px 'National Park', system-ui, sans-serif";
+        const textW = ctx.measureText(panel.name).width;
+        const tag = { x: panel.x + 12, y: panel.y + panel.h - 12 - 28, w: textW + 20, h: 28 };
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+        ctx.shadowBlur = 8 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(tag.x, tag.y, tag.w, tag.h, 6);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = '#000';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(panel.name, tag.x + 10, tag.y + tag.h / 2);
+        ctx.restore();
+      }
+      layerOverride = null;
+      paintShift = { x: 0, y: 0 };
+      // The panels' dividing lines.
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(canvas.clientWidth / 2 - 0.5, 0, 1, canvas.clientHeight);
+      ctx.fillRect(0, canvas.clientHeight / 2 - 0.5, canvas.clientWidth, 1);
+      ctx.restore();
+    }
+
+    function paintView() {
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
@@ -3791,7 +3861,7 @@
         for (const group of groups) {
           if (group.visible && group.width > 0) strokeGroupWidth(group);
         }
-        captureLabelBackdrop();
+        if (!layerOverride) captureLabelBackdrop();
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
         if (!labelTools.hidden) {
           drawPins();
@@ -3803,7 +3873,6 @@
         }
         if (!modePanels.preview.hidden) drawDeviceFrame();
         drawMarquee();
-        updatePanel();
         return;
       }
 
@@ -3962,7 +4031,6 @@
       if (showLabelsToggle.checked) drawLabels();
 
       drawMarquee();
-      updatePanel();
     }
 
     // The map behind the selected label, caught before labels are drawn over
@@ -6070,20 +6138,23 @@
     const LAYERS = ['sky', 'canopy', 'ground'];
     const layerZoom = { sky: { min: 10, max: 75 }, canopy: { min: 76, max: 100 }, ground: { min: 101, max: 600 } };
     const layerSelect = document.getElementById('layer-select');
+    // Split screen paints each panel with its own setting; anything else,
+    // clicking included, goes by all of them.
+    const layerMode = () => layerOverride ?? (layerSelect.value === 'Split Screen' ? 'All' : layerSelect.value);
     function shownLayers() {
-      if (layerSelect.value === 'All') return LAYERS;
-      if (layerSelect.value === 'Automatic') {
+      if (layerMode() === 'All') return LAYERS;
+      if (layerMode() === 'Automatic') {
         const zoom = zoomPercent();
         return LAYERS.filter((layer) => layerZoom[layer].min <= zoom && zoom <= layerZoom[layer].max);
       }
-      return [layerSelect.value.toLowerCase()];
+      return [layerMode().toLowerCase()];
     }
     // Labels, background shapes and pen points each carry layers (a pen
     // shape's points all share theirs). Anything without is on every layer.
-    const onShownLayer = (item) => !item.layers || layerSelect.value === 'All' || shownLayers().some((layer) => item.layers[layer]);
+    const onShownLayer = (item) => !item.layers || layerMode() === 'All' || shownLayers().some((layer) => item.layers[layer]);
     // Whether a label's text is on any level on show; without an icon, a
     // label whose text is off is off altogether.
-    const labelTextShown = (label) => layerSelect.value === 'All' || shownLayers().some((layer) => (!label.layers || label.layers[layer]) && !label.hideTextAt?.[layer]);
+    const labelTextShown = (label) => layerMode() === 'All' || shownLayers().some((layer) => (!label.layers || label.layers[layer]) && !label.hideTextAt?.[layer]);
     const labelShown = (label) => onShownLayer(label) && (!!label.icon || labelTextShown(label));
     // Something new goes on the layers being shown, so it stays in view.
     function newLayers() {
@@ -6164,6 +6235,8 @@
     }
     function fadeAlpha(fades, item, shown) {
       const target = shown ? 1 : 0;
+      // Split screen's panels each show their own levels, so nothing fades there.
+      if (layerOverride) return target;
       const now = performance.now();
       let fade = fades.get(item);
       if (!fade) {
@@ -7932,7 +8005,7 @@
       const box = marqueeBox();
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, paintShift.x * dpr, paintShift.y * dpr);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
       ctx.fillRect(box.x, box.y, box.w, box.h);
       ctx.strokeStyle = '#fff';
@@ -7973,9 +8046,14 @@
       return items;
     }
 
+    // In split screen, a point in any panel is taken back to where it
+    // would be on the whole canvas.
     function canvasPoint(e) {
       const rect = canvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      if (layerSelect.value !== 'Split Screen') return p;
+      const panel = splitPanels().find((each) => p.x >= each.x && p.x < each.x + each.w && p.y >= each.y && p.y < each.y + each.h);
+      return panel ? { x: p.x - panel.shift.x, y: p.y - panel.shift.y } : p;
     }
 
     canvas.addEventListener('pointerdown', (e) => {

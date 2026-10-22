@@ -738,7 +738,7 @@
       align-self: stretch;
       display: flex;
       align-items: center;
-      width: 64px;
+      width: 64px; /* SWATCH_WIDTH */
       padding-left: 6px;
       box-sizing: border-box;
       overflow: hidden;
@@ -753,7 +753,7 @@
       flex: none;
     }
     /* A soft shade where the preview is cut off. */
-    .style-swatch:not(.centered)::after {
+    .style-swatch:not(.centered, .fits)::after {
       content: '';
       position: absolute;
       top: 0;
@@ -770,13 +770,13 @@
     }
     /* Clip, not hidden: clicking the swatch focuses the radio pushed out of
        view, and a hidden overflow would scroll the card to it. */
-    .style-card:has(.style-swatch:hover) {
+    .style-card:has(.style-swatch:not(.fits):hover) {
       overflow: clip;
     }
-    .style-swatch:hover {
-      /* Half the card, or the preview's own width when wider, up to the whole
-         card with its 4px right padding. */
-      width: min(calc(100% + 4px), max(50%, var(--open-width, 50%)));
+    /* A swatch that cuts its preview off opens to the preview's width, up
+       to the whole card with its 4px right padding. */
+    .style-swatch:not(.fits):hover {
+      width: min(calc(100% + 4px), var(--open-width));
       border-radius: 6px;
     }
     .style-swatch:hover::after {
@@ -4394,6 +4394,7 @@
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     // A style's card: its radio, its name beside its preview, and its menu,
     // on the map's background color (set by updatePanel).
+    const SWATCH_WIDTH = 64;
     function styleCard(card, style, pick, preview, menu) {
       card.classList.add('style-card');
       const swatch = Object.assign(document.createElement('span'), { className: 'style-swatch' });
@@ -4401,7 +4402,9 @@
       swatch.classList.toggle('centered', preview.dataset.iconOnly === 'true');
       swatch.append(preview);
       // The preview's width with the swatch's 6px padding on each side.
-      swatch.style.setProperty('--open-width', `${parseFloat(preview.style.width) + 12}px`);
+      const openWidth = parseFloat(preview.style.width) + 12;
+      swatch.style.setProperty('--open-width', `${openWidth}px`);
+      swatch.classList.toggle('fits', openWidth <= SWATCH_WIDTH);
       // The preview opens the style for editing; the rest of the card picks it.
       swatch.addEventListener('click', (e) => {
         e.preventDefault();

@@ -387,8 +387,6 @@
       display: block;
       width: 100%;
       height: 100%;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      box-sizing: border-box;
     }
     #stack-view canvas.level {
       background: rgba(255, 255, 255, 0.06);
@@ -3747,10 +3745,9 @@
     let size = null;
 
     const zoomInput = document.getElementById('zoom-input');
-    // Split screen zooms each panel on its own, and Stacked doesn't zoom.
+    // Split screen zooms each panel on its own.
     function showViewMenu() {
-      zoomInput.parentElement.hidden = splitOn() || layerSelect.value === 'Stacked';
-      document.getElementById('fit-button').hidden = layerSelect.value === 'Stacked';
+      zoomInput.parentElement.hidden = splitOn();
     }
     const autoLayers = document.getElementById('auto-layers');
     // Clicking the levels Automatic shows switches to the first of them.
@@ -3788,7 +3785,9 @@
     });
     // In split screen, every panel fits the map to itself.
     document.getElementById('fit-button').addEventListener('click', (e) => {
-      if (panelViews) {
+      if (stackOn()) {
+        fitStack();
+      } else if (panelViews) {
         const { w, h } = splitPanels()[0];
         centerBackground(w, h);
         panelViews = panelViews.map(() => ({ ...view }));
@@ -3966,7 +3965,8 @@
 
     // Stacked paints the map once per plane on the canvas and copies each
     // into a plane of its own: the background alone, then each level's
-    // elements alone. It's only for looking: nothing pans, zooms or edits.
+    // elements alone. The map pans and zooms in all of them at once, but
+    // nothing can be edited.
     const stackView = document.getElementById('stack-view');
     const STACK_PLANES = [
       { part: 'background', layer: 'All', name: 'Background' },
@@ -3981,7 +3981,31 @@
     // scaled and moved so the stack, names included, fills the canvas.
     const STACK_PADDING = 24;
     const stackFrame = stackView.querySelector('.frame');
-    stackView.querySelector('.stack').style.transform = 'rotateX(58deg) rotateZ(-32deg) scale3d(0.5, 0.5, 0.5)';
+    const STACK_TILT = 58;
+    const STACK_TURN = -32;
+    const STACK_SHRINK = 0.5;
+    stackView.querySelector('.stack').style.transform = `rotateX(${STACK_TILT}deg) rotateZ(${STACK_TURN}deg) scale3d(${STACK_SHRINK}, ${STACK_SHRINK}, ${STACK_SHRINK})`;
+    // The frame's scale and offset, as last laid out.
+    let stackFit = { k: 1, x: 0, y: 0 };
+    // A point on screen, relative to the canvas, taken back through the
+    // frame, tilt, turn and shrink to where it is on the background plane, in
+    // canvas pixels. Pointer handling uses it to pan and zoom under the pointer.
+    function fromStack(p) {
+      const cx = canvas.clientWidth / 2;
+      const cy = canvas.clientHeight / 2;
+      const dx = (p.x - stackFit.x) / stackFit.k - cx;
+      const dy = ((p.y - stackFit.y) / stackFit.k - cy) / Math.cos((STACK_TILT * Math.PI) / 180);
+      const turn = (-STACK_TURN * Math.PI) / 180;
+      return {
+        x: cx + (dx * Math.cos(turn) - dy * Math.sin(turn)) / STACK_SHRINK,
+        y: cy + (dx * Math.sin(turn) + dy * Math.cos(turn)) / STACK_SHRINK,
+      };
+    }
+    // The map's box filling a plane exactly.
+    function fitStack() {
+      const fit = Math.min(canvas.clientWidth / board.w, canvas.clientHeight / board.h);
+      Object.assign(view, { scale: fit, x: (canvas.clientWidth - board.w * fit) / 2, y: (canvas.clientHeight - board.h * fit) / 2 });
+    }
     const stackPlanes = STACK_PLANES.map(({ part, layer, name }, i) => {
       const holder = Object.assign(document.createElement('div'), { className: 'plane' });
       holder.style.transform = `translateZ(${i * STACK_GAP}px)`;
@@ -4016,6 +4040,7 @@
       const x = (origin.width - (right - left) * k) / 2 - left * k;
       const y = (origin.height - (bottom - top) * k) / 2 - top * k;
       stackFrame.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+      stackFit = { k, x, y };
       for (const { corner, tag } of stackPlanes) {
         const at = corner.getBoundingClientRect();
         tag.style.left = `${at.left - origin.left - tag.offsetWidth - 12}px`;
@@ -4023,27 +4048,26 @@
       }
     }
     const stackOn = () => layerSelect.value === 'Stacked' && !inPreview();
-    // Each plane is the map's box, fitted into the canvas, whatever the
-    // map's own pan and zoom.
+    // Each plane is the shape of the map's box, as large as fits the canvas,
+    // and shows that part of the canvas.
     function paintStack() {
       stackView.style.background = colorOf(canvasColor);
       const dpr = window.devicePixelRatio || 1;
       const fit = Math.min(canvas.clientWidth / board.w, canvas.clientHeight / board.h);
       const w = board.w * fit;
       const h = board.h * fit;
-      const home = { ...view };
-      Object.assign(view, { scale: fit, x: 0, y: 0 });
+      const left = Math.round((canvas.clientWidth - w) / 2);
+      const top = Math.round((canvas.clientHeight - h) / 2);
       for (const [i, { part, layer }] of STACK_PLANES.entries()) {
         stackPart = part;
         layerOverride = layer;
         paintView();
         const { holder, plane } = stackPlanes[i];
-        Object.assign(holder.style, { left: `${(canvas.clientWidth - w) / 2}px`, top: `${(canvas.clientHeight - h) / 2}px`, width: `${w}px`, height: `${h}px` });
+        Object.assign(holder.style, { left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` });
         plane.width = Math.round(w * dpr);
         plane.height = Math.round(h * dpr);
-        plane.getContext('2d').drawImage(canvas, 0, 0, plane.width, plane.height, 0, 0, plane.width, plane.height);
+        plane.getContext('2d').drawImage(canvas, left * dpr, top * dpr, plane.width, plane.height, 0, 0, plane.width, plane.height);
       }
-      Object.assign(view, home);
       stackPart = null;
       layerOverride = null;
       stackView.hidden = false;
@@ -6463,6 +6487,7 @@
 
     layerSelect.addEventListener('change', () => {
       setSplit(splitOn());
+      if (stackOn()) fitStack();
       showViewMenu();
       selectedLabels = selectedLabels.filter(labelShown);
       selectedShapes = selectedShapes.filter(onShownLayer);
@@ -7954,11 +7979,9 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      // Stacked shows the whole map, fixed.
-      if (stackOn()) return;
       const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const { x: mx, y: my } = stackOn() ? fromStack(pointer) : pointer;
       const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-e.deltaY * 0.001)));
       // Keep the point under the cursor fixed while zooming.
       view.x = mx - (mx - view.x) * (next / view.scale);
@@ -8149,8 +8172,7 @@
     }
 
     function updateCursor() {
-      if (stackOn()) canvas.style.cursor = '';
-      else if (spaceHeld || drag?.spacePan || inPreview() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (spaceHeld || drag?.spacePan || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8308,11 +8330,11 @@
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || stackOn()) return;
+      if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      if (spaceHeld || inPreview() || (!labelTools.hidden && labelTool === 'pan')) {
+      if (spaceHeld || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         updateCursor();
         return;
@@ -8522,8 +8544,11 @@
           setSelectionItems([...drag.base, ...inside.filter((item) => !drag.base.some((b) => sameItem(b, item)))]);
         }
       } else if (drag) {
-        view.x += e.clientX - drag.x;
-        view.y += e.clientY - drag.y;
+        // Stacked, the map follows the pointer across the background plane.
+        const from = stackOn() ? fromStack({ x: drag.x, y: drag.y }) : { x: drag.x, y: drag.y };
+        const to = stackOn() ? fromStack({ x: e.clientX, y: e.clientY }) : { x: e.clientX, y: e.clientY };
+        view.x += to.x - from.x;
+        view.y += to.y - from.y;
         drag.x = e.clientX;
         drag.y = e.clientY;
       }

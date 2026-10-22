@@ -2907,12 +2907,13 @@
       for (const [name, panel] of Object.entries(modePanels)) {
         panel.hidden = name !== mode;
       }
+      // Every mode starts on its cursor tool.
       const enteringLabels = mode === 'labels' && labelTools.hidden;
       const enteringPath = mode === 'path' && pathTools.hidden;
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
       backgroundTools.hidden = mode !== 'background';
-      if (enteringLabels) setLabelTool('add');
+      if (enteringLabels) setLabelTool('select');
       if (mode !== 'background') {
         setBackgroundTool('select');
         selectedShapes = [];
@@ -2927,9 +2928,7 @@
       }
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
-      if (mode !== 'path') setTool('select');
-      // Path mode starts on the Add path tool.
-      else if (enteringPath) setTool('add');
+      if (mode !== 'path' || enteringPath) setTool('select');
     }
 
     for (const button of modeButtons) {

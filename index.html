@@ -1049,6 +1049,10 @@
       font-size: 24px;
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
+    :is(#panel, #style-panel).label-look .field .icon-picker > .icon-search {
+      font-size: 16px;
+      font-variation-settings: 'wght' 400, 'opsz' 20;
+    }
     .section-heading {
       display: flex;
       align-items: center;
@@ -1607,11 +1611,11 @@
             Icon
             <span class="icon-picker">
               <span id="label-icon-preview" class="material-symbols-rounded"></span>
+              <span id="label-icon-search" class="material-symbols-rounded icon-search" aria-hidden="true">search</span>
               <input id="label-icon" type="text" autocomplete="off" placeholder="Search">
               <div id="icon-options" class="icon-options" hidden></div>
             </span>
             <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
-            <span id="label-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
           <div id="label-icon-side-field" class="field">
             Alignment
@@ -1699,11 +1703,11 @@
             Icon
             <span class="icon-picker">
               <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
+              <span id="list-item-icon-search" class="material-symbols-rounded icon-search" aria-hidden="true">search</span>
               <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search">
               <div class="icon-options" hidden></div>
             </span>
             <button id="list-item-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
-            <span id="list-item-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
           <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
         </div>

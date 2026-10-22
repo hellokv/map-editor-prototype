@@ -4123,10 +4123,8 @@
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
         ctx.restore();
       }
-      if (stackPart !== 'background') {
-        drawShapes();
-        drawSketchFills();
-      }
+      drawShapes();
+      drawSketchFills();
       if (board.outline && stackPart !== 'level') strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
       if (stackPart) {
         if (stackPart === 'background') drawPaths();
@@ -6425,7 +6423,11 @@
     }
     // Labels, background shapes and pen points each carry layers (a pen
     // shape's points all share theirs). Anything without is on every layer.
-    const onShownLayer = (item) => !item.layers || layerMode() === 'All' || shownLayers().some((layer) => item.layers[layer]);
+    // Stacked, anything with no level of its own is background, on the bottom plane alone.
+    const onShownLayer = (item) => {
+      if (stackPart) return stackPart === 'background' ? !item.layers : !!item.layers && shownLayers().some((layer) => item.layers[layer]);
+      return !item.layers || layerMode() === 'All' || shownLayers().some((layer) => item.layers[layer]);
+    };
     // Whether a label's text is on any level on show; without an icon, a
     // label whose text is off is off altogether.
     const labelTextShown = (label) => layerMode() === 'All' || shownLayers().some((layer) => (!label.layers || label.layers[layer]) && !label.hideTextAt?.[layer]);

@@ -668,7 +668,7 @@
       display: block;
       width: 100%;
     }
-    #label-style-list .row {
+    :is(#label-style-list, #icon-style-list) .row {
       justify-content: flex-start;
     }
     .style-menu {
@@ -712,7 +712,7 @@
     :is(#panel, #style-panel) .style-menu [role="menu"] button:hover {
       background: #eee;
     }
-    #label-style-list .style-menu {
+    :is(#label-style-list, #icon-style-list) .style-menu {
       margin-left: auto;
     }
     .style-card .style-menu {
@@ -1353,7 +1353,8 @@
       font-weight: 400;
     }
     .radio-list,
-    #label-style-list {
+    #label-style-list,
+    #icon-style-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -1407,7 +1408,7 @@
     <div id="style-panel" class="label-look">
       <div id="style-panel-header">
         <h2>Label Style</h2>
-        <button id="style-panel-close" type="button" aria-label="Close label style"><span class="material-symbols-rounded">close</span></button>
+        <button id="style-panel-close" type="button" aria-label="Close"><span class="material-symbols-rounded">close</span></button>
       </div>
     </div>
     <canvas id="canvas"></canvas>
@@ -1566,6 +1567,7 @@
             <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
             <span id="label-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
+          <div id="label-icon-style-picker"></div>
           <div id="label-icon-side-field" class="field">
             Alignment
             <div id="label-icon-side" class="icon-buttons">
@@ -1779,6 +1781,11 @@
           <div id="label-style-list"></div>
           <button id="new-label-style" class="new-style" type="button">New Label Style<span class="material-symbols-rounded">add</span></button>
         </div>
+        <div class="label-section">
+          <div class="section-heading">Icon Styles</div>
+          <div id="icon-style-list"></div>
+          <button id="new-icon-style" class="new-style" type="button">New Icon Style<span class="material-symbols-rounded">add</span></button>
+        </div>
         <form id="label-style-form" hidden>
           <div class="label-section">
             <label class="field">
@@ -1894,10 +1901,6 @@
           </div>
           <div class="label-section">
             <div class="section-heading">Icon</div>
-            <label class="field">
-              Icon Color
-              <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-            </label>
             <div class="field">
               Placement
               <input id="style-icon-outside" type="checkbox" hidden>
@@ -1907,12 +1910,26 @@
               </div>
             </div>
             <label class="field">
-              Icon Size
-              <input id="style-icon-size" type="number" min="4" max="200" step="1">
-            </label>
-            <label class="field">
               Icon Gap
               <input id="style-icon-gap" type="number" min="0" max="200" step="1">
+            </label>
+          </div>
+        </form>
+        <form id="icon-style-form" hidden>
+          <div class="label-section">
+            <label class="field">
+              Name
+              <input id="style-icon-name" type="text" required>
+            </label>
+          </div>
+          <div class="label-section">
+            <label class="field">
+              Color
+              <span class="color-field"><input id="style-icon-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            </label>
+            <label class="field">
+              Size
+              <input id="style-icon-size" type="number" min="4" max="200" step="1">
             </label>
             <div class="field">
               Shape
@@ -3218,6 +3235,7 @@
         groups: groups.map((group) => ({ ...group, segments: new Set([...group.segments].map((segment) => segmentCopies.get(segment))) })),
         labels: labels.map((label) => ({ ...label, pins: label.pins.map((pin) => ({ ...pin })) })),
         labelStyles: labelStyles.map((style) => ({ ...style })),
+        iconStyles: iconStyles.map((style) => ({ ...style })),
         lists: lists.map((list) => ({ ...list, items: list.items.map((item) => ({ ...item })) })),
         shapes: shapes.map((shape) => ({ ...shape })),
         ...copySketch(),
@@ -3231,12 +3249,13 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, lists: restoredLists, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, iconStyles: restoredIconStyles, lists: restoredLists, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
       labels.splice(0, labels.length, ...restoredLabels);
       labelStyles.splice(0, labelStyles.length, ...restoredStyles);
+      iconStyles.splice(0, iconStyles.length, ...restoredIconStyles);
       lists.splice(0, lists.length, ...restoredLists);
       selectedList = null;
       renderLabelStyles();
@@ -3880,15 +3899,22 @@
     const labelProperties = document.getElementById('label-properties');
     const labelStylesSection = document.getElementById('label-styles');
     const labelStyleList = document.getElementById('label-style-list');
+    const iconStyleList = document.getElementById('icon-style-list');
     const labelStylePicker = document.getElementById('label-style-picker');
+    const iconStylePicker = document.getElementById('label-icon-style-picker');
     let stylePickerKey = '';
     let stylePickerOpen = false;
+    let iconStylePickerKey = '';
+    let iconStylePickerOpen = false;
     // The labels the picker was last shown for; a new selection closes it.
     let stylePickerFor = [];
     let loadedFontCount = 0;
     const styleForm = document.getElementById('label-style-form');
+    const iconStyleForm = document.getElementById('icon-style-form');
+    const isIconStyle = (style) => iconStyles.includes(style);
+    const stylesWith = (style) => (isIconStyle(style) ? iconStyles : labelStyles);
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // The placement buttons stand for the hidden checkbox the form reads.
     const placementButtons = document.querySelectorAll('[data-icon-placement]');
@@ -3918,16 +3944,13 @@
         if (button.dataset.iconShape === styleInputs['icon-shape'].value) return;
         styleInputs['icon-shape'].value = button.dataset.iconShape;
         showIconShape();
-        styleForm.dispatchEvent(new Event('input'));
-        styleForm.dispatchEvent(new Event('change'));
+        iconStyleForm.dispatchEvent(new Event('input'));
+        iconStyleForm.dispatchEvent(new Event('change'));
       });
     }
-    // A style's icon is in its text color until the icon is given a color of its own.
+    // An icon style has no color of its own until one is picked.
     let iconColorSet = false;
     styleInputs['icon-color'].addEventListener('input', () => { iconColorSet = true; });
-    styleInputs.color.addEventListener('input', () => {
-      if (!iconColorSet) showColor(styleInputs['icon-color'], colorOf(styleInputs.color));
-    });
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
     let editingStyle = null;
@@ -4010,7 +4033,7 @@
         const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete' });
         remove.addEventListener('click', () => {
           recordUndo();
-          labelStyles.splice(labelStyles.indexOf(style), 1);
+          stylesWith(style).splice(stylesWith(style).indexOf(style), 1);
           renderLabelStyles();
           draw();
         });
@@ -4029,12 +4052,12 @@
       });
       clone.addEventListener('click', () => {
         recordUndo();
-        const copy = { ...style, id: nextStyleId++, name: `Copy of ${style.name}` };
-        labelStyles.push(copy);
+        const copy = { ...style, id: isIconStyle(style) ? nextIconStyleId++ : nextStyleId++, name: `Copy of ${style.name}` };
+        stylesWith(style).push(copy);
         adopt(copy);
         renderLabelStyles();
         openStyleForm(copy, true);
-        styleInputs.name.select();
+        styleNameInput(copy).select();
       });
       return menu;
     }
@@ -4043,7 +4066,7 @@
     });
     // Previews are redrawn when a style, a loaded font or the list's width changes.
     let styleListKey = '';
-    const currentStyleListKey = () => JSON.stringify([labelStyles, loadedFontCount, labelStyleList.clientWidth]);
+    const currentStyleListKey = () => JSON.stringify([labelStyles, iconStyles, loadedFontCount, labelStyleList.clientWidth]);
     function renderLabelStyles() {
       styleListKey = currentStyleListKey();
       labelStyleList.replaceChildren(...labelStyles.map((style, i) => {
@@ -4061,7 +4084,11 @@
           setLabelTool('add');
           pick.blur();
         });
-        return styleCard(row, style, pick, stylePreview(style, style.name), styleMenu(style, { deletable: i > 0 }));
+        return styleCard(row, style, pick, previewOf(style, style.name), styleMenu(style, { deletable: i > 0 }));
+      }));
+      iconStyleList.replaceChildren(...iconStyles.map((style, i) => {
+        const row = Object.assign(document.createElement('div'), { className: 'row' });
+        return styleCard(row, style, '', previewOf(style, style.name), styleMenu(style, { deletable: i > 0, adopt: () => {} }));
       }));
     }
 
@@ -4074,7 +4101,6 @@
         lineHeight: Math.max(0.5, Number(styleInputs['line-height'].value) || 1.2),
         letterSpacing: Number(styleInputs['letter-spacing'].value) || 0,
         zoomScale: Math.max(0, Number(styleInputs['zoom-scale'].value) || 0),
-        iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
         hideText: styleInputs['hide-text'].checked,
@@ -4091,6 +4117,12 @@
         pointerLength: Math.max(0, Number(styleInputs['pointer-length'].value) || 0),
         pointerWidth: Math.max(0, Number(styleInputs['pointer-width'].value) || 0),
         pointerEnd: styleInputs['pointer-end'].value,
+      };
+    }
+    function readIconStyleForm() {
+      return {
+        name: styleInputs['icon-name'].value.trim(),
+        iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
         iconBackground: styleInputs['icon-background-on'].checked ? colorOf(styleInputs['icon-background']) : null,
         iconOutline: styleInputs['icon-outline-on'].checked ? colorOf(styleInputs['icon-outline']) : null,
         iconOutlineWidth: Math.max(0, Number(styleInputs['icon-outline-width'].value) || 0),
@@ -4110,11 +4142,27 @@
     const stylePanelOpen = () => stylePanel.classList.contains('open');
     let styleFormForSelection = false;
 
+    const stylePanelTitle = document.querySelector('#style-panel-header h2');
+    const styleNameInput = (style) => (isIconStyle(style) ? styleInputs['icon-name'] : styleInputs.name);
     function openStyleForm(style, recorded = false) {
       closeStyleForm();
       editingStyle = style;
       styleBefore = { snapshot: snapshot(), recorded };
-      const values = style;
+      const icon = isIconStyle(style);
+      if (icon) showIconStyleForm(style);
+      else showLabelStyleForm(style);
+      showToggledFields();
+      // Opened for a selection, the form goes when nothing is selected any more.
+      styleFormForSelection = !!(selectedLabels.length || selectedList);
+      stylePanelTitle.textContent = icon ? 'Icon Style' : 'Label Style';
+      styleForm.hidden = icon;
+      iconStyleForm.hidden = !icon;
+      stylePanel.append(icon ? iconStyleForm : styleForm);
+      stylePanel.classList.add('open');
+      draw();
+      styleNameInput(style).focus();
+    }
+    function showLabelStyleForm(values) {
       styleInputs.name.value = values.name;
       styleInputs.font.value = values.font;
       styleInputs.weight.value = values.weight;
@@ -4123,18 +4171,32 @@
       styleInputs['letter-spacing'].value = values.letterSpacing;
       styleInputs['zoom-scale'].value = values.zoomScale;
       zoomScaleSlider.value = values.zoomScale;
-      styleInputs['icon-size'].value = values.iconSize;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
       styleInputs['hide-text'].checked = !!values.hideText;
       styleInputs['icon-outside'].checked = !!values.iconOutside;
       showIconPlacement();
       showColor(styleInputs.color, values.color);
-      iconColorSet = values.iconColor != null;
-      showColor(styleInputs['icon-color'], values.iconColor ?? values.color);
       styleInputs['outline-on'].checked = !!values.outline;
       showColor(styleInputs.outline, values.outline ?? '#ffffff');
       styleInputs['outline-width'].value = values.outlineWidth;
+      styleInputs['shadow-on'].checked = !!values.shadow;
+      showColor(styleInputs.shadow, values.shadow ?? '#000000');
+      styleInputs['padding-y'].value = values.paddingY;
+      styleInputs['padding-x'].value = values.paddingX;
+      styleInputs['background-on'].checked = !!values.background;
+      showColor(styleInputs.background, values.background ?? '#ffffff');
+      styleInputs.corners.value = values.corners;
+      styleInputs.radius.value = values.radius;
+      styleInputs['pointer-length'].value = values.pointerLength;
+      styleInputs['pointer-width'].value = values.pointerWidth;
+      styleInputs['pointer-end'].value = values.pointerEnd;
+    }
+    function showIconStyleForm(values) {
+      styleInputs['icon-name'].value = values.name;
+      iconColorSet = values.iconColor != null;
+      showColor(styleInputs['icon-color'], values.iconColor ?? NEW_STYLE.color);
+      styleInputs['icon-size'].value = values.iconSize;
       for (const key of ['background', 'outline', 'shadow']) {
         const value = values[`icon${key[0].toUpperCase()}${key.slice(1)}`];
         styleInputs[`icon-${key}-on`].checked = !!value;
@@ -4148,25 +4210,6 @@
       styleInputs['icon-corners'].value = values.iconCorners;
       styleInputs['icon-radius'].value = values.iconRadius;
       styleInputs['icon-padding'].value = values.iconPadding;
-      styleInputs['shadow-on'].checked = !!values.shadow;
-      showColor(styleInputs.shadow, values.shadow ?? '#000000');
-      showToggledFields();
-      styleInputs['padding-y'].value = values.paddingY;
-      styleInputs['padding-x'].value = values.paddingX;
-      styleInputs['background-on'].checked = !!values.background;
-      showColor(styleInputs.background, values.background ?? '#ffffff');
-      styleInputs.corners.value = values.corners;
-      styleInputs.radius.value = values.radius;
-      styleInputs['pointer-length'].value = values.pointerLength;
-      styleInputs['pointer-width'].value = values.pointerWidth;
-      styleInputs['pointer-end'].value = values.pointerEnd;
-      // Opened for a selection, the form goes when nothing is selected any more.
-      styleFormForSelection = !!(selectedLabels.length || selectedList);
-      stylePanel.append(styleForm);
-      stylePanel.classList.add('open');
-      styleForm.hidden = false;
-      draw();
-      styleInputs.name.focus();
     }
 
     function closeStyleForm() {
@@ -4175,26 +4218,37 @@
       stylePanel.classList.remove('open');
     }
 
+    function recordStyleEdit() {
+      if (styleBefore.recorded) return;
+      recordUndo(styleBefore.snapshot);
+      styleBefore.recorded = true;
+    }
     function applyStyleForm() {
-      if (!editingStyle) return;
+      if (!editingStyle || isIconStyle(editingStyle)) return;
       const values = readStyleForm();
       // Half-typed font names aren't fonts, and a style needs a name; keep
       // the last good value of each.
       if (!googleFonts.has(values.font)) delete values.font;
       if (!values.name) delete values.name;
-      if (!styleBefore.recorded) {
-        recordUndo(styleBefore.snapshot);
-        styleBefore.recorded = true;
-      }
+      recordStyleEdit();
+      Object.assign(editingStyle, values);
+      for (const label of labels) if (label.styleId === editingStyle.id) giveIconIfHidingText(label);
+      renderLabelStyles();
+      draw();
+    }
+    function applyIconStyleForm() {
+      if (!editingStyle || !isIconStyle(editingStyle)) return;
+      const values = readIconStyleForm();
+      if (!values.name) delete values.name;
+      recordStyleEdit();
       // Labels with their own icon size keep it in proportion to the style's.
       const iconScale = values.iconSize / editingStyle.iconSize;
       if (iconScale !== 1) {
         for (const label of labels) {
-          if (label.styleId === editingStyle.id && label.iconSize !== undefined) label.iconSize *= iconScale;
+          if (iconStyleOf(label) === editingStyle && label.iconSize !== undefined) label.iconSize *= iconScale;
         }
       }
       Object.assign(editingStyle, values);
-      for (const label of labels) if (label.styleId === editingStyle.id) giveIconIfHidingText(label);
       renderLabelStyles();
       draw();
     }
@@ -4209,7 +4263,17 @@
       openStyleForm(style, true);
       styleInputs.name.select();
     }
+    function newIconStyle(adopt = () => {}) {
+      recordUndo();
+      const style = { id: nextIconStyleId++, name: `Icon Style ${iconStyles.length + 1}`, ...NEW_ICON_STYLE };
+      iconStyles.push(style);
+      adopt(style);
+      renderLabelStyles();
+      openStyleForm(style, true);
+      styleInputs['icon-name'].select();
+    }
     document.getElementById('new-label-style').addEventListener('click', () => newLabelStyle());
+    document.getElementById('new-icon-style').addEventListener('click', () => newIconStyle());
     function leaveStyleForm() {
       closeStyleForm();
       draw();
@@ -4238,21 +4302,31 @@
     }
     styleForm.addEventListener('input', applyStyleForm);
     styleForm.addEventListener('change', applyStyleForm);
-    styleForm.addEventListener('change', showToggledFields);
-    // Enter in a field would otherwise submit the form and reload the page.
-    styleForm.addEventListener('submit', (e) => e.preventDefault());
+    iconStyleForm.addEventListener('input', applyIconStyleForm);
+    iconStyleForm.addEventListener('change', applyIconStyleForm);
+    for (const form of [styleForm, iconStyleForm]) {
+      form.addEventListener('change', showToggledFields);
+      // Enter in a field would otherwise submit the form and reload the page.
+      form.addEventListener('submit', (e) => e.preventDefault());
+    }
 
     // A canvas showing text drawn in a style.
     const PREVIEW_TEXT_SIZE = 15;
     const PREVIEW_MAX_HEIGHT = 36;
-    // extra carries a label's icon settings, if any.
-    function stylePreview(style, text, extra = {}) {
+    // A label style shows text in it, with the label's icon settings in
+    // extra, if any; an icon style shows just an icon in it.
+    function previewOf(style, text, extra = {}) {
+      if (isIconStyle(style)) return stylePreview({ ...extra, text, icon: extra.icon || 'pets', hideText: true, iconStyleId: style.id, baseStyle: NEW_STYLE });
+      return stylePreview({ ...extra, text, styleId: style.id });
+    }
+    function stylePreview(label) {
+      const style = styleOf(label);
       // A style that hides text shows an icon, whether or not a label has one yet.
-      if (style.hideText && !extra.icon) extra = { ...extra, icon: 'pets' };
-      const { icon, iconSize } = extra;
+      if (style.hideText && !label.icon) label = { ...label, icon: 'pets' };
+      const { icon, iconSize } = label;
       const dpr = window.devicePixelRatio || 1;
       const preview = document.createElement('canvas');
-      const label = { x: 0, y: 0, ...extra, text, styleId: style.id };
+      label = { x: 0, y: 0, ...label };
       const box = labelBounds(label);
       // Room for the outline and shadow around the box, and for an icon drawn
       // bigger than the room the label gives it.
@@ -4282,13 +4356,16 @@
       preview.dataset.iconOnly = textIsHidden(label);
       return preview;
     }
-    // A label's own values for settings its style also has.
-    const STYLE_OVERRIDES = ['iconSize', 'iconGap'];
-    // A new style brings its own values, so the label's overrides go.
+    // A new style brings its own values, so the label's own value for the
+    // style's setting goes.
     function setLabelStyle(label, style) {
       label.styleId = style.id;
-      for (const key of STYLE_OVERRIDES) delete label[key];
+      delete label.iconGap;
       giveIconIfHidingText(label);
+    }
+    function setIconStyle(label, style) {
+      label.iconStyleId = style.id;
+      delete label.iconSize;
     }
     // Text can only hide behind an icon, so a label in a style that hides
     // text gets its icon turned on, as pets if it had none.
@@ -4298,7 +4375,7 @@
     // Previews show the style's own values, not the label's overrides,
     // offset or icon side (the icon is always on the left), and leave out
     // text the label hides.
-    const ICON_SETTINGS = ['icon', 'hideText'];
+    const ICON_SETTINGS = ['icon', 'hideText', 'iconStyleId'];
     const iconSettingsOf = (label) => Object.fromEntries(ICON_SETTINGS.map((key) => [key, label[key]]));
     // A style's card: its radio, its name beside its preview, and its menu,
     // on the map's background color (set by updatePanel).
@@ -4343,7 +4420,7 @@
       const frame = (height) => ({ height: `${height}px`, boxSizing: 'border-box', overflow: 'hidden' });
       container.animate([frame(from), frame(to)], { duration: PICKER_EASE_MS, easing: 'ease' });
     }
-    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null }) {
+    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null, styles = labelStyles }) {
       if (chevron) {
         const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
         const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });
@@ -4357,12 +4434,12 @@
         title = heading;
       }
       const card = (element, style, pick) => {
-        const made = styleCard(element, style, pick, stylePreview(style, text, iconSettings), styleMenu(style, { deletable: style !== labelStyles[0], adopt }));
+        const made = styleCard(element, style, pick, previewOf(style, text, iconSettings), styleMenu(style, { deletable: style !== styles[0], adopt }));
         if (backdrop) Object.assign(made.querySelector('.style-swatch').style, { backgroundImage: `url(${backdrop})`, backgroundSize: `${SWATCH_OPEN_WIDTH}px ${SWATCH_HEIGHT}px`, backgroundPosition: 'left center' });
         return made;
       };
       if (!open) {
-        const style = styleIds.size === 1 ? labelStyles.find((each) => styleIds.has(each.id)) : null;
+        const style = styleIds.size === 1 ? styles.find((each) => styleIds.has(each.id)) : null;
         const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Change style' });
         change.addEventListener('click', () => {
           setOpen(true);
@@ -4382,7 +4459,7 @@
         container.replaceChildren(title, ...(single ? [single] : []), ...(chevron ? [] : [change]));
         return;
       }
-      const ordered = [...labelStyles.filter((style) => styleIds.has(style.id)), ...labelStyles.filter((style) => !styleIds.has(style.id))];
+      const ordered = [...styles.filter((style) => styleIds.has(style.id)), ...styles.filter((style) => !styleIds.has(style.id))];
       const options = Object.assign(document.createElement('div'), { className: 'radio-list' });
       container.replaceChildren(title, options);
       options.append(...ordered.map((style) => {
@@ -4406,8 +4483,9 @@
         }
         return option;
       }));
-      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style', innerHTML: 'New Label Style<span class="material-symbols-rounded">add</span>' });
-      create.addEventListener('click', () => newLabelStyle(adopt));
+      const icons = styles === iconStyles;
+      const create = Object.assign(document.createElement('button'), { type: 'button', className: 'new-style', innerHTML: `New ${icons ? 'Icon' : 'Label'} Style<span class="material-symbols-rounded">add</span>` });
+      create.addEventListener('click', () => (icons ? newIconStyle : newLabelStyle)(adopt));
       container.append(create);
     }
     const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
@@ -4878,7 +4956,7 @@
         const styleId = styleOf({ styleId: picker.styleId(list) }).id;
         const text = picker.text(list);
         const icon = picker.icon?.();
-        const key = JSON.stringify([text, icon, styleId, picker.open, labelStyles, loadedFontCount, picker.container.clientWidth]);
+        const key = JSON.stringify([text, icon, styleId, picker.open, labelStyles, iconStyles, loadedFontCount, picker.container.clientWidth]);
         if (key === picker.rendered) continue;
         picker.rendered = key;
         renderStylePicker(picker.container, {
@@ -5081,13 +5159,14 @@
         }
         if (selectedLabels.length !== stylePickerFor.length || selectedLabels.some((label, i) => label !== stylePickerFor[i])) {
           stylePickerOpen = false;
+          iconStylePickerOpen = false;
           stylePickerFor = [...selectedLabels];
         }
         const source = selectedLabels[0];
         const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
         // The backdrop follows the label around the map and the map's zoom.
         const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
-        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey]);
+        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey]);
         if (key !== stylePickerKey) {
           stylePickerKey = key;
           renderStylePicker(labelStylePicker, {
@@ -5135,6 +5214,25 @@
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
+        iconStylePicker.hidden = !iconOn;
+        const iconStyleIds = new Set([iconStyleOf(selectedLabel).id]);
+        const backdropKey = [selectedLabel.x, selectedLabel.y, view.scale];
+        const iconKey = JSON.stringify([selectedLabel.icon, iconStyles, loadedFontCount, iconStylePicker.clientWidth, iconStylePickerOpen, [...iconStyleIds], backdropKey]);
+        if (iconOn && iconKey !== iconStylePickerKey) {
+          iconStylePickerKey = iconKey;
+          renderStylePicker(iconStylePicker, {
+            title: 'Icon Style',
+            text: selectedLabel.text,
+            iconSettings: { icon: selectedLabel.icon },
+            styleIds: iconStyleIds,
+            open: iconStylePickerOpen,
+            setOpen: (open) => { iconStylePickerOpen = open; },
+            adopt: (style) => setIconStyle(selectedLabel, style),
+            chevron: true,
+            backdrop: labelBackdrop.toDataURL(),
+            styles: iconStyles,
+          });
+        }
         // With its text hidden a label is just its icon, so where the icon sits doesn't apply.
         document.getElementById('label-icon-side-field').hidden = !iconOn || textHidden;
         for (const button of iconSideButtons) {
@@ -5311,19 +5409,36 @@
     // radius is how far either reaches along each side. outline, shadow and
     // background are null when off. The first style is the default and can't
     // be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconSize: 24, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconShape: 'square', iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, paddingY: 0, paddingX: 0, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round' };
     const labelStyles = [
       { id: 1, name: 'Label', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, paddingY: 8, paddingX: 16, background: '#f5be41', radius: 20 },
-      { ...NEW_STYLE, id: 3, name: 'Pin', zoomScale: 29, iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
+      { ...NEW_STYLE, id: 3, name: 'Pin', zoomScale: 29 },
       { ...NEW_STYLE, id: LIST_HEADING_STYLE_ID, name: 'List heading', weight: 600, size: 16, letterSpacing: 1, caps: true },
       { ...NEW_STYLE, id: LIST_ITEM_STYLE_ID, name: 'List item' },
     ];
     let nextStyleId = 6;
+    // A label's icon is drawn in an icon style of its own, picked apart from its
+    // label style. Without an iconColor, the icon takes the label's text color.
+    const NEW_ICON_STYLE = { iconSize: 24, iconShape: 'square', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconCorners: 'round', iconRadius: 0, iconPadding: 0 };
+    const ICON_STYLE_KEYS = ['iconColor', ...Object.keys(NEW_ICON_STYLE)];
+    const iconStyles = [
+      { id: 1, name: 'Icon', ...NEW_ICON_STYLE },
+      { ...NEW_ICON_STYLE, id: 2, name: 'Pin', iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
+    ];
+    let nextIconStyleId = 3;
     // The style new labels are created in, picked in the style list.
     let currentStyleId = 1;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];
-    const styleOf = (label) => labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0];
+    const iconStyleOf = (label) => iconStyles.find((style) => style.id === label.iconStyleId) ?? iconStyles[0];
+    // How a label is drawn: its label style with its icon style's settings.
+    // A preview can draw in a baseStyle that isn't one of the label styles.
+    function styleOf(label) {
+      const look = { ...(label.baseStyle ?? labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0]) };
+      const icon = iconStyleOf(label);
+      for (const key of ICON_STYLE_KEYS) look[key] = icon[key];
+      return look;
+    }
     const fontOf = (style) => `${style.weight} ${style.size}px "${style.font}", sans-serif`;
 
     // Fetches a Google font at a weight the first time a style uses it, and
@@ -7969,6 +8084,8 @@
         labels,
         labelStyles,
         nextStyleId,
+        iconStyles,
+        nextIconStyleId,
         lists,
         shapes: shapes.map((shape) => (shape.image ? { ...shape, image: imageId(shape.image) } : shape)),
         sketch: {
@@ -7992,10 +8109,18 @@
       })));
       fills.splice(0, fills.length, ...(file.fills ?? []).map((fill) => Object.assign(new Set(fill.points.map((i) => points[i])), { visible: fill.visible, color: fill.color })));
       groups.splice(0, groups.length, ...(file.groups ?? []).map((group) => ({ ...group, segments: new Set(group.segments.map(([i, j]) => paths[i].segments[j])) })));
-      labelStyles.splice(0, labelStyles.length, ...(file.labelStyles ?? []).map((style) => ({ ...NEW_STYLE, ...style })));
+      // Files from before icon styles keep each label style's icon settings
+      // as an icon style of the same id, which its labels then use.
+      const separateIcons = !!file.iconStyles;
+      const savedIconStyles = file.iconStyles ?? (file.labelStyles ?? []).map((style) => ({ id: style.id, name: style.name, ...Object.fromEntries(ICON_STYLE_KEYS.filter((key) => key in style).map((key) => [key, style[key]])) }));
+      iconStyles.splice(0, iconStyles.length, ...savedIconStyles.map((style) => ({ ...NEW_ICON_STYLE, ...style })));
+      if (!iconStyles.length) iconStyles.push({ ...NEW_ICON_STYLE, id: 1, name: 'Icon' });
+      nextIconStyleId = file.nextIconStyleId ?? Math.max(...iconStyles.map((style) => style.id)) + 1;
+      const labelSettings = (style) => Object.fromEntries(Object.entries(style).filter(([key]) => !ICON_STYLE_KEYS.includes(key)));
+      labelStyles.splice(0, labelStyles.length, ...(file.labelStyles ?? []).map((style) => ({ ...NEW_STYLE, ...labelSettings(style) })));
       if (!labelStyles.length) labelStyles.push({ ...NEW_STYLE, id: 1, name: 'Label' });
       nextStyleId = file.nextStyleId ?? Math.max(...labelStyles.map((style) => style.id)) + 1;
-      labels.splice(0, labels.length, ...(file.labels ?? []).map((label) => ({ pins: [], ...label })));
+      labels.splice(0, labels.length, ...(file.labels ?? []).map((label) => ({ pins: [], ...(separateIcons ? {} : { iconStyleId: label.styleId }), ...label })));
       lists.splice(0, lists.length, ...(file.lists ?? []).map((list) => ({ ...newList(list), ...list })));
       shapes.splice(0, shapes.length, ...(file.shapes ?? []).map((shape) => (shape.kind === 'image' ? { ...shape, image: images[shape.image] } : shape)));
       const sketchPoints = file.sketch?.points ?? [];

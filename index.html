@@ -5070,8 +5070,7 @@
         labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = !!selectedLabel.icon;
-        // Hidden text needs its icon, so then the icon can't be cleared.
-        labelIconClear.hidden = !iconOn || textHidden;
+        labelIconClear.hidden = !iconOn;
         document.getElementById('label-icon-search').hidden = iconOn;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
@@ -5166,7 +5165,8 @@
       labelIconClear.blur();
       if (!label?.icon) return;
       recordUndo();
-      delete label.icon;
+      // Text can only hide behind an icon, so without one it shows again.
+      for (const key of ['icon', 'hideText', 'hideTextAt']) delete label[key];
       draw();
     });
     // Listing every icon at once makes the list slow to open.

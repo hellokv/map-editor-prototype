@@ -539,6 +539,13 @@
       visibility: visible;
       transition: transform 0.25s ease, visibility 0s;
     }
+    /* The zoom menu moves out from under the open style panel, alongside it. */
+    #view-menu {
+      transition: right 0.25s ease;
+    }
+    #canvas-area:has(#style-panel.open) #view-menu {
+      right: calc(20px + 300px + 12px);
+    }
     .group {
       padding: 6px 0;
     }

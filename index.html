@@ -366,21 +366,52 @@
       position: absolute;
       inset: 0;
       overflow: hidden;
-      perspective: 2400px;
       pointer-events: none;
+    }
+    /* The stack drawn in perspective, then scaled as a whole to fit. */
+    #stack-view .frame {
+      position: absolute;
+      inset: 0;
+      perspective: 2400px;
+      transform-origin: 0 0;
     }
     #stack-view .stack {
       position: absolute;
       inset: 0;
       transform-style: preserve-3d;
     }
-    #stack-view canvas {
+    #stack-view .plane {
       position: absolute;
+    }
+    #stack-view canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
       border: 1px solid rgba(255, 255, 255, 0.35);
       box-sizing: border-box;
     }
     #stack-view canvas.level {
       background: rgba(255, 255, 255, 0.06);
+    }
+    /* Where a plane's name sits: its left corner as the stack turns. */
+    #stack-view .corner {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1px;
+      height: 1px;
+    }
+    #stack-view .plane-name {
+      position: absolute;
+      padding: 0 10px;
+      border: none;
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      font: 600 12px/28px 'National Park', system-ui, sans-serif;
+      white-space: nowrap;
+      pointer-events: auto;
+      cursor: pointer;
     }
     #auto-layers {
       position: absolute;
@@ -1492,7 +1523,7 @@
       </div>
     </div>
     <canvas id="canvas"></canvas>
-    <div id="stack-view" hidden><div class="stack"></div></div>
+    <div id="stack-view" hidden><div class="frame"><div class="stack"></div></div></div>
     <textarea id="label-input" rows="1" hidden></textarea>
     <div id="place-suggestions" hidden></div>
     <div id="crossing-dialog" hidden>
@@ -3938,34 +3969,66 @@
     // elements alone. It's only for looking: nothing pans, zooms or edits.
     const stackView = document.getElementById('stack-view');
     const STACK_PLANES = [
-      { part: 'background', layer: 'All' },
-      { part: 'level', layer: 'Ground' },
-      { part: 'level', layer: 'Canopy' },
-      { part: 'level', layer: 'Sky' },
+      { part: 'background', layer: 'All', name: 'Background' },
+      { part: 'level', layer: 'Ground', name: 'Ground' },
+      { part: 'level', layer: 'Canopy', name: 'Canopy' },
+      { part: 'level', layer: 'Sky', name: 'Sky' },
     ];
     // The plane being painted, while it's painted.
     let stackPart = null;
-    const STACK_GAP = 340;
-    // How the planes are laid down: tilted back, turned and shrunk, and moved
-    // down by half the stack's height so the whole stack is centred.
-    const STACK_TILT = 58;
-    const STACK_TURN = -32;
-    const STACK_SCALE = 0.5;
-    const stackRise = ((STACK_PLANES.length - 1) * STACK_GAP * Math.sin((STACK_TILT * Math.PI) / 180) * STACK_SCALE) / 2;
-    stackView.firstElementChild.style.transform = `translateY(${stackRise}px) rotateX(${STACK_TILT}deg) rotateZ(${STACK_TURN}deg) scale3d(${STACK_SCALE}, ${STACK_SCALE}, ${STACK_SCALE})`;
-    const stackPlanes = STACK_PLANES.map(({ part }, i) => {
+    const STACK_GAP = 300;
+    // The planes are tilted back and turned; the frame around them is then
+    // scaled and moved so the stack, names included, fills the canvas.
+    const STACK_PADDING = 24;
+    const stackFrame = stackView.querySelector('.frame');
+    stackView.querySelector('.stack').style.transform = 'rotateX(58deg) rotateZ(-32deg) scale3d(0.5, 0.5, 0.5)';
+    const stackPlanes = STACK_PLANES.map(({ part, layer, name }, i) => {
+      const holder = Object.assign(document.createElement('div'), { className: 'plane' });
+      holder.style.transform = `translateZ(${i * STACK_GAP}px)`;
       const plane = Object.assign(document.createElement('canvas'), { className: part });
-      plane.style.transform = `translateZ(${i * STACK_GAP}px)`;
-      stackView.firstElementChild.append(plane);
-      return plane;
+      const corner = Object.assign(document.createElement('span'), { className: 'corner' });
+      holder.append(plane, corner);
+      stackView.querySelector('.stack').append(holder);
+      // Background goes back to the whole map in Background mode; a level
+      // shows just that level, in whatever mode is on.
+      const tag = Object.assign(document.createElement('button'), { type: 'button', className: 'plane-name', textContent: name });
+      tag.addEventListener('click', () => {
+        tag.blur();
+        if (part === 'background') setMode('background');
+        layerSelect.value = layer;
+        layerSelect.dispatchEvent(new Event('change'));
+      });
+      stackView.append(tag);
+      return { holder, plane, corner, tag };
     });
+    function layoutStack() {
+      stackFrame.style.transform = 'none';
+      const origin = stackView.getBoundingClientRect();
+      const rects = stackPlanes.map(({ holder }) => holder.getBoundingClientRect());
+      // The names hang off the planes' left corners, so leave them room.
+      const nameRoom = Math.max(...stackPlanes.map(({ tag }) => tag.offsetWidth)) + 12;
+      const left = Math.min(...rects.map((r) => r.left)) - origin.left - nameRoom;
+      const top = Math.min(...rects.map((r) => r.top)) - origin.top;
+      const right = Math.max(...rects.map((r) => r.right)) - origin.left;
+      const bottom = Math.max(...rects.map((r) => r.bottom)) - origin.top;
+      const room = { w: origin.width - 2 * STACK_PADDING, h: origin.height - 2 * STACK_PADDING };
+      const k = Math.min(room.w / (right - left), room.h / (bottom - top));
+      const x = (origin.width - (right - left) * k) / 2 - left * k;
+      const y = (origin.height - (bottom - top) * k) / 2 - top * k;
+      stackFrame.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+      for (const { corner, tag } of stackPlanes) {
+        const at = corner.getBoundingClientRect();
+        tag.style.left = `${at.left - origin.left - tag.offsetWidth - 12}px`;
+        tag.style.top = `${at.top - origin.top - tag.offsetHeight / 2}px`;
+      }
+    }
     const stackOn = () => layerSelect.value === 'Stacked' && !inPreview();
     // Each plane is the map's box, fitted into the canvas, whatever the
     // map's own pan and zoom.
     function paintStack() {
       stackView.style.background = colorOf(canvasColor);
       const dpr = window.devicePixelRatio || 1;
-      const fit = Math.min(canvas.clientWidth / board.w, canvas.clientHeight / board.h) * 0.9;
+      const fit = Math.min(canvas.clientWidth / board.w, canvas.clientHeight / board.h);
       const w = board.w * fit;
       const h = board.h * fit;
       const home = { ...view };
@@ -3974,8 +4037,8 @@
         stackPart = part;
         layerOverride = layer;
         paintView();
-        const plane = stackPlanes[i];
-        Object.assign(plane.style, { left: `${(canvas.clientWidth - w) / 2}px`, top: `${(canvas.clientHeight - h) / 2}px`, width: `${w}px`, height: `${h}px` });
+        const { holder, plane } = stackPlanes[i];
+        Object.assign(holder.style, { left: `${(canvas.clientWidth - w) / 2}px`, top: `${(canvas.clientHeight - h) / 2}px`, width: `${w}px`, height: `${h}px` });
         plane.width = Math.round(w * dpr);
         plane.height = Math.round(h * dpr);
         plane.getContext('2d').drawImage(canvas, 0, 0, plane.width, plane.height, 0, 0, plane.width, plane.height);
@@ -3983,6 +4046,8 @@
       Object.assign(view, home);
       stackPart = null;
       layerOverride = null;
+      stackView.hidden = false;
+      layoutStack();
     }
 
     // The paths' filled areas and their widths, as the map shows them.

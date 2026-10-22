@@ -1168,40 +1168,6 @@
     input.switch:disabled::after {
       color: #c4c4c4;
     }
-    /* A hide-text checkbox shown as the levels' eye: open on black while the
-       text shows, crossed out once it's hidden. */
-    input.eye {
-      flex: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      margin: 0;
-      border-radius: 6px;
-      background: var(--label-ink, #000);
-      appearance: none;
-      cursor: pointer;
-    }
-    input.eye::after {
-      content: 'visibility';
-      font: 20px/1 'Material Symbols Rounded';
-      font-variation-settings: 'wght' 400, 'opsz' 20;
-      color: #fff;
-    }
-    input.eye:checked {
-      background: none;
-    }
-    input.eye:checked::after {
-      content: 'visibility_off';
-      color: var(--label-ink, #000);
-    }
-    input.eye:disabled {
-      cursor: default;
-    }
-    input.eye:disabled::after {
-      color: #b5b5b5;
-    }
     .icon-buttons {
       display: flex;
       gap: 12px;
@@ -1918,21 +1884,19 @@
               Font Size
               <span class="slider"><input id="style-size" type="number" min="4" max="200" step="1" required><input type="range" min="4" max="120" step="1" aria-label="Font size"></span>
             </label>
-            <label class="field">
-              Line Height
-              <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
-            </label>
-            <label class="field">
-              Letter Spacing
-              <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
-            </label>
+            <div class="field-pair">
+              <label class="field">
+                Line Height
+                <input id="style-line-height" type="number" min="0.5" max="4" step="0.1" required>
+              </label>
+              <label class="field">
+                Letter Spacing
+                <input id="style-letter-spacing" type="number" min="-50" max="100" step="0.5">
+              </label>
+            </div>
             <label class="field">
               All Caps
               <input id="style-caps" class="switch" type="checkbox">
-            </label>
-            <label class="field">
-              Hide Text
-              <input id="style-hide-text" class="eye" type="checkbox">
             </label>
             <label class="field">
               Color
@@ -2018,16 +1982,17 @@
             </div>
           </div>
           <div class="label-section">
+            <div class="section-heading">Pointer</div>
             <label class="field">
-              Pointer Length
+              Length
               <input id="style-pointer-length" type="number" min="0" max="500" step="1">
             </label>
             <label class="field">
-              Pointer Weight
+              Weight
               <input id="style-pointer-width" type="number" min="0" max="50" step="0.5">
             </label>
             <label class="field">
-              Pointer End
+              End
               <select id="style-pointer-end">
                 <option value="round">Rounded</option>
                 <option value="square">Square</option>
@@ -2036,8 +2001,9 @@
             </label>
           </div>
           <div class="label-section">
+            <div class="section-heading">Icons</div>
             <div class="field">
-              Icon Placement
+              Placement
               <input id="style-icon-outside" type="checkbox" hidden>
               <div class="icon-buttons with-text">
                 <button type="button" data-icon-placement="inside"><span class="material-symbols-rounded">collapse_content</span>Inside</button>
@@ -2045,7 +2011,7 @@
               </div>
             </div>
             <label class="field">
-              Icon Gap
+              Gap
               <input id="style-icon-gap" type="number" min="0" max="200" step="1">
             </label>
           </div>
@@ -4087,7 +4053,7 @@
     const isIconStyle = (style) => iconStyles.includes(style);
     const stylesWith = (style) => (isIconStyle(style) ? iconStyles : labelStyles);
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-color', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Every Corners select is shown as buttons that set it, and a square
     // corner has no radius to set.
@@ -4382,7 +4348,6 @@
         zoomScale: Math.max(0, Number(styleInputs['zoom-scale'].value) || 0),
         iconGap: Math.max(0, Number(styleInputs['icon-gap'].value) || 0),
         caps: styleInputs.caps.checked,
-        hideText: styleInputs['hide-text'].checked,
         iconOutside: styleInputs['icon-outside'].checked,
         color: colorOf(styleInputs.color),
         outline: styleInputs['outline-on'].checked ? colorOf(styleInputs.outline) : null,
@@ -4452,7 +4417,6 @@
       zoomScaleSlider.value = values.zoomScale;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
-      styleInputs['hide-text'].checked = !!values.hideText;
       styleInputs['icon-outside'].checked = !!values.iconOutside;
       showIconPlacement();
       showColor(styleInputs.color, values.color);

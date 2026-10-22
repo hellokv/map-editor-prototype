@@ -1056,11 +1056,19 @@
       font-size: 15px;
       font-weight: 600;
     }
-    #new-label-kind {
+    .kind-tabs {
       display: flex;
       justify-content: space-between;
     }
-    :is(#panel, #style-panel) #new-label-kind button {
+    .style-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .style-picker .section-label {
+      margin-bottom: 0;
+    }
+    :is(#panel, #style-panel) .kind-tabs button {
       height: 36px;
       padding: 0 12px;
       border: none;
@@ -1069,13 +1077,9 @@
       color: #000;
       font-size: 15px;
     }
-    :is(#panel, #style-panel) #new-label-kind button[aria-pressed="true"] {
+    :is(#panel, #style-panel) .kind-tabs button[aria-pressed="true"] {
       background: #000;
       color: #fff;
-    }
-    .heading-actions {
-      display: flex;
-      gap: 8px;
     }
     :is(#panel, #style-panel) .section-heading button {
       display: flex;
@@ -1560,6 +1564,18 @@
     </div>
     <div id="labels-panel" hidden>
       <div id="label-properties" hidden>
+        <div class="label-section">
+          <div id="label-kind" class="kind-tabs">
+            <button type="button" data-kind="both">Text + Icon</button>
+            <button type="button" data-kind="text">Text Only</button>
+            <button type="button" data-kind="icon">Icon Only</button>
+          </div>
+        </div>
+        <div class="label-section">
+          <div class="section-heading"><span id="label-styles-title">Styles</span><button id="label-styles-toggle" class="chevron" type="button"><span class="material-symbols-rounded">expand_more</span></button></div>
+          <div id="label-style-picker" class="style-picker"></div>
+          <div id="label-icon-style-picker" class="style-picker"></div>
+        </div>
         <div class="label-section label-single">
           <label class="field">
             Place
@@ -1568,7 +1584,6 @@
           <div class="field">
             <label for="label-text">Text</label>
             <textarea id="label-text" rows="1"></textarea>
-            <input id="label-hide-text" class="eye" type="checkbox" aria-label="Hide text">
           </div>
           <div class="field-pair">
             <label class="field">
@@ -1581,8 +1596,7 @@
             </label>
           </div>
         </div>
-        <div id="label-style-picker" class="label-section"></div>
-        <div class="label-section label-single">
+        <div id="label-icon-section" class="label-section label-single">
           <div id="label-icon-field" class="field">
             Icon
             <span class="icon-picker">
@@ -1593,7 +1607,6 @@
             <button id="label-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
             <span id="label-icon-search" class="material-symbols-rounded" aria-hidden="true">search</span>
           </div>
-          <div id="label-icon-style-picker"></div>
           <div id="label-icon-side-field" class="field">
             Alignment
             <div id="label-icon-side" class="icon-buttons">
@@ -1804,7 +1817,7 @@
       </div>
       <div id="label-styles">
         <div class="label-section">
-          <div id="new-label-kind">
+          <div id="new-label-kind" class="kind-tabs">
             <button type="button" data-kind="both" aria-pressed="true">Text + Icon</button>
             <button type="button" data-kind="text" aria-pressed="false">Text Only</button>
             <button type="button" data-kind="icon" aria-pressed="false">Icon Only</button>
@@ -3934,9 +3947,7 @@
     const iconStyleList = document.getElementById('icon-style-list');
     const labelStylePicker = document.getElementById('label-style-picker');
     const iconStylePicker = document.getElementById('label-icon-style-picker');
-    let stylePickerKey = '';
     let stylePickerOpen = false;
-    let iconStylePickerKey = '';
     let iconStylePickerOpen = false;
     // The labels the picker was last shown for; a new selection closes it.
     let stylePickerFor = [];
@@ -4459,11 +4470,11 @@
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
     }
-    // A style picker: the style in use alone, and Change style to open the
-    // whole list to pick from, that style first. Mixed styles show only the
-    // button. adopt gives a picked style to whatever the picker is for. With
-    // chevron, a chevron beside the title opens and closes the list instead.
-    // backdrop, an image URL, replaces the swatches' plain map color.
+    // A style picker: the style in use alone, clicked beside its preview to
+    // open the whole list to pick from, that style first; mixed styles show
+    // nothing until opened. adopt gives a picked style to whatever the picker
+    // is for. With chevron, a chevron beside the title also opens and closes
+    // the list. backdrop, an image URL, replaces the swatches' plain map color.
     // Opening or closing eases the picker's height between the two.
     const PICKER_EASE_MS = 200;
     function renderStylePicker(container, options) {
@@ -4476,8 +4487,7 @@
       const frame = (height) => ({ height: `${height}px`, boxSizing: 'border-box', overflow: 'hidden' });
       container.animate([frame(from), frame(to)], { duration: PICKER_EASE_MS, easing: 'ease' });
     }
-    // remove, if given, takes the style off whatever the picker is for.
-    function buildStylePicker(container, { title, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null, styles = labelStyles, remove = null }) {
+    function buildStylePicker(container, { title = null, text, iconSettings = {}, styleIds, open, setOpen, adopt, chevron = false, backdrop = null, styles = labelStyles }) {
       if (chevron) {
         const heading = Object.assign(document.createElement('div'), { className: 'section-heading', textContent: title });
         const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'chevron' });
@@ -4487,19 +4497,7 @@
           setOpen(!open);
           draw();
         });
-        const actions = Object.assign(document.createElement('span'), { className: 'heading-actions' });
-        if (remove) {
-          const removeButton = Object.assign(document.createElement('button'), { type: 'button', innerHTML: '<span class="material-symbols-rounded">close</span>' });
-          removeButton.setAttribute('aria-label', 'Remove style');
-          removeButton.addEventListener('click', () => {
-            recordUndo();
-            remove();
-            draw();
-          });
-          actions.append(removeButton);
-        }
-        actions.append(toggle);
-        heading.append(actions);
+        heading.append(toggle);
         title = heading;
       }
       const card = (element, style, pick) => {
@@ -4509,11 +4507,6 @@
       };
       if (!open) {
         const style = styleIds.size === 1 ? styles.find((each) => styleIds.has(each.id)) : null;
-        const change = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Change style' });
-        change.addEventListener('click', () => {
-          setOpen(true);
-          draw();
-        });
         // The style in use alone opens the list when clicked beside its
         // preview (the preview itself opens the style for editing).
         const single = style && card(document.createElement('div'), style, '');
@@ -4525,12 +4518,12 @@
             draw();
           });
         }
-        container.replaceChildren(title, ...(single ? [single] : []), ...(chevron ? [] : [change]));
+        container.replaceChildren(...(title ? [title] : []), ...(single ? [single] : []));
         return;
       }
       const ordered = [...styles.filter((style) => styleIds.has(style.id)), ...styles.filter((style) => !styleIds.has(style.id))];
       const options = Object.assign(document.createElement('div'), { className: 'radio-list' });
-      container.replaceChildren(title, options);
+      container.replaceChildren(...(title ? [title] : []), options);
       options.append(...ordered.map((style) => {
         const pick = Object.assign(document.createElement('input'), { type: 'radio', name: container.id, value: style.id, checked: styleIds.size === 1 && styleIds.has(style.id) });
         pick.addEventListener('change', () => {
@@ -5219,9 +5212,9 @@
         }
         // Text can only show on a level the whole label shows on.
         // Text can only be hidden behind an icon, so without one there's no text toggle.
-        const allHaveIcons = selectedLabels.every((label) => label.icon);
+        const allBoth = selectedLabels.every((label) => labelKindOf(label) === 'both');
         for (const button of labelTextLayerButtons) {
-          button.hidden = !allHaveIcons;
+          button.hidden = !allBoth;
           const layer = button.dataset.textLayer;
           button.disabled = selectedLabels.some((label) => label.layers && !label.layers[layer]);
           button.setAttribute('aria-pressed', !button.disabled && selectedLabels.every((label) => !label.hideTextAt?.[layer]));
@@ -5231,28 +5224,7 @@
           iconStylePickerOpen = false;
           stylePickerFor = [...selectedLabels];
         }
-        const source = selectedLabels[0];
-        const styleIds = new Set(selectedLabels.map((label) => styleOf(label).id));
-        // The backdrop follows the label around the map and the map's zoom.
-        const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
-        // A label can lose its label style if it has an icon to be instead.
-        const removable = selectedLabels.every((label) => label.icon && label.styleId !== null);
-        const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, [...styleIds], backdropKey, removable]);
-        if (key !== stylePickerKey) {
-          stylePickerKey = key;
-          renderStylePicker(labelStylePicker, {
-            title: 'Style',
-            text: source.text,
-            iconSettings: iconSettingsOf(source),
-            styleIds,
-            open: stylePickerOpen,
-            setOpen: (open) => { stylePickerOpen = open; },
-            adopt: adoptForLabels,
-            chevron: true,
-            backdrop: backdropKey && labelBackdrop.toDataURL(),
-            remove: removable && (() => { for (const label of selectedLabels) setLabelStyle(label, null); }),
-          });
-        }
+        showLabelStylePickers();
       }
       const selectedLabel = soleLabel();
       for (const part of document.querySelectorAll('.label-single')) part.hidden = !selectedLabel;
@@ -5267,13 +5239,8 @@
           if (button.dataset.pointer) button.setAttribute('aria-pressed', button.dataset.pointer === selectedLabel.pointer);
           else button.disabled = !selectedLabel.pointer;
         }
-        // Text can only be hidden behind an icon, which then has to stay,
-        // and sits plainly inside the label: no outside, offset or gap.
+        // A label that's just its icon has it plainly: no outside, offset or gap.
         const textHidden = textIsHidden(selectedLabel);
-        labelHideTextToggle.hidden = !selectedLabel.icon;
-        labelHideTextToggle.checked = textHidden;
-        // A style that hides text hides it for all its labels.
-        labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = !!selectedLabel.icon;
         // A style that hides text needs its labels' icons, so they can't be cleared.
@@ -5286,25 +5253,7 @@
         show(labelIconInput, selectedLabel.icon ?? '');
         labelIconPreview.textContent = selectedLabel.icon ?? '';
         document.getElementById('label-icon-size-field').hidden = !iconOn;
-        iconStylePicker.hidden = !iconOn;
-        const iconStyleIds = new Set([iconStyleOf(selectedLabel).id]);
-        const backdropKey = [selectedLabel.x, selectedLabel.y, view.scale];
-        const iconKey = JSON.stringify([selectedLabel.icon, iconStyles, loadedFontCount, iconStylePicker.clientWidth, iconStylePickerOpen, [...iconStyleIds], backdropKey]);
-        if (iconOn && iconKey !== iconStylePickerKey) {
-          iconStylePickerKey = iconKey;
-          renderStylePicker(iconStylePicker, {
-            title: 'Icon Style',
-            text: selectedLabel.text,
-            iconSettings: { icon: selectedLabel.icon },
-            styleIds: iconStyleIds,
-            open: iconStylePickerOpen,
-            setOpen: (open) => { iconStylePickerOpen = open; },
-            adopt: (style) => setIconStyle(selectedLabel, style),
-            chevron: true,
-            backdrop: labelBackdrop.toDataURL(),
-            styles: iconStyles,
-          });
-        }
+        document.getElementById('label-icon-section').hidden = !iconOn;
         // With its text hidden a label is just its icon, so where the icon sits doesn't apply.
         document.getElementById('label-icon-side-field').hidden = !iconOn || textHidden;
         for (const button of iconSideButtons) {
@@ -5367,18 +5316,103 @@
         draw();
       });
     }
-    const labelHideTextToggle = document.getElementById('label-hide-text');
-    labelHideTextToggle.addEventListener('change', () => {
-      const label = soleLabel();
-      if (!label) return;
-      recordUndo();
-      if (labelHideTextToggle.checked) {
-        label.hideText = true;
-        for (const key of ['iconOffset', 'iconGap']) delete label[key];
-      } else {
-        delete label.hideText;
+    // A label is text, its icon, or both: text needs a label style that
+    // shows it, and the icon an icon.
+    const labelKindOf = (label) => (textIsHidden(label) ? 'icon' : label.icon ? 'both' : 'text');
+    // A label switched away from text or its icon keeps them aside
+    // (droppedStyleId, droppedIcon) to have them back when switched again.
+    function setLabelKind(label, kind) {
+      delete label.hideText;
+      const restoreIcon = () => { label.icon ||= label.droppedIcon || 'pets'; };
+      if (kind === 'icon') {
+        if (label.styleId !== null) label.droppedStyleId = label.styleId;
+        label.styleId = null;
+        for (const key of ['iconGap', 'iconOffset', 'hideTextAt']) delete label[key];
+        restoreIcon();
+        return;
       }
-      labelHideTextToggle.blur();
+      if (label.styleId === null || styleOf(label).hideText) {
+        const dropped = labelStyles.find((style) => style.id === label.droppedStyleId && !style.hideText);
+        const current = currentStyle().hideText ? labelStyles.find((style) => !style.hideText) : currentStyle();
+        setLabelStyle(label, dropped ?? current ?? currentStyle());
+      }
+      if (kind === 'text') {
+        if (label.icon) label.droppedIcon = label.icon;
+        for (const key of ['icon', 'hideTextAt']) delete label[key];
+      } else {
+        restoreIcon();
+      }
+    }
+    const labelKindTabs = document.querySelectorAll('#label-kind button');
+    for (const button of labelKindTabs) {
+      button.addEventListener('click', () => {
+        button.blur();
+        if (button.getAttribute('aria-pressed') === 'true') return;
+        recordUndo();
+        for (const label of selectedLabels) setLabelKind(label, button.dataset.kind);
+        draw();
+      });
+    }
+    // The selected labels' styles: their label style and icon style, each
+    // as one card that opens its own list, or both lists at once from the
+    // chevron. Text or an icon alone has just the one.
+    let labelPickersKey = '';
+    let shownStyleLists = { label: true, icon: true };
+    function showLabelStylePickers() {
+      const kinds = new Set(selectedLabels.map(labelKindOf));
+      const kind = kinds.size === 1 ? [...kinds][0] : null;
+      for (const button of labelKindTabs) button.setAttribute('aria-pressed', button.dataset.kind === kind);
+      shownStyleLists = { label: kind !== 'icon', icon: kind !== 'text' };
+      const both = shownStyleLists.label && shownStyleLists.icon;
+      document.getElementById('label-styles-title').textContent = both ? 'Styles' : 'Style';
+      const anyOpen = (shownStyleLists.label && stylePickerOpen) || (shownStyleLists.icon && iconStylePickerOpen);
+      const toggle = document.getElementById('label-styles-toggle');
+      toggle.setAttribute('aria-label', anyOpen ? 'Close styles' : 'Change styles');
+      toggle.firstElementChild.textContent = anyOpen ? 'expand_less' : 'expand_more';
+      labelStylePicker.hidden = !shownStyleLists.label;
+      iconStylePicker.hidden = !shownStyleLists.icon;
+      const source = selectedLabels[0];
+      const labelStyleIds = new Set(selectedLabels.filter((label) => label.styleId !== null).map((label) => styleOf(label).id));
+      const iconStyleIds = new Set(selectedLabels.filter((label) => label.icon).map((label) => iconStyleOf(label).id));
+      // The backdrop follows the label around the map and the map's zoom.
+      const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
+      const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, iconStylePickerOpen, [...labelStyleIds], [...iconStyleIds], kind, backdropKey]);
+      if (key === labelPickersKey) return;
+      labelPickersKey = key;
+      // With both lists showing, an open one is named.
+      const listTitle = (open, name) => (both && open ? Object.assign(document.createElement('div'), { className: 'section-label', textContent: name }) : null);
+      const backdrop = backdropKey && labelBackdrop.toDataURL();
+      if (shownStyleLists.label) {
+        renderStylePicker(labelStylePicker, {
+          title: listTitle(stylePickerOpen, 'Label Styles'),
+          text: source.text,
+          iconSettings: iconSettingsOf(source),
+          styleIds: labelStyleIds,
+          open: stylePickerOpen,
+          setOpen: (open) => { stylePickerOpen = open; },
+          adopt: adoptForLabels,
+          backdrop,
+        });
+      }
+      if (shownStyleLists.icon) {
+        renderStylePicker(iconStylePicker, {
+          title: listTitle(iconStylePickerOpen, 'Icon Styles'),
+          text: source.text,
+          iconSettings: { icon: source.icon },
+          styleIds: iconStyleIds,
+          open: iconStylePickerOpen,
+          setOpen: (open) => { iconStylePickerOpen = open; },
+          adopt: (style) => { for (const label of selectedLabels) setIconStyle(label, style); },
+          backdrop,
+          styles: iconStyles,
+        });
+      }
+    }
+    document.getElementById('label-styles-toggle').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      const open = !((shownStyleLists.label && stylePickerOpen) || (shownStyleLists.icon && iconStylePickerOpen));
+      stylePickerOpen = open && shownStyleLists.label;
+      iconStylePickerOpen = open && shownStyleLists.icon;
       draw();
     });
     // A label's icon is a Material Symbols name, absent (or, from before, '') for none.

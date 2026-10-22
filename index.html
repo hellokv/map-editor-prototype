@@ -7420,8 +7420,6 @@
       c.fillStyle = color;
       c.fillText(icon, 12, 12);
     }, fallback) : fallback);
-    // The add path cursor, in the path color.
-    const addCursor = () => iconCursor('add_circle', colorOf(pathColor), 'crosshair');
 
     // The pin cursor's hotspot is the tip of the pin.
     let pinCursor = 'crosshair';
@@ -7596,10 +7594,10 @@
       if (spaceHeld || drag?.spacePan || inPreview() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
-      else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = iconCursor('list_alt_add', '#000000', 'crosshair');
-      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' ? 'crosshair' : backgroundTool === 'segments' ? iconCursor('add_circle', SELECTED_COLOR, 'crosshair') : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
+      else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
+      else if (!backgroundTools.hidden) canvas.style.cursor = backgroundTool === 'shapes' || backgroundTool === 'segments' ? 'crosshair' : backgroundTool === 'compass' ? iconCursor('explore', '#000000', 'crosshair') : shapeHandleCursor();
       else if (!labelTools.hidden) canvas.style.cursor = shapeHandleCursor();
-      else canvas.style.cursor = addTarget() ? addCursor() : '';
+      else canvas.style.cursor = addTarget() ? 'crosshair' : '';
     }
 
     // Holding space turns every press on the canvas into a pan.

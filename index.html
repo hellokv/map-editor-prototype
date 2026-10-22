@@ -2102,6 +2102,10 @@
               Size
               <span class="slider"><input id="style-icon-size" type="number" min="4" max="200" step="1"><input type="range" min="4" max="120" step="1" aria-label="Size"></span>
             </label>
+            <label class="field">
+              Scale Factor
+              <span class="slider"><span class="percent-field"><input id="style-icon-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
+            </label>
             <div class="field">
               Padding
               <input id="style-icon-padding" type="number" min="0" max="200" step="1">
@@ -4408,7 +4412,7 @@
     const isIconStyle = (style) => iconStyles.includes(style);
     const stylesWith = (style) => (isIconStyle(style) ? iconStyles : labelStyles);
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-color', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-zoom-scale', 'icon-color', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Every Corners select is shown as buttons that set it, and a square
     // corner has no radius to set.
@@ -4530,16 +4534,17 @@
     }
     const labelPadding = paddingControl('', styleForm);
     const iconPadding = paddingControl('icon-', iconStyleForm);
-    // A slider and the number beside it move each other.
-    const formSliders = [...document.querySelectorAll('#label-style-form .slider input[type="range"], #icon-style-form .slider input[type="range"]')]
-      .filter((slider) => slider.previousElementSibling?.type === 'number');
+    // A slider and the number beside it move each other; a percent can go
+    // past the slider's end.
+    const formSliders = [...document.querySelectorAll('#label-style-form .slider input[type="range"], #icon-style-form .slider input[type="range"]')];
+    const sliderField = (slider) => slider.closest('.slider').querySelector('input[type="number"]');
     for (const slider of formSliders) {
-      const field = slider.previousElementSibling;
+      const field = sliderField(slider);
       slider.addEventListener('input', () => { field.value = slider.value; });
       slider.addEventListener('change', () => slider.blur());
       field.addEventListener('input', () => { slider.value = field.value; });
     }
-    const showSliders = () => { for (const slider of formSliders) slider.value = slider.previousElementSibling.value; };
+    const showSliders = () => { for (const slider of formSliders) slider.value = sliderField(slider).value; };
     // A style's form saves as it goes: each change applies to the style and
     // its labels at once, and a whole visit to the form is one undo step.
     let editingStyle = null;
@@ -4722,6 +4727,7 @@
       return {
         name: styleInputs['icon-name'].value.trim(),
         iconSize: Math.max(4, Number(styleInputs['icon-size'].value) || 24),
+        iconZoomScale: Math.max(0, Number(styleInputs['icon-zoom-scale'].value) || 0),
         iconBackground: styleInputs['icon-background-on'].checked ? colorOf(styleInputs['icon-background']) : null,
         iconOutline: styleInputs['icon-outline-on'].checked ? colorOf(styleInputs['icon-outline']) : null,
         iconOutlineWidth: Math.max(0, Number(styleInputs['icon-outline-width'].value) || 0),
@@ -4769,7 +4775,6 @@
       styleInputs['line-height'].value = values.lineHeight;
       styleInputs['letter-spacing'].value = values.letterSpacing;
       styleInputs['zoom-scale'].value = values.zoomScale;
-      zoomScaleSlider.value = values.zoomScale;
       styleInputs['icon-gap'].value = values.iconGap;
       styleInputs.caps.checked = values.caps;
       styleInputs['icon-outside'].checked = !!values.iconOutside;
@@ -4795,6 +4800,7 @@
       iconColorSet = values.iconColor != null;
       showColor(styleInputs['icon-color'], values.iconColor ?? NEW_STYLE.color);
       styleInputs['icon-size'].value = values.iconSize;
+      styleInputs['icon-zoom-scale'].value = values.iconZoomScale;
       for (const key of ['background', 'outline', 'shadow']) {
         const value = values[`icon${key[0].toUpperCase()}${key.slice(1)}`];
         styleInputs[`icon-${key}-on`].checked = !!value;
@@ -4892,11 +4898,6 @@
       e.currentTarget.blur();
       leaveStyleForm();
     });
-    // The slider and the field move each other; the field can go past 100%.
-    const zoomScaleSlider = styleInputs['zoom-scale'].closest('.slider').querySelector('input[type="range"]');
-    zoomScaleSlider.addEventListener('input', () => { styleInputs['zoom-scale'].value = zoomScaleSlider.value; });
-    zoomScaleSlider.addEventListener('change', () => zoomScaleSlider.blur());
-    styleInputs['zoom-scale'].addEventListener('input', () => { zoomScaleSlider.value = styleInputs['zoom-scale'].value; });
     // A style's settings for its background, outline and shadow show while
     // each is on.
     function showToggledFields() {
@@ -6085,11 +6086,11 @@
     let nextStyleId = 6;
     // A label's icon is drawn in an icon style of its own, picked apart from its
     // label style. Without an iconColor, the icon takes the label's text color.
-    const NEW_ICON_STYLE = { iconSize: 24, iconShape: 'square', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconCorners: 'round', iconRadius: 0, iconPadding: 0, iconPaddingSides: null };
+    const NEW_ICON_STYLE = { iconSize: 24, iconZoomScale: 100, iconShape: 'square', iconBackground: null, iconOutline: null, iconOutlineWidth: 2, iconShadow: null, iconShadowGap: 2, iconShadowSize: 100, iconCorners: 'round', iconRadius: 0, iconPadding: 0, iconPaddingSides: null };
     const ICON_STYLE_KEYS = ['iconColor', ...Object.keys(NEW_ICON_STYLE)];
     const iconStyles = [
       { id: 1, name: 'Icon', ...NEW_ICON_STYLE },
-      { ...NEW_ICON_STYLE, id: 2, name: 'Pin', iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
+      { ...NEW_ICON_STYLE, id: 2, name: 'Pin', iconSize: 38, iconZoomScale: 29, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
     ];
     let nextIconStyleId = 3;
     // New labels are text, an icon, or both ('text', 'icon', 'both'), in the
@@ -6107,6 +6108,8 @@
       const look = { ...(label.styleId === null ? NO_LABEL_STYLE : labelStyles.find((style) => style.id === label.styleId) ?? labelStyles[0]) };
       const icon = iconStyleOf(label);
       for (const key of ICON_STYLE_KEYS) look[key] = icon[key];
+      // A label that's just its icon follows its icon style's scale factor.
+      if (label.styleId === null) look.zoomScale = icon.iconZoomScale;
       return look;
     }
     const fontOf = (style) => `${style.weight} ${style.size}px "${style.font}", sans-serif`;

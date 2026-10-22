@@ -358,9 +358,18 @@
       font-size: 16px;
       font-variation-settings: 'wght' 400, 'opsz' 20;
     }
+    /* Under Automatic, the levels the zoom shows, in the canvas's bottom
+       left corner like a split screen panel's name. */
     #auto-layers {
-      font: 12px system-ui, sans-serif;
-      color: #666;
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      display: block;
+      padding: 0 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      font: 600 12px/28px 'National Park', system-ui, sans-serif;
     }
     #canvas-area #view-menu select {
       background-color: #f4f1ee;
@@ -1532,6 +1541,7 @@
     </div>
     <div id="tooltip" hidden></div>
     <button id="panel-open" type="button" aria-label="Open panel" hidden><span class="material-symbols-rounded">right_panel_open</span></button>
+    <span id="auto-layers" hidden></span>
     <div id="view-menu">
       <button id="layers-button" type="button" aria-label="Layer zoom levels"><span class="material-symbols-rounded">layers</span></button>
       <select id="layer-select" aria-label="Layer">
@@ -1542,7 +1552,6 @@
         <option>Automatic</option>
         <option>Split Screen</option>
       </select>
-      <span id="auto-layers" hidden></span>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
       <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
     </div>
@@ -3752,7 +3761,7 @@
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       // Under Automatic, names the layers the current zoom shows.
-      autoLayers.hidden = layerSelect.value !== 'Automatic';
+      autoLayers.hidden = layerSelect.value !== 'Automatic' || inPreview();
       if (!autoLayers.hidden) {
         const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
         autoLayers.textContent = names.join(', ') || 'None';

@@ -5503,9 +5503,19 @@
     // editing an existing label in place.
     let editingLabel = null;
 
+    // The label being typed is drawn like a real one in the style it will
+    // get. One that will be just an icon shows its text beside the icon, in
+    // the first label style, until it's placed.
+    function typingLabel() {
+      const typing = { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, hideText: false, hideTextAt: undefined };
+      if (editingLabel.iconStyleId) return { ...typing, styleId: labelStyles[0].id, iconStyleId: editingLabel.iconStyleId, icon: 'pets' };
+      return { ...typing, styleId: (editingLabel.label ? styleOf(editingLabel.label) : currentStyle()).id };
+    }
     function startLabel(p, label = null) {
       finishLabel(true);
       editingLabel = { x: p.x, y: p.y, label };
+      // Started from an icon style, a new label is just that icon.
+      if (!label && currentIconStyle()) editingLabel.iconStyleId = currentIconStyle().id;
       labelInput.value = label?.text ?? '';
       labelInput.hidden = false;
       placeLabelInput();
@@ -5527,6 +5537,7 @@
       } else if (!label && keep && text) {
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
+        if (editingLabel.iconStyleId) Object.assign(created, { styleId: null, iconStyleId: editingLabel.iconStyleId, icon: 'pets' });
         if (editingLabel.place) created.place = editingLabel.place;
         created.layers = newLayers();
         giveIconIfHidingText(created);
@@ -5546,7 +5557,7 @@
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
       if (!placeSuggestions.hidden) {
-        const typed = { x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: currentStyle().id };
+        const typed = typingLabel();
         const box = zoomedRect(typed, labelBox(typed));
         placeSuggestions.style.left = `${box.x * view.scale + view.x}px`;
         placeSuggestions.style.top = `${(box.y + box.h) * view.scale + view.y + 8}px`;
@@ -6099,9 +6110,7 @@
       ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
       drawLists();
-      // The label being typed is drawn like a real one in the style it will get.
-      const typingStyle = editingLabel && (editingLabel.label ? styleOf(editingLabel.label) : currentStyle());
-      const typing = editingLabel && { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, styleId: typingStyle.id, hideText: false, hideTextAt: undefined };
+      const typing = editingLabel && typingLabel();
       const shown = labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0);
       for (const label of typing ? [...shown, typing] : shown) {
         ctx.globalAlpha = label === typing ? 1 : labelAlpha(label);
@@ -6126,11 +6135,14 @@
         const { lines, textX } = labelLayout(typing, labelZoom(typing));
         const last = lines.at(-1);
         const px = 1 / (view.scale * labelZoom(typing));
-        ctx.save();
-        zoomAboutLabel(ctx, typing);
-        ctx.fillStyle = typingStyle.color;
-        ctx.fillRect(textX + last.width / 2 + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
-        ctx.restore();
+        const typingStyle = styleOf(typing);
+        if (last) {
+          ctx.save();
+          zoomAboutLabel(ctx, typing);
+          ctx.fillStyle = typingStyle.color;
+          ctx.fillRect(textX + last.width / 2 + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
+          ctx.restore();
+        }
       }
       // Same look as other selections, a few pixels clear of the text.
       ctx.shadowColor = 'transparent';
@@ -7968,13 +7980,7 @@
         const p = toBackground(s.x, s.y);
         if (labelTool === 'add') {
           // New label places one label, then hands back to the cursor tool.
-          if (inBackground(p) && currentIconStyle()) {
-            recordUndo();
-            const label = { x: p.x, y: p.y, text: '', styleId: null, iconStyleId: currentIconStyle().id, icon: 'pets', pins: [], layers: newLayers() };
-            labels.push(label);
-            selectedLabels = [label];
-            setLabelTool('select');
-          } else if (inBackground(p)) {
+          if (inBackground(p)) {
             startLabel(p);
             setLabelTool('select');
           }

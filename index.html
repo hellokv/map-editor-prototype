@@ -1716,13 +1716,14 @@
             Background Color
             <span class="color-field"><input id="list-background" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
-          <label class="field">
+          <div class="field">
             Corners
             <select id="list-corners">
+              <option value="square">Square</option>
               <option value="round">Rounded</option>
               <option value="chamfer">Chamfered</option>
             </select>
-          </label>
+          </div>
           <label class="field">
             Corner Radius
             <input id="list-radius" type="number" min="0" step="1">
@@ -1786,13 +1787,14 @@
           </div>
         </div>
         <div class="group">
-          <label class="row">
+          <div class="row">
             Corners
             <select id="image-corners">
+              <option value="square">Square</option>
               <option value="round">Rounded</option>
               <option value="chamfer">Chamfered</option>
             </select>
-          </label>
+          </div>
           <label class="row">
             Corner Radius
             <input id="image-radius" type="number" min="0" step="1">
@@ -1926,13 +1928,14 @@
               <span class="color-field"><input id="style-background" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
               <input id="style-background-on" class="switch" type="checkbox">
             </label>
-            <label class="field">
+            <div class="field">
               Corners
               <select id="style-corners">
+                <option value="square">Square</option>
                 <option value="round">Rounded</option>
                 <option value="chamfer">Chamfered</option>
               </select>
-            </label>
+            </div>
             <label class="field">
               Corner Radius
               <input id="style-radius" type="number" min="0" max="200" step="1">
@@ -2026,13 +2029,14 @@
               Shadow Size
               <span class="percent-field"><input id="style-icon-shadow-size" type="number" min="0" step="5"></span>
             </label>
-            <label class="field">
+            <div class="field">
               Corners
               <select id="style-icon-corners">
+                <option value="square">Square</option>
                 <option value="round">Rounded</option>
                 <option value="chamfer">Chamfered</option>
               </select>
-            </label>
+            </div>
             <label class="field">
               Corner Radius
               <input id="style-icon-radius" type="number" min="0" max="200" step="1">
@@ -2177,13 +2181,14 @@
           Outline Weight
           <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
         </label>
-        <label class="field">
+        <div class="field">
           Corners
           <select id="board-corners">
-            <option value="round">Rounded</option>
+            <option value="square">Square</option>
+            <option value="round" selected>Rounded</option>
             <option value="chamfer">Chamfered</option>
           </select>
-        </label>
+        </div>
         <label class="field">
           Corner Radius
           <input id="board-radius" type="number" min="0" step="1" value="0">
@@ -3508,7 +3513,7 @@
     }
     // Traces the box onto a path or a context's current path.
     function traceBox(shape, { x, y, w, h }, radius, corners) {
-      const r = Math.min(radius, w / 2, h / 2);
+      const r = corners === 'square' ? 0 : Math.min(radius, w / 2, h / 2);
       if (corners === 'chamfer') {
         shape.moveTo(x + r, y);
         shape.lineTo(x + w - r, y);
@@ -3969,6 +3974,39 @@
     const styleInputs = Object.fromEntries(
       ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding-y', 'padding-x', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-color', 'hide-text', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
+    // Every Corners select is shown as buttons that set it, and a square
+    // corner has no radius to set.
+    const CORNER_DOTS = 'M3.2875 4.7125C3.09583 4.52083 3 4.28333 3 4C3 3.71667 3.09583 3.47917 3.2875 3.2875C3.47917 3.09583 3.71667 3 4 3C4.28333 3 4.52083 3.09583 4.7125 3.2875C4.90417 3.47917 5 3.71667 5 4C5 4.28333 4.90417 4.52083 4.7125 4.7125C4.52083 4.90417 4.28333 5 4 5C3.71667 5 3.47917 4.90417 3.2875 4.7125ZM7.2875 4.7125C7.09583 4.52083 7 4.28333 7 4C7 3.71667 7.09583 3.47917 7.2875 3.2875C7.47917 3.09583 7.71667 3 8 3C8.28333 3 8.52083 3.09583 8.7125 3.2875C8.90417 3.47917 9 3.71667 9 4C9 4.28333 8.90417 4.52083 8.7125 4.7125C8.52083 4.90417 8.28333 5 8 5C7.71667 5 7.47917 4.90417 7.2875 4.7125ZM3.2875 8.7125C3.09583 8.52083 3 8.28333 3 8C3 7.71667 3.09583 7.47917 3.2875 7.2875C3.47917 7.09583 3.71667 7 4 7C4.28333 7 4.52083 7.09583 4.7125 7.2875C4.90417 7.47917 5 7.71667 5 8C5 8.28333 4.90417 8.52083 4.7125 8.7125C4.52083 8.90417 4.28333 9 4 9C3.71667 9 3.47917 8.90417 3.2875 8.7125ZM3.2875 12.7125C3.09583 12.5208 3 12.2833 3 12C3 11.7167 3.09583 11.4792 3.2875 11.2875C3.47917 11.0958 3.71667 11 4 11C4.28333 11 4.52083 11.0958 4.7125 11.2875C4.90417 11.4792 5 11.7167 5 12C5 12.2833 4.90417 12.5208 4.7125 12.7125C4.52083 12.9042 4.28333 13 4 13C3.71667 13 3.47917 12.9042 3.2875 12.7125ZM3.2875 16.7125C3.09583 16.5208 3 16.2833 3 16C3 15.7167 3.09583 15.4792 3.2875 15.2875C3.47917 15.0958 3.71667 15 4 15C4.28333 15 4.52083 15.0958 4.7125 15.2875C4.90417 15.4792 5 15.7167 5 16C5 16.2833 4.90417 16.5208 4.7125 16.7125C4.52083 16.9042 4.28333 17 4 17C3.71667 17 3.47917 16.9042 3.2875 16.7125ZM19.2875 16.7125C19.0958 16.5208 19 16.2833 19 16C19 15.7167 19.0958 15.4792 19.2875 15.2875C19.4792 15.0958 19.7167 15 20 15C20.2833 15 20.5208 15.0958 20.7125 15.2875C20.9042 15.4792 21 15.7167 21 16C21 16.2833 20.9042 16.5208 20.7125 16.7125C20.5208 16.9042 20.2833 17 20 17C19.7167 17 19.4792 16.9042 19.2875 16.7125ZM3.2875 20.7125C3.09583 20.5208 3 20.2833 3 20C3 19.7167 3.09583 19.4792 3.2875 19.2875C3.47917 19.0958 3.71667 19 4 19C4.28333 19 4.52083 19.0958 4.7125 19.2875C4.90417 19.4792 5 19.7167 5 20C5 20.2833 4.90417 20.5208 4.7125 20.7125C4.52083 20.9042 4.28333 21 4 21C3.71667 21 3.47917 20.9042 3.2875 20.7125ZM7.2875 20.7125C7.09583 20.5208 7 20.2833 7 20C7 19.7167 7.09583 19.4792 7.2875 19.2875C7.47917 19.0958 7.71667 19 8 19C8.28333 19 8.52083 19.0958 8.7125 19.2875C8.90417 19.4792 9 19.7167 9 20C9 20.2833 8.90417 20.5208 8.7125 20.7125C8.52083 20.9042 8.28333 21 8 21C7.71667 21 7.47917 20.9042 7.2875 20.7125ZM11.2875 20.7125C11.0958 20.5208 11 20.2833 11 20C11 19.7167 11.0958 19.4792 11.2875 19.2875C11.4792 19.0958 11.7167 19 12 19C12.2833 19 12.5208 19.0958 12.7125 19.2875C12.9042 19.4792 13 19.7167 13 20C13 20.2833 12.9042 20.5208 12.7125 20.7125C12.5208 20.9042 12.2833 21 12 21C11.7167 21 11.4792 20.9042 11.2875 20.7125ZM15.2875 20.7125C15.0958 20.5208 15 20.2833 15 20C15 19.7167 15.0958 19.4792 15.2875 19.2875C15.4792 19.0958 15.7167 19 16 19C16.2833 19 16.5208 19.0958 16.7125 19.2875C16.9042 19.4792 17 19.7167 17 20C17 20.2833 16.9042 20.5208 16.7125 20.7125C16.5208 20.9042 16.2833 21 16 21C15.7167 21 15.4792 20.9042 15.2875 20.7125ZM19.2875 20.7125C19.0958 20.5208 19 20.2833 19 20C19 19.7167 19.0958 19.4792 19.2875 19.2875C19.4792 19.0958 19.7167 19 20 19C20.2833 19 20.5208 19.0958 20.7125 19.2875C20.9042 19.4792 21 19.7167 21 20C21 20.2833 20.9042 20.5208 20.7125 20.7125C20.5208 20.9042 20.2833 21 20 21C19.7167 21 19.4792 20.9042 19.2875 20.7125Z';
+    const CORNER_EDGES = { square: 'M12 4H20V12', round: 'M12 4H14C17.3137 4 20 6.68629 20 10V12', chamfer: 'M12 4H15L20 9V12' };
+    const cornerPickers = [...document.querySelectorAll('select[id$="corners"]')].map((select) => {
+      select.hidden = true;
+      const buttons = Object.assign(document.createElement('div'), { className: 'icon-buttons' });
+      for (const option of select.options) {
+        const button = Object.assign(document.createElement('button'), { type: 'button' });
+        button.dataset.corners = option.value;
+        button.setAttribute('aria-label', option.textContent);
+        button.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="${CORNER_DOTS}" fill="currentColor"/><path d="${CORNER_EDGES[option.value]}" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+        button.addEventListener('click', () => {
+          button.blur();
+          if (select.value === option.value) return;
+          select.value = option.value;
+          select.dispatchEvent(new Event('input', { bubbles: true }));
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          showCorners();
+        });
+        buttons.append(button);
+      }
+      select.after(buttons);
+      const radius = document.getElementById(select.id.replace(/corners$/, 'radius'));
+      return { select, buttons, radius };
+    });
+    function showCorners() {
+      for (const { select, buttons, radius } of cornerPickers) {
+        for (const button of buttons.children) button.setAttribute('aria-pressed', button.dataset.corners === select.value);
+        // The icon's radius also depends on its shape, so its form decides.
+        if (select.id !== 'style-icon-corners') radius.closest('.field, .row').hidden = select.value === 'square';
+      }
+    }
     // The placement buttons stand for the hidden checkbox the form reads.
     const placementButtons = document.querySelectorAll('[data-icon-placement]');
     function showIconPlacement() {
@@ -4370,7 +4408,7 @@
       // Only a square backdrop has corners to shape; a pin's radius rounds its point.
       const iconShape = styleInputs['icon-shape'].value;
       styleInputs['icon-corners'].closest('.field').hidden = iconShape !== 'square';
-      styleInputs['icon-radius'].closest('.field').hidden = iconShape === 'circle';
+      styleInputs['icon-radius'].closest('.field').hidden = iconShape === 'circle' || (iconShape === 'square' && styleInputs['icon-corners'].value === 'square');
       // A pin's shadow lies on the ground below it.
       for (const key of ['icon-shadow-gap', 'icon-shadow-size']) styleInputs[key].closest('.field').hidden = iconShape !== 'pin' || !styleInputs['icon-shadow-on'].checked;
     }
@@ -5090,6 +5128,7 @@
 
     // Runs after every draw, which follows every change to the selection.
     function updatePanel() {
+      showCorners();
       const mapGround = colorOf(boardColor);
       const panelStyle = document.getElementById('panel').style;
       panelStyle.setProperty('--map-ground', mapGround);
@@ -6017,7 +6056,7 @@
       // box drawn over it hides the join, and its visible part is measured
       // from the curved edge. A chamfer's diagonal edge is half as far in.
       // Sides have no curve, so this changes nothing there.
-      const radius = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+      const radius = style.background && style.corners !== 'square' ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
       const inset = style.corners === 'chamfer' ? radius / 2 : radius;
       const startX = cornerX - dx * inset;
       const startY = cornerY - dy * inset;
@@ -6032,7 +6071,7 @@
       // levels on show, the pointer leaves that box but still ends in place.
       const { box, frame } = labelLayout(label, zoom);
       if (box !== frame) {
-        const radius = style.background ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
+        const radius = style.background && style.corners !== 'square' ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
         const inset = style.corners === 'chamfer' ? radius / 2 : radius;
         startX = box.x + box.w / 2 + dx * (box.w / 2 - inset);
         startY = box.y + box.h / 2 + dy * (box.h / 2 - inset);

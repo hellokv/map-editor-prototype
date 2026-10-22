@@ -376,9 +376,6 @@
     }
     #stack-view canvas {
       position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
       border: 1px solid rgba(255, 255, 255, 0.35);
       box-sizing: border-box;
     }
@@ -2868,7 +2865,7 @@
         layerSelect.value = beforePreview.layer;
         setSplit(splitOn());
       }
-      zoomInput.parentElement.hidden = splitOn();
+      showViewMenu();
       document.getElementById('view-menu').hidden = mode === 'preview';
       for (const button of modeButtons) {
         button.setAttribute('aria-pressed', button.dataset.mode === mode);
@@ -3719,6 +3716,11 @@
     let size = null;
 
     const zoomInput = document.getElementById('zoom-input');
+    // Split screen zooms each panel on its own, and Stacked doesn't zoom.
+    function showViewMenu() {
+      zoomInput.parentElement.hidden = splitOn() || layerSelect.value === 'Stacked';
+      document.getElementById('fit-button').hidden = layerSelect.value === 'Stacked';
+    }
     const autoLayers = document.getElementById('auto-layers');
     // Clicking the levels Automatic shows switches to the first of them.
     autoLayers.addEventListener('click', () => {
@@ -3933,7 +3935,7 @@
 
     // Stacked paints the map once per plane on the canvas and copies each
     // into a plane of its own: the background alone, then each level's
-    // elements alone. Dragging pans the map in all of them.
+    // elements alone. It's only for looking: nothing pans, zooms or edits.
     const stackView = document.getElementById('stack-view');
     const STACK_PLANES = [
       { part: 'background', layer: 'All' },
@@ -3943,22 +3945,14 @@
     ];
     // The plane being painted, while it's painted.
     let stackPart = null;
-    const STACK_GAP = 220;
-    // How the planes are laid down: tilted back, turned and shrunk.
+    const STACK_GAP = 340;
+    // How the planes are laid down: tilted back, turned and shrunk, and moved
+    // down by half the stack's height so the whole stack is centred.
     const STACK_TILT = 58;
     const STACK_TURN = -32;
-    const STACK_SCALE = 0.55;
-    stackView.firstElementChild.style.transform = `translateY(11%) rotateX(${STACK_TILT}deg) rotateZ(${STACK_TURN}deg) scale3d(${STACK_SCALE}, ${STACK_SCALE}, ${STACK_SCALE})`;
-    // A drag on screen, taken back through the tilt, turn and shrink so the
-    // map follows the pointer across the planes.
-    function stackDrag(dx, dy) {
-      const y = dy / Math.cos((STACK_TILT * Math.PI) / 180);
-      const turn = (-STACK_TURN * Math.PI) / 180;
-      return {
-        x: (dx * Math.cos(turn) - y * Math.sin(turn)) / STACK_SCALE,
-        y: (dx * Math.sin(turn) + y * Math.cos(turn)) / STACK_SCALE,
-      };
-    }
+    const STACK_SCALE = 0.5;
+    const stackRise = ((STACK_PLANES.length - 1) * STACK_GAP * Math.sin((STACK_TILT * Math.PI) / 180) * STACK_SCALE) / 2;
+    stackView.firstElementChild.style.transform = `translateY(${stackRise}px) rotateX(${STACK_TILT}deg) rotateZ(${STACK_TURN}deg) scale3d(${STACK_SCALE}, ${STACK_SCALE}, ${STACK_SCALE})`;
     const stackPlanes = STACK_PLANES.map(({ part }, i) => {
       const plane = Object.assign(document.createElement('canvas'), { className: part });
       plane.style.transform = `translateZ(${i * STACK_GAP}px)`;
@@ -3966,17 +3960,27 @@
       return plane;
     });
     const stackOn = () => layerSelect.value === 'Stacked' && !inPreview();
+    // Each plane is the map's box, fitted into the canvas, whatever the
+    // map's own pan and zoom.
     function paintStack() {
       stackView.style.background = colorOf(canvasColor);
+      const dpr = window.devicePixelRatio || 1;
+      const fit = Math.min(canvas.clientWidth / board.w, canvas.clientHeight / board.h) * 0.9;
+      const w = board.w * fit;
+      const h = board.h * fit;
+      const home = { ...view };
+      Object.assign(view, { scale: fit, x: 0, y: 0 });
       for (const [i, { part, layer }] of STACK_PLANES.entries()) {
         stackPart = part;
         layerOverride = layer;
         paintView();
         const plane = stackPlanes[i];
-        plane.width = canvas.width;
-        plane.height = canvas.height;
-        plane.getContext('2d').drawImage(canvas, 0, 0);
+        Object.assign(plane.style, { left: `${(canvas.clientWidth - w) / 2}px`, top: `${(canvas.clientHeight - h) / 2}px`, width: `${w}px`, height: `${h}px` });
+        plane.width = Math.round(w * dpr);
+        plane.height = Math.round(h * dpr);
+        plane.getContext('2d').drawImage(canvas, 0, 0, plane.width, plane.height, 0, 0, plane.width, plane.height);
       }
+      Object.assign(view, home);
       stackPart = null;
       layerOverride = null;
     }
@@ -6394,7 +6398,7 @@
 
     layerSelect.addEventListener('change', () => {
       setSplit(splitOn());
-      zoomInput.parentElement.hidden = splitOn();
+      showViewMenu();
       selectedLabels = selectedLabels.filter(labelShown);
       selectedShapes = selectedShapes.filter(onShownLayer);
       if (sketchSelected && !onShownLayer(sketchSelected.point ?? [...sketchSelected.figure][0])) sketchSelected = null;
@@ -7885,6 +7889,8 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // Stacked shows the whole map, fixed.
+      if (stackOn()) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -8078,7 +8084,8 @@
     }
 
     function updateCursor() {
-      if (spaceHeld || drag?.spacePan || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (stackOn()) canvas.style.cursor = '';
+      else if (spaceHeld || drag?.spacePan || inPreview() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8236,11 +8243,11 @@
     }
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || stackOn()) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      if (spaceHeld || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
+      if (spaceHeld || inPreview() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         updateCursor();
         return;
@@ -8450,11 +8457,8 @@
           setSelectionItems([...drag.base, ...inside.filter((item) => !drag.base.some((b) => sameItem(b, item)))]);
         }
       } else if (drag) {
-        const dx = e.clientX - drag.x;
-        const dy = e.clientY - drag.y;
-        const move = stackOn() ? stackDrag(dx, dy) : { x: dx, y: dy };
-        view.x += move.x;
-        view.y += move.y;
+        view.x += e.clientX - drag.x;
+        view.y += e.clientY - drag.y;
         drag.x = e.clientX;
         drag.y = e.clientY;
       }

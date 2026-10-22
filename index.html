@@ -8019,24 +8019,6 @@
     const clampX = (v) => Math.min(board.w, Math.max(0, v));
     const clampY = (v) => Math.min(board.h, Math.max(0, v));
 
-    // The pin cursor's hotspot is the tip of the pin.
-    let pinCursor = 'crosshair';
-    document.fonts.load('300 24px "Material Symbols Rounded"', 'add_location').then(() => {
-      const icon = document.createElement('canvas');
-      icon.width = icon.height = 24;
-      const c = icon.getContext('2d');
-      c.font = '300 24px "Material Symbols Rounded"';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.strokeStyle = '#fff';
-      c.lineWidth = 3;
-      c.strokeText('add_location', 12, 12);
-      c.fillText('add_location', 12, 12);
-      const tip = Math.min(23, Math.round(12 + c.measureText('add_location').actualBoundingBoxDescent));
-      pinCursor = `url(${icon.toDataURL()}) 12 ${tip}, crosshair`;
-      updateCursor();
-    });
-
     let pointer = null;
 
     let shiftHeld = false;
@@ -8191,7 +8173,7 @@
     function updateCursor() {
       if (spaceHeld || drag?.spacePan || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
-      else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = pinCursor;
+      else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (!backgroundTools.hidden) canvas.style.cursor = ['shapes', 'segments', 'compass'].includes(backgroundTool) ? 'crosshair' : shapeHandleCursor();
       else if (!labelTools.hidden) canvas.style.cursor = shapeHandleCursor();

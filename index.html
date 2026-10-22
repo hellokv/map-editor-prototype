@@ -2822,13 +2822,16 @@
     let beforePreview = null;
     function setMode(mode) {
       if (mode === 'preview' && !inPreview()) {
+        setSplit(false);
         beforePreview = { view: { ...view }, layer: layerSelect.value };
         layerSelect.value = 'Automatic';
         centerPreview();
       } else if (mode !== 'preview' && inPreview()) {
         Object.assign(view, beforePreview.view);
         layerSelect.value = beforePreview.layer;
+        setSplit(splitOn());
       }
+      zoomInput.parentElement.hidden = splitOn();
       document.getElementById('view-menu').hidden = mode === 'preview';
       for (const button of modeButtons) {
         button.setAttribute('aria-pressed', button.dataset.mode === mode);
@@ -3683,11 +3686,12 @@
     // In preview, the zoom as the device draws it, per its own pixels.
     const zoomPercent = () => Math.round((inPreview() ? view.scale / previewFrame().k : view.scale) * 100);
     const inPreview = () => !document.getElementById('preview-panel').hidden;
-    // Zooms about the middle of the canvas.
+    // Zooms about the middle of the canvas, or of the active split screen panel.
     function zoomTo(scale) {
       const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
-      const mx = canvas.clientWidth / 2;
-      const my = canvas.clientHeight / 2;
+      const area = panelViews ? splitPanels()[activePanel] : { x: 0, y: 0, w: canvas.clientWidth, h: canvas.clientHeight };
+      const mx = area.x + area.w / 2;
+      const my = area.y + area.h / 2;
       view.x = mx - (mx - view.x) * (next / view.scale);
       view.y = my - (my - view.y) * (next / view.scale);
       view.scale = next;
@@ -3705,8 +3709,16 @@
       zoomTo((zoomPercent() + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)) / 100);
       zoomInput.value = zoomPercent();
     });
+    // In split screen, every panel fits the map to itself.
     document.getElementById('fit-button').addEventListener('click', (e) => {
-      centerBackground(canvas.clientWidth, canvas.clientHeight);
+      if (panelViews) {
+        const { w, h } = splitPanels()[0];
+        centerBackground(w, h);
+        panelViews = panelViews.map(() => ({ ...view }));
+        loadPanelView(activePanel);
+      } else {
+        centerBackground(canvas.clientWidth, canvas.clientHeight);
+      }
       e.currentTarget.blur();
       draw();
     });
@@ -3751,38 +3763,71 @@
     }
 
     // Split screen shows the map four times, each a quarter of the canvas
-    // showing one level, or the levels the zoom picks, at the same zoom. Each quarter is
-    // centred on what the whole canvas would centre on.
+    // showing one level, or the levels the zoom picks, each panned and zoomed
+    // on its own. Panels keep their views in their own coordinates; view
+    // itself is always the active panel's, on the whole canvas, so pointer
+    // handling works on whichever panel the pointer is in.
     const SPLIT_PANELS = ['Sky', 'Canopy', 'Ground', 'Automatic'];
-    // The layer setting a quarter is painted with, while it's painted.
+    // The layer setting a panel is painted with, while it's painted.
     let layerOverride = null;
-    // How far a quarter's map is moved from the whole canvas's, while it's painted.
-    let paintShift = { x: 0, y: 0 };
+    let panelViews = null;
+    let activePanel = 0;
+    const splitOn = () => layerSelect.value === 'Split Screen';
     const splitPanels = () => {
       const w = canvas.clientWidth / 2;
       const h = canvas.clientHeight / 2;
-      return SPLIT_PANELS.map((name, i) => {
-        const x = (i % 2) * w;
-        const y = Math.floor(i / 2) * h;
-        return { name, x, y, w, h, shift: { x: x - w / 2, y: y - h / 2 } };
-      });
+      return SPLIT_PANELS.map((name, i) => ({ name, x: (i % 2) * w, y: Math.floor(i / 2) * h, w, h }));
     };
+    function storeActiveView() {
+      const panel = splitPanels()[activePanel];
+      panelViews[activePanel] = { scale: view.scale, x: view.x - panel.x, y: view.y - panel.y };
+    }
+    function loadPanelView(i) {
+      const panel = splitPanels()[i];
+      const local = panelViews[i];
+      Object.assign(view, { scale: local.scale, x: local.x + panel.x, y: local.y + panel.y });
+    }
+    // Entering split screen, every panel starts centred on what the whole
+    // canvas was; leaving, the whole canvas centres on the active panel's.
+    function setSplit(on) {
+      if (on === !!panelViews) return;
+      const { w, h } = splitPanels()[0];
+      if (on) {
+        panelViews = SPLIT_PANELS.map(() => ({ scale: view.scale, x: view.x - w / 2, y: view.y - h / 2 }));
+        activePanel = 0;
+        loadPanelView(0);
+      } else {
+        storeActiveView();
+        const local = panelViews[activePanel];
+        Object.assign(view, { scale: local.scale, x: local.x + w / 2, y: local.y + h / 2 });
+        panelViews = null;
+      }
+    }
+    // The pointer makes the panel it's over the active one, except mid-drag.
+    function focusPanelAt(e) {
+      if (!panelViews || drag) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const i = splitPanels().findIndex((panel) => x >= panel.x && x < panel.x + panel.w && y >= panel.y && y < panel.y + panel.h);
+      if (i < 0 || i === activePanel) return;
+      storeActiveView();
+      activePanel = i;
+      loadPanelView(i);
+    }
+    for (const type of ['pointerdown', 'pointermove', 'wheel', 'dblclick']) canvas.addEventListener(type, focusPanelAt, { capture: true, passive: true });
     function paintSplit() {
       const dpr = window.devicePixelRatio || 1;
-      const home = { ...view };
-      for (const panel of splitPanels()) {
+      storeActiveView();
+      for (const [i, panel] of splitPanels().entries()) {
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.beginPath();
         ctx.rect(panel.x, panel.y, panel.w, panel.h);
         ctx.clip();
         layerOverride = panel.name;
-        paintShift = panel.shift;
-        view.x = home.x + panel.shift.x;
-        view.y = home.y + panel.shift.y;
+        loadPanelView(i);
         paintView();
-        view.x = home.x;
-        view.y = home.y;
         ctx.restore();
         // The panel's level, named in its bottom left corner.
         ctx.save();
@@ -3803,7 +3848,7 @@
         ctx.restore();
       }
       layerOverride = null;
-      paintShift = { x: 0, y: 0 };
+      loadPanelView(activePanel);
       // The panels' dividing lines.
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -6212,6 +6257,8 @@
     }, true);
 
     layerSelect.addEventListener('change', () => {
+      setSplit(splitOn());
+      zoomInput.parentElement.hidden = splitOn();
       selectedLabels = selectedLabels.filter(labelShown);
       selectedShapes = selectedShapes.filter(onShownLayer);
       if (sketchSelected && !onShownLayer(sketchSelected.point ?? [...sketchSelected.figure][0])) sketchSelected = null;
@@ -8005,7 +8052,7 @@
       const box = marqueeBox();
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, paintShift.x * dpr, paintShift.y * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
       ctx.fillRect(box.x, box.y, box.w, box.h);
       ctx.strokeStyle = '#fff';
@@ -8046,14 +8093,9 @@
       return items;
     }
 
-    // In split screen, a point in any panel is taken back to where it
-    // would be on the whole canvas.
     function canvasPoint(e) {
       const rect = canvas.getBoundingClientRect();
-      const p = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      if (layerSelect.value !== 'Split Screen') return p;
-      const panel = splitPanels().find((each) => p.x >= each.x && p.x < each.x + each.w && p.y >= each.y && p.y < each.y + each.h);
-      return panel ? { x: p.x - panel.shift.x, y: p.y - panel.shift.y } : p;
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
 
     canvas.addEventListener('pointerdown', (e) => {

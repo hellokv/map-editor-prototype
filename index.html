@@ -1056,7 +1056,24 @@
       font-size: 15px;
       font-weight: 600;
     }
-.heading-actions {
+    #new-label-kind {
+      display: flex;
+      justify-content: space-between;
+    }
+    :is(#panel, #style-panel) #new-label-kind button {
+      height: 36px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: #000;
+      font-size: 15px;
+    }
+    :is(#panel, #style-panel) #new-label-kind button[aria-pressed="true"] {
+      background: #000;
+      color: #fff;
+    }
+    .heading-actions {
       display: flex;
       gap: 8px;
     }
@@ -1786,11 +1803,18 @@
         </div>
       </div>
       <div id="label-styles">
+        <div class="label-section">
+          <div id="new-label-kind">
+            <button type="button" data-kind="both" aria-pressed="true">Text + Icon</button>
+            <button type="button" data-kind="text" aria-pressed="false">Text Only</button>
+            <button type="button" data-kind="icon" aria-pressed="false">Icon Only</button>
+          </div>
+        </div>
         <div id="label-style-browser" class="label-section">
           <div class="section-heading">Label Styles<button id="new-label-style" type="button" aria-label="New label style"><span class="material-symbols-rounded">add</span></button></div>
           <div id="label-style-list"></div>
         </div>
-        <div class="label-section">
+        <div id="icon-style-browser" class="label-section">
           <div class="section-heading">Icon Styles<button id="new-icon-style" type="button" aria-label="New icon style"><span class="material-symbols-rounded">add</span></button></div>
           <div id="icon-style-list"></div>
         </div>
@@ -4083,13 +4107,12 @@
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',
           name: 'current-label-style',
-          checked: !currentIconStyle() && style === currentStyle(),
+          checked: style === currentStyle(),
           title: 'Use for new labels',
         });
         // Picking a style, even the current one, is getting ready to add a label in it.
         pick.addEventListener('click', () => {
           currentStyleId = style.id;
-          currentIconStyleId = null;
           setLabelTool('add');
           pick.blur();
         });
@@ -4099,7 +4122,7 @@
         const row = Object.assign(document.createElement('label'), { className: 'row' });
         const pick = Object.assign(document.createElement('input'), {
           type: 'radio',
-          name: 'current-label-style',
+          name: 'current-icon-style',
           checked: style === currentIconStyle(),
           title: 'Use for new labels',
         });
@@ -4291,6 +4314,16 @@
       renderLabelStyles();
       openStyleForm(style, true);
       styleInputs['icon-name'].select();
+    }
+    const labelKindButtons = document.querySelectorAll('#new-label-kind button');
+    for (const button of labelKindButtons) {
+      button.addEventListener('click', () => {
+        newLabelKind = button.dataset.kind;
+        for (const each of labelKindButtons) each.setAttribute('aria-pressed', each === button);
+        document.getElementById('label-style-browser').hidden = newLabelKind === 'icon';
+        document.getElementById('icon-style-browser').hidden = newLabelKind === 'text';
+        button.blur();
+      });
     }
     document.getElementById('new-label-style').addEventListener('click', () => newLabelStyle());
     document.getElementById('new-icon-style').addEventListener('click', () => newIconStyle());
@@ -5465,12 +5498,13 @@
       { ...NEW_ICON_STYLE, id: 2, name: 'Pin', iconSize: 38, iconShape: 'pin', iconBackground: '#ffffff', iconShadow: '#000000', iconShadowGap: 10, iconPadding: 4 },
     ];
     let nextIconStyleId = 3;
-    // The style new labels are created in, picked in the style lists: a label
-    // style, or an icon style for labels that are just an icon.
+    // New labels are text, an icon, or both ('text', 'icon', 'both'), in the
+    // styles picked in the style lists.
+    let newLabelKind = 'both';
     let currentStyleId = 1;
-    let currentIconStyleId = null;
+    let currentIconStyleId = 1;
     const currentStyle = () => labelStyles.find((style) => style.id === currentStyleId) ?? labelStyles[0];
-    const currentIconStyle = () => iconStyles.find((style) => style.id === currentIconStyleId) ?? null;
+    const currentIconStyle = () => iconStyles.find((style) => style.id === currentIconStyleId) ?? iconStyles[0];
     const iconStyleOf = (label) => iconStyles.find((style) => style.id === label.iconStyleId) ?? iconStyles[0];
     // A label without a label style (styleId null) is just its icon.
     const NO_LABEL_STYLE = { ...NEW_STYLE, id: null, hideText: true };
@@ -5508,19 +5542,19 @@
     // editing an existing label in place.
     let editingLabel = null;
 
-    // The label being typed is drawn like a real one in the style it will
+    // The label being typed is drawn like a real one in the styles it will
     // get. One that will be just an icon shows its text beside the icon, in
     // the first label style, until it's placed.
     function typingLabel() {
       const typing = { ...editingLabel.label, x: editingLabel.x, y: editingLabel.y, text: labelInput.value, hideText: false, hideTextAt: undefined };
-      if (editingLabel.iconStyleId) return { ...typing, styleId: labelStyles[0].id, iconStyleId: editingLabel.iconStyleId, icon: 'pets' };
-      return { ...typing, styleId: (editingLabel.label ? styleOf(editingLabel.label) : currentStyle()).id };
+      if (editingLabel.label) return { ...typing, styleId: styleOf(editingLabel.label).id };
+      const { kind } = editingLabel;
+      return { ...typing, styleId: kind === 'icon' ? labelStyles[0].id : currentStyle().id, ...(kind !== 'text' && { iconStyleId: currentIconStyle().id, icon: 'pets' }) };
     }
     function startLabel(p, label = null) {
       finishLabel(true);
       editingLabel = { x: p.x, y: p.y, label };
-      // Started from an icon style, a new label is just that icon.
-      if (!label && currentIconStyle()) editingLabel.iconStyleId = currentIconStyle().id;
+      if (!label) editingLabel.kind = newLabelKind;
       labelInput.value = label?.text ?? '';
       labelInput.hidden = false;
       placeLabelInput();
@@ -5542,7 +5576,8 @@
       } else if (!label && keep && text) {
         recordUndo();
         created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
-        if (editingLabel.iconStyleId) Object.assign(created, { styleId: null, iconStyleId: editingLabel.iconStyleId, icon: 'pets' });
+        if (editingLabel.kind !== 'text') Object.assign(created, { iconStyleId: currentIconStyle().id, icon: 'pets' });
+        if (editingLabel.kind === 'icon') created.styleId = null;
         if (editingLabel.place) created.place = editingLabel.place;
         created.layers = newLayers();
         giveIconIfHidingText(created);

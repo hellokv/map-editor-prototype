@@ -3825,6 +3825,32 @@
       loadPanelView(i);
     }
     for (const type of ['pointerdown', 'pointermove', 'wheel', 'dblclick']) canvas.addEventListener(type, focusPanelAt, { capture: true, passive: true });
+    // Each panel's name, where it was last painted. Clicking one leaves
+    // split screen for that panel's level and view.
+    const splitTags = [];
+    const splitTagAt = (e) => {
+      if (!panelViews || drag) return -1;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      return splitTags.findIndex((tag) => tag && x >= tag.x && x <= tag.x + tag.w && y >= tag.y && y <= tag.y + tag.h);
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      const i = splitTagAt(e);
+      if (i < 0) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      storeActiveView();
+      activePanel = i;
+      loadPanelView(i);
+      layerSelect.value = SPLIT_PANELS[i];
+      layerSelect.dispatchEvent(new Event('change'));
+    }, { capture: true });
+    canvas.addEventListener('pointermove', (e) => {
+      if (splitTagAt(e) < 0) return;
+      e.stopImmediatePropagation();
+      canvas.style.cursor = 'pointer';
+    }, { capture: true });
     function paintSplit() {
       const dpr = window.devicePixelRatio || 1;
       storeActiveView();
@@ -3844,6 +3870,7 @@
         ctx.font = "600 12px 'National Park', system-ui, sans-serif";
         const textW = ctx.measureText(panel.name).width;
         const tag = { x: panel.x + 12, y: panel.y + panel.h - 12 - 28, w: textW + 20, h: 28 };
+        splitTags[i] = tag;
         ctx.fillStyle = '#fff';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
         ctx.shadowBlur = 8 * dpr;

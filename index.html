@@ -5125,7 +5125,8 @@
         labelHideTextToggle.disabled = !!styleOf(selectedLabel).hideText;
         if (document.activeElement !== labelPlaceSelect) labelPlaceSelect.value = selectedLabel.place ?? '';
         const iconOn = !!selectedLabel.icon;
-        labelIconClear.hidden = !iconOn;
+        // A style that hides text needs its labels' icons, so they can't be cleared.
+        labelIconClear.hidden = !iconOn || !!styleOf(selectedLabel).hideText;
         document.getElementById('label-icon-search').hidden = iconOn;
         for (const field of [labelIconOffsetInput, labelIconGapInput]) {
           field.disabled = textHidden;
@@ -5218,7 +5219,7 @@
     labelIconClear.addEventListener('click', () => {
       const label = soleLabel();
       labelIconClear.blur();
-      if (!label?.icon) return;
+      if (!label?.icon || styleOf(label).hideText) return;
       recordUndo();
       // Text can only hide behind an icon, so without one it shows again.
       for (const key of ['icon', 'hideText', 'hideTextAt']) delete label[key];

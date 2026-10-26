@@ -2065,6 +2065,10 @@
               <input id="style-pointer-length" type="number" min="0" max="500" step="1">
             </label>
             <label class="field">
+              Gap
+              <span class="slider"><input id="style-pointer-gap" type="number" min="0" max="200" step="1"><input type="range" min="0" max="40" step="1" aria-label="Pointer gap"></span>
+            </label>
+            <label class="field">
               Weight
               <input id="style-pointer-width" type="number" min="0" max="50" step="0.5">
             </label>
@@ -4420,7 +4424,7 @@
     const isIconStyle = (style) => iconStyles.includes(style);
     const stylesWith = (style) => (isIconStyle(style) ? iconStyles : labelStyles);
     const styleInputs = Object.fromEntries(
-      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-zoom-scale', 'icon-color', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
+      ['name', 'font', 'weight', 'size', 'line-height', 'letter-spacing', 'zoom-scale', 'icon-size', 'icon-gap', 'caps', 'color', 'outline-on', 'outline', 'outline-width', 'shadow-on', 'shadow', 'padding', 'padding-left', 'padding-top', 'padding-right', 'padding-bottom', 'background-on', 'background', 'corners', 'radius', 'pointer-length', 'pointer-gap', 'pointer-width', 'pointer-end', 'icon-name', 'icon-background-on', 'icon-background', 'icon-outline-on', 'icon-outline', 'icon-outline-width', 'icon-shadow-on', 'icon-shadow', 'icon-shadow-gap', 'icon-shadow-size', 'icon-shape', 'icon-corners', 'icon-radius', 'icon-padding', 'icon-padding-left', 'icon-padding-top', 'icon-padding-right', 'icon-padding-bottom', 'icon-zoom-scale', 'icon-color', 'icon-outside'].map((key) => [key, document.getElementById(`style-${key}`)]),
     );
     // Every Corners select is shown as buttons that set it, and a square
     // corner has no radius to set.
@@ -4727,6 +4731,7 @@
         corners: styleInputs.corners.value,
         radius: Math.max(0, Number(styleInputs.radius.value) || 0),
         pointerLength: Math.max(0, Number(styleInputs['pointer-length'].value) || 0),
+        pointerGap: Math.max(0, Number(styleInputs['pointer-gap'].value) || 0),
         pointerWidth: Math.max(0, Number(styleInputs['pointer-width'].value) || 0),
         pointerEnd: styleInputs['pointer-end'].value,
       };
@@ -4800,6 +4805,7 @@
       styleInputs.corners.value = values.corners;
       styleInputs.radius.value = values.radius;
       styleInputs['pointer-length'].value = values.pointerLength;
+      styleInputs['pointer-gap'].value = values.pointerGap;
       styleInputs['pointer-width'].value = values.pointerWidth;
       styleInputs['pointer-end'].value = values.pointerEnd;
     }
@@ -6076,15 +6082,16 @@
     const labels = []; // { x, y, text, styleId }
     // { id, name, font, weight, size, lineHeight, letterSpacing, zoomScale,
     // caps, color, outline, outlineWidth, shadow, padding, paddingSides,
-    // background, corners, radius, pointerLength, pointerWidth, pointerEnd,
-    // iconOutside, iconGap, hideText }; lineHeight is how far apart a label's
+    // background, corners, radius, pointerLength, pointerGap, pointerWidth,
+    // pointerEnd, iconOutside, iconGap, hideText }; lineHeight is how far apart a label's
     // lines stack, as a multiple of size, and caps shows the text in capitals
     // without changing what was typed. outlineWidth is how thick the outline
     // looks. paddingSides is { top, right, bottom, left }, or null for padding
     // all round. corners is 'square', 'round' or 'chamfer', and radius is how
-    // far the last two reach along each side. outline, shadow and background
+    // far the last two reach along each side. pointerGap is the space between
+    // the box and the pointer's line. outline, shadow and background
     // are null when off. The first style is the default and can't be deleted.
-    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, padding: 0, paddingSides: null, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerWidth: 4, pointerEnd: 'round' };
+    const NEW_STYLE = { font: 'National Park', weight: 400, size: 24, lineHeight: 1.2, letterSpacing: 0, zoomScale: 100, iconGap: 6, caps: false, color: '#000000', outline: null, outlineWidth: 2, shadow: null, padding: 0, paddingSides: null, background: null, corners: 'round', radius: 0, pointerLength: 18, pointerGap: 0, pointerWidth: 4, pointerEnd: 'round' };
     const labelStyles = [
       { id: 1, name: 'Label', ...NEW_STYLE },
       { ...NEW_STYLE, id: 2, name: 'Pill', font: 'National Park', weight: 600, caps: true, padding: 8, paddingSides: { top: 8, right: 16, bottom: 8, left: 16 }, background: '#f5be41', radius: 20 },
@@ -6595,10 +6602,14 @@
       // Sides have no curve, so this changes nothing there.
       const radius = style.background && style.corners !== 'square' ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
       const inset = style.corners === 'chamfer' ? radius / 2 : radius;
-      const startX = cornerX - dx * inset;
-      const startY = cornerY - dy * inset;
-      const endX = startX + (dx / unit) * (inset + length);
-      const endY = startY + (dy / unit) * (inset + length);
+      const fromX = cornerX - dx * inset;
+      const fromY = cornerY - dy * inset;
+      // Past a gap, the line starts clear of the box instead of inside it.
+      const gap = style.pointerGap ?? 0;
+      const startX = gap ? fromX + (dx / unit) * (inset + gap) : fromX;
+      const startY = gap ? fromY + (dy / unit) * (inset + gap) : fromY;
+      const endX = fromX + (dx / unit) * (inset + gap + length);
+      const endY = fromY + (dy / unit) * (inset + gap + length);
       return { startX, startY, endX, endY };
     }
     function drawPointer(label, style, zoom) {
@@ -6610,13 +6621,15 @@
       if (box !== frame) {
         const radius = style.background && style.corners !== 'square' ? Math.min(style.radius, box.w / 2, box.h / 2) : 0;
         const inset = style.corners === 'chamfer' ? radius / 2 : radius;
-        startX = box.x + box.w / 2 + dx * (box.w / 2 - inset);
-        startY = box.y + box.h / 2 + dy * (box.h / 2 - inset);
+        const gap = style.pointerGap ?? 0;
+        const unit = Math.hypot(dx, dy);
+        startX = box.x + box.w / 2 + dx * (box.w / 2 - inset) + (gap ? (dx / unit) * (inset + gap) : 0);
+        startY = box.y + box.h / 2 + dy * (box.h / 2 - inset) + (gap ? (dy / unit) * (inset + gap) : 0);
       }
       const lineWidth = style.pointerWidth;
       // The line's cap and sides would bulge past the box's edges
       // where it leaves the box, so with a box the line reaches deeper inside.
-      const hidden = style.background ? lineWidth / 2 : 0;
+      const hidden = style.background && !style.pointerGap ? lineWidth / 2 : 0;
       ctx.save();
       ctx.strokeStyle = style.background ? style.outline ?? style.background : style.color;
       ctx.lineWidth = lineWidth;

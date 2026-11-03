@@ -1580,6 +1580,14 @@
       </button>
       </div>
       <div id="tool-menu" class="menu-card">
+      <div id="location-tools" hidden>
+        <button type="button" data-location-tool="select" aria-label="Select" aria-pressed="true">
+          <span class="material-symbols-rounded">arrow_selector_tool</span>
+        </button>
+        <button type="button" data-location-tool="add" aria-label="Add circle" aria-pressed="false">
+          <span class="material-symbols-rounded">add_circle</span>
+        </button>
+      </div>
       <div id="label-tools" hidden>
         <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
@@ -2702,6 +2710,21 @@
         }
       });
     }
+    // Location's tools: the cursor, which drags the map and satellite, and Add circle.
+    const locationTools = document.getElementById('location-tools');
+    const locationToolButtons = document.querySelectorAll('[data-location-tool]');
+    let locationTool = 'select';
+    function setLocationTool(name) {
+      locationTool = name;
+      for (const button of locationToolButtons) button.setAttribute('aria-pressed', button.dataset.locationTool === name);
+      updateCursor();
+    }
+    for (const button of locationToolButtons) {
+      button.addEventListener('click', () => {
+        setLocationTool(button.dataset.locationTool);
+        button.blur();
+      });
+    }
     const backgroundTools = document.getElementById('background-tools');
     const backgroundToolButtons = document.querySelectorAll('[data-background-tool]');
     const shapeMenu = document.getElementById('shape-menu');
@@ -2981,6 +3004,8 @@
       pathTools.hidden = mode !== 'path';
       labelTools.hidden = mode !== 'labels';
       backgroundTools.hidden = mode !== 'background';
+      if (mode === 'location' && locationTools.hidden) setLocationTool('select');
+      locationTools.hidden = mode !== 'location';
       if (enteringLabels) setLabelTool('select');
       if (mode !== 'background') {
         setBackgroundTool('select');
@@ -8356,7 +8381,8 @@
     }
 
     function updateCursor() {
-      if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
+      else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8518,6 +8544,8 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
+      // Add circle places nothing yet, so its clicks do nothing.
+      if (inLocation() && locationTool === 'add' && !spaceHeld) return;
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         if (inLocation() && !spaceHeld) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));

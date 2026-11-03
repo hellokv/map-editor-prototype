@@ -4244,7 +4244,15 @@
         return;
       }
       if (locationPart) {
-        if (locationPart === 'paths') drawPaths();
+        if (locationPart === 'paths') {
+          drawPaths();
+          // The paths' own lines, as Path mode draws them, one on-screen width at any zoom.
+          ctx.strokeStyle = colorOf(pathColor);
+          ctx.lineWidth = 2 / view.scale;
+          ctx.beginPath();
+          for (const path of paths) path.segments.forEach(traceSegment);
+          ctx.stroke();
+        }
         return;
       }
       if (pathTools.hidden) {

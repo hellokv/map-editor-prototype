@@ -4281,15 +4281,17 @@
     meshBorder.addEventListener('input', () => draw());
     // The mesh is a lattice of nodes in its own frame: centred on the map,
     // unturned. Its lines are those through nodes 1 to count, and the lattice
-    // runs on past the map's edges so a turned mesh still covers it. A node
-    // pulled with the Pull mesh tool keeps its offset here, until the count
-    // changes.
+    // runs on past the map's edges so a turned mesh still covers it. Nodes
+    // moved with the Pull mesh tool keep their offsets here, and each pull its
+    // start and end, until the count changes.
     const meshOffsets = new Map();
+    const meshPulls = [];
     let meshOffsetsCount = null;
     function meshLattice() {
       const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
       if (count !== meshOffsetsCount) {
         meshOffsets.clear();
+        meshPulls.length = 0;
         meshOffsetsCount = count;
       }
       const reach = Math.hypot(board.w, board.h) / 2;
@@ -4315,39 +4317,42 @@
       const t = meshTurn();
       return { x: board.w / 2 + q.x * Math.cos(t) - q.y * Math.sin(t), y: board.h / 2 + q.x * Math.sin(t) + q.y * Math.cos(t) };
     }
-    // The crossing of two mesh lines near screen point s, as [i, j].
-    function meshNodeAt(s) {
-      if (!meshOn.checked) return null;
-      const { count, node } = meshLattice();
-      let best = null;
-      let bestDistance = SELECTED_DOT_RADIUS * 1.5;
-      for (let i = 1; i <= count; i++) {
-        for (let j = 1; j <= count; j++) {
-          const q = toScreen(fromMesh(node(i, j)));
-          const d = Math.hypot(q.x - s.x, q.y - s.y);
-          if (d <= bestDistance) {
-            best = [i, j];
-            bestDistance = d;
-          }
-        }
-      }
-      return best;
+    // Whether the mesh can be grabbed at screen point s: anywhere on the map.
+    function meshGrabbable(s) {
+      if (!meshOn.checked) return false;
+      const p = toBackground(s.x, s.y);
+      return p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h;
     }
-    // Pulls node [a, b] by (dx, dy) in the mesh's frame, and the sheet around
-    // it with it, less the further away: Rubber sets how far the pull spreads,
-    // from the node alone at 0 to about half the mesh at 100.
-    function pullMesh([a, b], dx, dy) {
-      const { count, from, to } = meshLattice();
-      const spread = ((Number(meshRubber.value) || 0) / 100) * (count / 2);
+    // How much of a pull from mesh point g each node takes, less the further
+    // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
+    // to about half the mesh at 100. Where earlier pulls ended, the sheet is
+    // pinned and takes none, unless the pull starts on that pin.
+    function meshPullShares(g) {
+      const { count, node, from, to } = meshLattice();
+      const step = Math.min(board.w, board.h) / (count + 1);
+      const spread = Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step;
+      // A pin holds the nodes round its cell still, and eases off past them.
+      const pin = step * 1.5;
+      const pins = meshPulls.filter(({ end }) => Math.hypot(end.x - g.x, end.y - g.y) > step / 3).map(({ end }) => end);
+      const hold = (d) => {
+        const t = Math.min(1, Math.max(0, (d - pin) / pin));
+        return t * t * (3 - 2 * t);
+      };
+      const shares = [];
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
-          const distanceSq = (i - a) ** 2 + (j - b) ** 2;
-          const share = distanceSq === 0 ? 1 : spread > 0 ? Math.exp(-distanceSq / (2 * spread * spread)) : 0;
-          if (share < 0.001) continue;
-          const key = `${i},${j}`;
-          const off = meshOffsets.get(key) ?? { x: 0, y: 0 };
-          meshOffsets.set(key, { x: off.x + dx * share, y: off.y + dy * share });
+          const n = node(i, j);
+          let share = Math.exp(-((n.x - g.x) ** 2 + (n.y - g.y) ** 2) / (2 * spread * spread));
+          for (const q of pins) share *= hold(Math.hypot(n.x - q.x, n.y - q.y));
+          if (share >= 0.001) shares.push([`${i},${j}`, share]);
         }
+      }
+      return { shares, pins };
+    }
+    function pullMesh(shares, dx, dy) {
+      for (const [key, share] of shares) {
+        const off = meshOffsets.get(key) ?? { x: 0, y: 0 };
+        meshOffsets.set(key, { x: off.x + dx * share, y: off.y + dy * share });
       }
     }
     // A smooth line through points, as a Catmull-Rom curve.
@@ -4386,6 +4391,22 @@
       ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = thickness / view.scale;
       ctx.stroke();
+      // Each pull: a dot where it started, dotted to where it ended.
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 1.5 / view.scale;
+      ctx.setLineDash([3 / view.scale, 3 / view.scale]);
+      for (const { start, end } of meshPulls) {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      for (const { start } of meshPulls) {
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, 4 / view.scale, 0, 2 * Math.PI);
+        ctx.fill();
+      }
       ctx.restore();
     }
     const locationPathColor = document.getElementById('location-path-color');
@@ -8556,7 +8577,7 @@
 
     function updateCursor() {
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
-      else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = drag?.meshNode ? 'grabbing' : pointer && meshNodeAt(pointer) ? 'grab' : '';
+      else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = drag?.meshPull ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8722,8 +8743,16 @@
       // Add circle places nothing yet, so its clicks do nothing.
       if (inLocation() && locationTool === 'add' && !spaceHeld) return;
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
-        const meshNode = meshNodeAt(s);
-        if (meshNode) drag = { meshNode, last: toMesh(toBackground(s.x, s.y)) };
+        if (meshGrabbable(s)) {
+          const at = toMesh(toBackground(s.x, s.y));
+          const { shares, pins } = meshPullShares(at);
+          // Starting on an earlier pull's end takes that pull up again.
+          const again = meshPulls.find(({ end }) => !pins.includes(end));
+          const meshPull = again ?? { start: at, end: at };
+          if (!again) meshPulls.push(meshPull);
+          drag = { meshPull, shares, last: at };
+          draw();
+        }
         updateCursor();
         return;
       }
@@ -8849,10 +8878,10 @@
         updateCursor();
         return;
       }
-      if (drag?.meshNode) {
+      if (drag?.meshPull) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
-        pullMesh(drag.meshNode, at.x - drag.last.x, at.y - drag.last.y);
-        drag.last = at;
+        pullMesh(drag.shares, at.x - drag.last.x, at.y - drag.last.y);
+        drag.meshPull.end = drag.last = at;
         draw();
         return;
       }
@@ -8977,7 +9006,7 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      if (drag.meshNode) {
+      if (drag.meshPull) {
         drag = null;
         updateCursor();
         return;

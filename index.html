@@ -4201,6 +4201,29 @@
         draw();
       });
     }
+    // Location lets the paths' nodes be moved without moving them on the map:
+    // its positions for points and bend controls are kept here, and swapped
+    // in only while fn draws or drags in Location.
+    const locationEdits = new Map();
+    function inLocationGeometry(fn) {
+      const parts = paths.flatMap((path) => [...path.points, ...path.segments.flatMap(([, , ...controls]) => controls)]);
+      const real = new Map(parts.map((part) => [part, { x: part.x, y: part.y }]));
+      for (const [part, at] of locationEdits) Object.assign(part, at);
+      try {
+        return fn();
+      } finally {
+        for (const part of parts) {
+          const { x, y } = real.get(part);
+          if (part.x !== x || part.y !== y) locationEdits.set(part, { x: part.x, y: part.y });
+          Object.assign(part, real.get(part));
+        }
+      }
+    }
+    // The node under screen point s in Location, while the paths show there.
+    function locationNodeAt(s) {
+      if (!(Number(locationInputs.paths.value) > 0)) return null;
+      return inLocationGeometry(() => nearestPoint(s.x, s.y, SELECTED_DOT_RADIUS)?.point ?? null);
+    }
     // Where the satellite view has been dragged to, from the map's centre, in map units.
     const satelliteOffset = { x: 0, y: 0 };
     const satelliteScale = () => (Number(document.getElementById('satellite-scale').value) || 100) / 100;
@@ -4321,14 +4344,25 @@
       }
       if (locationPart) {
         if (locationPart === 'paths') {
-          drawPaths();
           // The paths' own lines, one on-screen width at any zoom, in
           // Location's own path color; the map's paths keep theirs.
-          ctx.strokeStyle = colorOf(locationPathColor);
-          ctx.lineWidth = 2 / view.scale;
-          ctx.beginPath();
-          for (const path of paths) path.segments.forEach(traceSegment);
-          ctx.stroke();
+          inLocationGeometry(() => {
+            drawPaths();
+            ctx.strokeStyle = colorOf(locationPathColor);
+            ctx.lineWidth = 2 / view.scale;
+            ctx.beginPath();
+            for (const path of paths) path.segments.forEach(traceSegment);
+            ctx.stroke();
+            // The paths' nodes, which can be dragged here.
+            ctx.fillStyle = colorOf(locationPathColor);
+            for (const path of paths) {
+              for (const point of path.points) {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, DOT_RADIUS / view.scale, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          });
         }
         return;
       }
@@ -8382,6 +8416,7 @@
 
     function updateCursor() {
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
+      else if (inLocation() && !spaceHeld && (drag?.locationNode || (!drag && pointer && locationNodeAt(pointer)))) canvas.style.cursor = 'move';
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8546,6 +8581,13 @@
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
       // Add circle places nothing yet, so its clicks do nothing.
       if (inLocation() && locationTool === 'add' && !spaceHeld) return;
+      const node = inLocation() && !spaceHeld && locationNodeAt(s);
+      if (node) {
+        const at = locationEdits.get(node) ?? node;
+        const p = toBackground(s.x, s.y);
+        drag = { locationNode: node, dx: at.x - p.x, dy: at.y - p.y };
+        return;
+      }
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         if (inLocation() && !spaceHeld) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
@@ -8666,6 +8708,16 @@
         shapePointerMove(e);
         draw();
         updateCursor();
+        return;
+      }
+      if (drag?.locationNode) {
+        const p = toBackground(pointer.x, pointer.y);
+        const node = drag.locationNode;
+        inLocationGeometry(() => keepingBends(new Set([node]), () => {
+          node.x = p.x + drag.dx;
+          node.y = p.y + drag.dy;
+        }));
+        draw();
         return;
       }
       if (drag?.point) {
@@ -8789,6 +8841,11 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.locationNode) {
+        drag = null;
+        updateCursor();
+        return;
+      }
       if (drag.shapes) {
         shapePointerUp();
         draw();

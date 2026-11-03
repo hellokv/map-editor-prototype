@@ -4159,6 +4159,9 @@
         draw();
       });
     }
+    // Made from the demo map's background, so it lines up with that one only.
+    const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
+    satellite.addEventListener('load', () => { if (inLocation()) draw(); });
     const locationLayers = { background: document.createElement('canvas'), paths: document.createElement('canvas') };
     // The part of the map being painted, while it's painted.
     let locationPart = null;
@@ -4175,6 +4178,13 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = colorOf(canvasColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      // The satellite view, under everything: twice the map's box each way,
+      // with the box in its middle.
+      if (satellite.complete && satellite.naturalWidth) {
+        ctx.translate(view.x, view.y);
+        ctx.scale(view.scale, view.scale);
+        ctx.drawImage(satellite, -board.w / 2, -board.h / 2, board.w * 2, board.h * 2);
+      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       for (const [part, layer] of Object.entries(locationLayers)) {
         ctx.globalAlpha = Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100;

@@ -2245,6 +2245,12 @@
           <span class="slider"><span class="percent-field"><input id="location-paths" type="number" min="0" max="100" step="1" value="100"></span><input type="range" min="0" max="100" step="1" value="100" aria-label="Paths opacity"></span>
         </label>
       </div>
+      <div class="label-section">
+        <label class="field">
+          Path Color
+          <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+      </div>
     </div>
     <div id="preview-panel" hidden>
       <div class="label-section">
@@ -4162,6 +4168,8 @@
     // Made from the demo map's background, so it lines up with that one only.
     const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
+    const locationPathColor = document.getElementById('location-path-color');
+    locationPathColor.addEventListener('input', () => draw());
     const locationLayers = { background: document.createElement('canvas'), paths: document.createElement('canvas') };
     // The part of the map being painted, while it's painted.
     let locationPart = null;
@@ -4256,8 +4264,9 @@
       if (locationPart) {
         if (locationPart === 'paths') {
           drawPaths();
-          // The paths' own lines, as Path mode draws them, one on-screen width at any zoom.
-          ctx.strokeStyle = colorOf(pathColor);
+          // The paths' own lines, one on-screen width at any zoom, in
+          // Location's own path color; the map's paths keep theirs.
+          ctx.strokeStyle = colorOf(locationPathColor);
           ctx.lineWidth = 2 / view.scale;
           ctx.beginPath();
           for (const path of paths) path.segments.forEach(traceSegment);

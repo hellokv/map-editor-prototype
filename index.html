@@ -2311,6 +2311,10 @@
           Path Color
           <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
+        <label class="field">
+          Polygon Color
+          <span class="color-field"><input id="polygon-color" type="color" value="#00ffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
       </div>
     </div>
     <div id="preview-panel" hidden>
@@ -4501,16 +4505,65 @@
       return inside;
     }
     const inMeshKeep = (p) => meshKeeps.some((points) => insidePolygon(p, points));
+    const polygonColor = document.getElementById('polygon-color');
+    polygonColor.closest('.color-field').addEventListener('input', () => draw());
+    // Where the Polygon tool puts a corner for screen point s: on a corner
+    // within reach, else on an edge within reach, else at s. Corners in
+    // `moving` are left out, so a dragged corner doesn't snap to itself.
+    function polygonSnap(s, moving = []) {
+      const corners = [...meshKeeps.flat(), ...(meshDrawing ?? [])].filter((q) => !moving.includes(q));
+      let best = null;
+      let bestDistance = 10;
+      for (const q of corners) {
+        const at = toScreen(q);
+        const d = Math.hypot(at.x - s.x, at.y - s.y);
+        if (d <= bestDistance) {
+          best = { x: q.x, y: q.y, corner: q };
+          bestDistance = d;
+        }
+      }
+      if (best) return best;
+      bestDistance = 8;
+      for (const points of meshKeeps) {
+        for (let k = 0; k < points.length; k++) {
+          const a = points[k];
+          const b = points[(k + 1) % points.length];
+          if (moving.includes(a) || moving.includes(b)) continue;
+          const sa = toScreen(a);
+          const sb = toScreen(b);
+          const length = (sb.x - sa.x) ** 2 + (sb.y - sa.y) ** 2;
+          if (!length) continue;
+          const t = Math.min(1, Math.max(0, ((s.x - sa.x) * (sb.x - sa.x) + (s.y - sa.y) * (sb.y - sa.y)) / length));
+          const d = Math.hypot(sa.x + (sb.x - sa.x) * t - s.x, sa.y + (sb.y - sa.y) * t - s.y);
+          if (d <= bestDistance) {
+            best = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+            bestDistance = d;
+          }
+        }
+      }
+      return best ?? toBackground(s.x, s.y);
+    }
+    // The closed polygons' corners at screen point s: the nearest, and any
+    // others in the same place, so joined polygons move together.
+    function polygonCornersAt(s) {
+      let nearest = null;
+      let bestDistance = 8;
+      for (const q of meshKeeps.flat()) {
+        const at = toScreen(q);
+        const d = Math.hypot(at.x - s.x, at.y - s.y);
+        if (d <= bestDistance) {
+          nearest = q;
+          bestDistance = d;
+        }
+      }
+      return nearest ? meshKeeps.flat().filter((q) => Math.hypot(q.x - nearest.x, q.y - nearest.y) < 1e-6) : [];
+    }
     // A click adds a corner; clicking the first corner again, or Enter, closes it.
     function addPolygonCorner(s) {
-      const p = toBackground(s.x, s.y);
-      if (!meshDrawing) {
-        meshDrawing = [p];
-        return;
-      }
-      const first = toScreen(meshDrawing[0]);
-      if (meshDrawing.length >= 3 && Math.hypot(first.x - s.x, first.y - s.y) <= 8) closePolygon();
-      else meshDrawing.push(p);
+      const { x, y, corner } = polygonSnap(s);
+      if (meshDrawing?.length >= 3 && corner === meshDrawing[0]) closePolygon();
+      else if (meshDrawing) meshDrawing.push({ x, y });
+      else meshDrawing = [{ x, y }];
     }
     function closePolygon() {
       if (meshDrawing?.length >= 3) meshKeeps.push(meshDrawing);
@@ -4524,24 +4577,29 @@
         out.closePath();
       }
     }
-    // Outlines in map coordinates, with ctx set to the view.
+    // Lightly filled outlines with a dot on each corner, in map coordinates,
+    // with ctx set to the view.
     function drawMeshKeeps() {
       const px = 1 / view.scale;
-      ctx.strokeStyle = colorOf(meshColor);
+      ctx.strokeStyle = colorOf(polygonColor);
       ctx.fillStyle = ctx.strokeStyle;
       ctx.lineWidth = 1.5 * px;
       traceMeshKeeps(ctx);
+      ctx.globalAlpha = 0.15;
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.stroke();
-      if (!meshDrawing) return;
-      ctx.beginPath();
-      ctx.moveTo(meshDrawing[0].x, meshDrawing[0].y);
-      for (const q of meshDrawing.slice(1)) ctx.lineTo(q.x, q.y);
-      if (pointer) {
-        const at = toBackground(pointer.x, pointer.y);
-        ctx.lineTo(at.x, at.y);
+      if (meshDrawing) {
+        ctx.beginPath();
+        ctx.moveTo(meshDrawing[0].x, meshDrawing[0].y);
+        for (const q of meshDrawing.slice(1)) ctx.lineTo(q.x, q.y);
+        if (pointer && !drag) {
+          const at = polygonSnap(pointer);
+          ctx.lineTo(at.x, at.y);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
-      for (const q of meshDrawing) {
+      for (const q of [...meshKeeps.flat(), ...(meshDrawing ?? [])]) {
         ctx.beginPath();
         ctx.arc(q.x, q.y, 3.5 * px, 0, 2 * Math.PI);
         ctx.fill();
@@ -8912,7 +8970,10 @@
     }
 
     function updateCursor() {
-      if (inLocation() && (locationTool === 'add' || locationTool === 'polygon') && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
+      if (inLocation() && locationTool === 'polygon' && !spaceHeld && !drag?.spacePan) {
+        canvas.style.cursor = drag?.polygonCorners ? 'grabbing' : pointer && !meshDrawing && polygonCornersAt(pointer).length ? 'grab' : 'crosshair';
+      }
+      else if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const hit = pointer && !drag && meshPullAt(pointer);
         canvas.style.cursor = drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
@@ -9082,8 +9143,12 @@
       // Add circle places nothing yet, so its clicks do nothing.
       if (inLocation() && locationTool === 'add' && !spaceHeld) return;
       if (inLocation() && locationTool === 'polygon' && !spaceHeld) {
-        addPolygonCorner(s);
+        // A press on a corner drags it; one that doesn't move starts a polygon there.
+        const polygonCorners = meshDrawing ? [] : polygonCornersAt(s);
+        if (polygonCorners.length) drag = { polygonCorners, from: s, moved: false };
+        else addPolygonCorner(s);
         draw();
+        updateCursor();
         return;
       }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
@@ -9234,6 +9299,15 @@
         draw();
         return;
       }
+      if (drag?.polygonCorners) {
+        drag.moved ||= Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
+        if (drag.moved) {
+          const at = polygonSnap(pointer, drag.polygonCorners);
+          for (const q of drag.polygonCorners) Object.assign(q, { x: at.x, y: at.y });
+        }
+        draw();
+        return;
+      }
       if (drag?.meshStart) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const pull = drag.meshStart;
@@ -9373,6 +9447,13 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.polygonCorners) {
+        if (!drag.moved) addPolygonCorner(drag.from);
+        drag = null;
+        draw();
+        updateCursor();
+        return;
+      }
       if (drag.meshPull || drag.meshStart) {
         drag = null;
         updateCursor();

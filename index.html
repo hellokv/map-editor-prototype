@@ -1584,6 +1584,9 @@
         <button type="button" data-location-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
+        <button type="button" data-location-tool="mesh" aria-label="Pull mesh" aria-pressed="false">
+          <span class="material-symbols-rounded">drag_pan</span>
+        </button>
         <button type="button" data-location-tool="add" aria-label="Add circle" aria-pressed="false">
           <span class="material-symbols-rounded">add_circle</span>
         </button>
@@ -2289,6 +2292,10 @@
           <label class="field">
             Rotation
             <span class="slider"><input id="mesh-rotation" type="number" min="-180" max="180" step="1" value="-15"><input type="range" min="-180" max="180" step="1" value="-15" aria-label="Mesh rotation"></span>
+          </label>
+          <label class="field">
+            Rubber
+            <span class="slider"><span class="percent-field"><input id="mesh-rubber" type="number" min="0" max="100" step="1" value="50"></span><input type="range" min="0" max="100" step="1" value="50" aria-label="Rubber strength"></span>
           </label>
         </div>
       </div>
@@ -4260,8 +4267,9 @@
     const meshThickness = document.getElementById('mesh-thickness');
     meshThickness.addEventListener('input', () => draw());
     const meshRotation = document.getElementById('mesh-rotation');
+    const meshRubber = document.getElementById('mesh-rubber');
     function showMeshFields() {
-      for (const input of [meshCount, meshColor, meshThickness, meshBorder, meshRotation]) input.closest('.field').hidden = !meshOn.checked;
+      for (const input of [meshCount, meshColor, meshThickness, meshBorder, meshRotation, meshRubber]) input.closest('.field').hidden = !meshOn.checked;
     }
     showMeshFields();
     meshOn.addEventListener('change', () => {
@@ -4271,23 +4279,104 @@
     });
     meshColor.addEventListener('input', () => draw());
     meshBorder.addEventListener('input', () => draw());
-    function drawMesh() {
+    // The mesh is a lattice of nodes in its own frame: centred on the map,
+    // unturned. Its lines are those through nodes 1 to count, and the lattice
+    // runs on past the map's edges so a turned mesh still covers it. A node
+    // pulled with the Pull mesh tool keeps its offset here, until the count
+    // changes.
+    const meshOffsets = new Map();
+    let meshOffsetsCount = null;
+    function meshLattice() {
       const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
+      if (count !== meshOffsetsCount) {
+        meshOffsets.clear();
+        meshOffsetsCount = count;
+      }
       const reach = Math.hypot(board.w, board.h) / 2;
+      const stepX = board.w / (count + 1);
+      const stepY = board.h / (count + 1);
+      const extraX = Math.ceil((reach - board.w / 2) / stepX) + 1;
+      const extraY = Math.ceil((reach - board.h / 2) / stepY) + 1;
+      const node = (i, j) => {
+        const off = meshOffsets.get(`${i},${j}`);
+        return { x: -board.w / 2 + i * stepX + (off?.x ?? 0), y: -board.h / 2 + j * stepY + (off?.y ?? 0) };
+      };
+      return { count, node, from: { i: -extraX, j: -extraY }, to: { i: count + 1 + extraX, j: count + 1 + extraY } };
+    }
+    const meshTurn = () => ((Number(meshRotation.value) || 0) * Math.PI) / 180;
+    // Between a map point and the mesh's own frame.
+    function toMesh(p) {
+      const t = -meshTurn();
+      const dx = p.x - board.w / 2;
+      const dy = p.y - board.h / 2;
+      return { x: dx * Math.cos(t) - dy * Math.sin(t), y: dx * Math.sin(t) + dy * Math.cos(t) };
+    }
+    function fromMesh(q) {
+      const t = meshTurn();
+      return { x: board.w / 2 + q.x * Math.cos(t) - q.y * Math.sin(t), y: board.h / 2 + q.x * Math.sin(t) + q.y * Math.cos(t) };
+    }
+    // The crossing of two mesh lines near screen point s, as [i, j].
+    function meshNodeAt(s) {
+      if (!meshOn.checked) return null;
+      const { count, node } = meshLattice();
+      let best = null;
+      let bestDistance = SELECTED_DOT_RADIUS * 1.5;
+      for (let i = 1; i <= count; i++) {
+        for (let j = 1; j <= count; j++) {
+          const q = toScreen(fromMesh(node(i, j)));
+          const d = Math.hypot(q.x - s.x, q.y - s.y);
+          if (d <= bestDistance) {
+            best = [i, j];
+            bestDistance = d;
+          }
+        }
+      }
+      return best;
+    }
+    // Pulls node [a, b] by (dx, dy) in the mesh's frame, and the sheet around
+    // it with it, less the further away: Rubber sets how far the pull spreads,
+    // from the node alone at 0 to about half the mesh at 100.
+    function pullMesh([a, b], dx, dy) {
+      const { count, from, to } = meshLattice();
+      const spread = ((Number(meshRubber.value) || 0) / 100) * (count / 2);
+      for (let i = from.i; i <= to.i; i++) {
+        for (let j = from.j; j <= to.j; j++) {
+          const distanceSq = (i - a) ** 2 + (j - b) ** 2;
+          const share = distanceSq === 0 ? 1 : spread > 0 ? Math.exp(-distanceSq / (2 * spread * spread)) : 0;
+          if (share < 0.001) continue;
+          const key = `${i},${j}`;
+          const off = meshOffsets.get(key) ?? { x: 0, y: 0 };
+          meshOffsets.set(key, { x: off.x + dx * share, y: off.y + dy * share });
+        }
+      }
+    }
+    // A smooth line through points, as a Catmull-Rom curve.
+    function traceThrough(points) {
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let k = 0; k < points.length - 1; k++) {
+        const p0 = points[Math.max(0, k - 1)];
+        const p1 = points[k];
+        const p2 = points[k + 1];
+        const p3 = points[Math.min(points.length - 1, k + 2)];
+        ctx.bezierCurveTo(p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6, p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6, p2.x, p2.y);
+      }
+    }
+    function drawMesh() {
+      const { count, node, from, to } = meshLattice();
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, board.w, board.h);
       ctx.clip();
       ctx.translate(board.w / 2, board.h / 2);
-      ctx.rotate(((Number(meshRotation.value) || 0) * Math.PI) / 180);
+      ctx.rotate(meshTurn());
       ctx.beginPath();
-      for (let i = 1; i <= count; i++) {
-        const x = -board.w / 2 + (board.w * i) / (count + 1);
-        const y = -board.h / 2 + (board.h * i) / (count + 1);
-        ctx.moveTo(x, -reach);
-        ctx.lineTo(x, reach);
-        ctx.moveTo(-reach, y);
-        ctx.lineTo(reach, y);
+      for (let k = 1; k <= count; k++) {
+        const down = [];
+        const across = [];
+        for (let j = from.j; j <= to.j; j++) down.push(node(k, j));
+        for (let i = from.i; i <= to.i; i++) across.push(node(i, k));
+        traceThrough(down);
+        traceThrough(across);
       }
       // Line thickness in screen pixels; the border is a pixel either side of it.
       const thickness = Math.max(0.1, Number(meshThickness.value) || 1);
@@ -8467,6 +8556,7 @@
 
     function updateCursor() {
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
+      else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = drag?.meshNode ? 'grabbing' : pointer && meshNodeAt(pointer) ? 'grab' : '';
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8631,6 +8721,12 @@
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
       // Add circle places nothing yet, so its clicks do nothing.
       if (inLocation() && locationTool === 'add' && !spaceHeld) return;
+      if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
+        const meshNode = meshNodeAt(s);
+        if (meshNode) drag = { meshNode, last: toMesh(toBackground(s.x, s.y)) };
+        updateCursor();
+        return;
+      }
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         if (inLocation() && !spaceHeld) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
@@ -8751,6 +8847,13 @@
         shapePointerMove(e);
         draw();
         updateCursor();
+        return;
+      }
+      if (drag?.meshNode) {
+        const at = toMesh(toBackground(pointer.x, pointer.y));
+        pullMesh(drag.meshNode, at.x - drag.last.x, at.y - drag.last.y);
+        drag.last = at;
+        draw();
         return;
       }
       if (drag?.point) {
@@ -8874,6 +8977,11 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.meshNode) {
+        drag = null;
+        updateCursor();
+        return;
+      }
       if (drag.shapes) {
         shapePointerUp();
         draw();

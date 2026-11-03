@@ -4283,15 +4283,17 @@
     // unturned. Its lines are those through nodes 1 to count, and the lattice
     // runs on past the map's edges so a turned mesh still covers it. Nodes
     // moved with the Pull mesh tool keep their offsets here, and each pull its
-    // start and end, until the count changes.
+    // start, end and what it moved each node by, until the count changes.
     const meshOffsets = new Map();
     const meshPulls = [];
+    let meshPullSelected = null;
     let meshOffsetsCount = null;
     function meshLattice() {
       const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
       if (count !== meshOffsetsCount) {
         meshOffsets.clear();
         meshPulls.length = 0;
+        meshPullSelected = null;
         meshOffsetsCount = count;
       }
       const reach = Math.hypot(board.w, board.h) / 2;
@@ -4325,15 +4327,15 @@
     }
     // How much of a pull from mesh point g each node takes, less the further
     // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
-    // to about half the mesh at 100. Where earlier pulls ended, the sheet is
-    // pinned and takes none, unless the pull starts on that pin.
-    function meshPullShares(g) {
+    // to about half the mesh at 100. Where other pulls ended, the sheet is
+    // pinned and takes none.
+    function meshPullShares(g, pull) {
       const { count, node, from, to } = meshLattice();
       const step = Math.min(board.w, board.h) / (count + 1);
       const spread = Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step;
       // A pin holds the nodes round its cell still, and eases off past them.
       const pin = step * 1.5;
-      const pins = meshPulls.filter(({ end }) => Math.hypot(end.x - g.x, end.y - g.y) > step / 3).map(({ end }) => end);
+      const pins = meshPulls.filter((other) => other !== pull).map(({ end }) => end);
       const hold = (d) => {
         const t = Math.min(1, Math.max(0, (d - pin) / pin));
         return t * t * (3 - 2 * t);
@@ -4347,13 +4349,36 @@
           if (share >= 0.001) shares.push([`${i},${j}`, share]);
         }
       }
-      return { shares, pins };
+      return shares;
     }
-    function pullMesh(shares, dx, dy) {
+    function moveMeshNode(key, dx, dy) {
+      const off = meshOffsets.get(key) ?? { x: 0, y: 0 };
+      meshOffsets.set(key, { x: off.x + dx, y: off.y + dy });
+    }
+    function pullMesh(pull, shares, dx, dy) {
       for (const [key, share] of shares) {
-        const off = meshOffsets.get(key) ?? { x: 0, y: 0 };
-        meshOffsets.set(key, { x: off.x + dx * share, y: off.y + dy * share });
+        moveMeshNode(key, dx * share, dy * share);
+        const moved = pull.moves.get(key) ?? { x: 0, y: 0 };
+        pull.moves.set(key, { x: moved.x + dx * share, y: moved.y + dy * share });
       }
+    }
+    function deleteMeshPull(pull) {
+      for (const [key, moved] of pull.moves) moveMeshNode(key, -moved.x, -moved.y);
+      meshPulls.splice(meshPulls.indexOf(pull), 1);
+      if (meshPullSelected === pull) meshPullSelected = null;
+    }
+    // The pull whose arrow or start dot is at screen point s.
+    function meshPullAt(s) {
+      if (!meshOn.checked) return null;
+      const near = (q, reach) => {
+        const p = toScreen(fromMesh(q));
+        return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
+      };
+      for (const pull of [...meshPulls].reverse()) {
+        if (near(pull.end, 10)) return { pull, part: 'end' };
+        if (near(pull.start, 8)) return { pull, part: 'start' };
+      }
+      return null;
     }
     // A smooth line through points, as a Catmull-Rom curve.
     function traceThrough(points) {
@@ -4391,21 +4416,40 @@
       ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = thickness / view.scale;
       ctx.stroke();
-      // Each pull: a dot where it started, dotted to where it ended.
+      // Each pull: a dot where it started, dotted to an arrow where it ended.
+      const px = 1 / view.scale;
+      const arrow = 10 * px;
       ctx.fillStyle = ctx.strokeStyle;
-      ctx.lineWidth = 1.5 / view.scale;
-      ctx.setLineDash([3 / view.scale, 3 / view.scale]);
+      ctx.lineWidth = 1.5 * px;
       for (const { start, end } of meshPulls) {
+        const length = Math.hypot(end.x - start.x, end.y - start.y);
+        if (length < px) continue;
+        const ux = (end.x - start.x) / length;
+        const uy = (end.y - start.y) / length;
+        const base = Math.max(0, length - arrow);
+        ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
         ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
+        ctx.lineTo(start.x + ux * base, start.y + uy * base);
         ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      for (const { start } of meshPulls) {
+        ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(start.x, start.y, 4 / view.scale, 0, 2 * Math.PI);
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(end.x - ux * arrow - uy * arrow * 0.5, end.y - uy * arrow + ux * arrow * 0.5);
+        ctx.lineTo(end.x - ux * arrow + uy * arrow * 0.5, end.y - uy * arrow - ux * arrow * 0.5);
+        ctx.closePath();
         ctx.fill();
+      }
+      for (const pull of meshPulls) {
+        ctx.beginPath();
+        ctx.arc(pull.start.x, pull.start.y, (pull === meshPullSelected ? 5 : 4) * px, 0, 2 * Math.PI);
+        ctx.fill();
+        if (pull === meshPullSelected) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2 * px;
+          ctx.stroke();
+          ctx.strokeStyle = colorOf(meshColor);
+        }
       }
       ctx.restore();
     }
@@ -8221,6 +8265,16 @@
     bindFigureInput(sketchRadius, (fill) => { fill.radius = Math.max(0, Number(sketchRadius.value) || 0); });
     sketchStripeFields.bindEach(bindFigureInput, (fill, stripes) => { fill.stripes = stripes; });
 
+    document.addEventListener('keydown', (e) => {
+      if (!meshPullSelected || !inLocation() || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        deleteMeshPull(meshPullSelected);
+        draw();
+      }
+    }, true);
+
     let copiedShapes = [];
     let shapePasteCount = 0;
     document.addEventListener('keydown', (e) => {
@@ -8577,7 +8631,10 @@
 
     function updateCursor() {
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
-      else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = drag?.meshPull ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+      else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
+        const hit = pointer && !drag && meshPullAt(pointer);
+        canvas.style.cursor = drag?.meshPull ? 'grabbing' : hit?.part === 'start' ? 'pointer' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+      }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8743,16 +8800,23 @@
       // Add circle places nothing yet, so its clicks do nothing.
       if (inLocation() && locationTool === 'add' && !spaceHeld) return;
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
-        if (meshGrabbable(s)) {
+        const hit = meshPullAt(s);
+        if (hit?.part === 'start') {
+          meshPullSelected = hit.pull;
+        } else if (hit) {
+          // Dragging an arrow takes its pull up again from where it ended.
+          meshPullSelected = null;
+          drag = { meshPull: hit.pull, shares: meshPullShares(hit.pull.end, hit.pull), last: toMesh(toBackground(s.x, s.y)) };
+        } else if (meshGrabbable(s)) {
+          meshPullSelected = null;
           const at = toMesh(toBackground(s.x, s.y));
-          const { shares, pins } = meshPullShares(at);
-          // Starting on an earlier pull's end takes that pull up again.
-          const again = meshPulls.find(({ end }) => !pins.includes(end));
-          const meshPull = again ?? { start: at, end: at };
-          if (!again) meshPulls.push(meshPull);
-          drag = { meshPull, shares, last: at };
-          draw();
+          const meshPull = { start: at, end: at, moves: new Map() };
+          meshPulls.push(meshPull);
+          drag = { meshPull, shares: meshPullShares(at, meshPull), last: at };
+        } else {
+          meshPullSelected = null;
         }
+        draw();
         updateCursor();
         return;
       }
@@ -8880,8 +8944,10 @@
       }
       if (drag?.meshPull) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
-        pullMesh(drag.shares, at.x - drag.last.x, at.y - drag.last.y);
-        drag.meshPull.end = drag.last = at;
+        const { end } = drag.meshPull;
+        pullMesh(drag.meshPull, drag.shares, at.x - drag.last.x, at.y - drag.last.y);
+        drag.meshPull.end = { x: end.x + at.x - drag.last.x, y: end.y + at.y - drag.last.y };
+        drag.last = at;
         draw();
         return;
       }

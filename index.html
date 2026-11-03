@@ -438,13 +438,23 @@
       border-radius: 6px;
       font: inherit;
     }
-    /* Floating menus over the map: white, rounded, shadowed, the selected
-       button black like the panels'. */
-    #mode-menu,
-    #shape-menu {
+    /* The modes and, below them, the mode's tools, each a floating menu. */
+    #mode-menu {
       position: absolute;
       top: 8px;
       left: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* Preview has no tools, so no tools menu. */
+    #mode-menu #tool-menu:not(:has(> :not([hidden]))) {
+      display: none;
+    }
+    /* Floating menus over the map: white, rounded, shadowed, the selected
+       button black like the panels'. */
+    #mode-menu .menu-card,
+    #shape-menu {
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -452,6 +462,11 @@
       background: #fff;
       border-radius: 8px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+    }
+    #shape-menu {
+      position: absolute;
+      top: 8px;
+      left: 8px;
     }
     #mode-menu button,
     #shape-menu button {
@@ -471,12 +486,6 @@
     #shape-menu button[aria-pressed="true"] {
       background: #000;
       color: #fff;
-    }
-    #mode-menu hr {
-      align-self: stretch;
-      margin: 2px 2px;
-      border: none;
-      border-top: 1px solid #dcd8d3;
     }
     :is(#panel, #style-panel) {
       flex: none;
@@ -1548,6 +1557,7 @@
       <button id="list-no" type="button">No</button>
     </div>
     <div id="mode-menu">
+      <div class="menu-card">
       <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
         <span class="material-symbols-rounded">label</span>
       </button>
@@ -1560,8 +1570,9 @@
       <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
         <span class="material-symbols-rounded">responsive_layout</span>
       </button>
+      </div>
+      <div id="tool-menu" class="menu-card">
       <div id="label-tools" hidden>
-        <hr>
         <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
@@ -1580,7 +1591,6 @@
         <input id="place-image" type="file" accept="image/*" hidden>
       </div>
       <div id="background-tools" hidden>
-        <hr>
         <button type="button" data-background-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
@@ -1596,13 +1606,13 @@
 
       </div>
       <div id="path-tools">
-        <hr>
         <button type="button" data-tool="select" aria-label="Select" aria-pressed="false">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
         <button type="button" data-tool="add" aria-label="Add path" aria-pressed="true">
           <span class="material-symbols-rounded">add_circle</span>
         </button>
+      </div>
       </div>
     </div>
     <div id="tooltip" hidden></div>

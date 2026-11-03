@@ -4386,8 +4386,19 @@
         pull.moves.set(key, { x: moved.x + dx * share, y: moved.y + dy * share });
       }
     }
-    function deleteMeshPull(pull) {
+    function undoMeshPull(pull) {
       for (const [key, moved] of pull.moves) moveMeshNode(key, -moved.x, -moved.y);
+      pull.moves.clear();
+    }
+    // Pulls again from a start dot that's been moved, to the same end. Other
+    // pulls aren't tugged, as this redoes the pull rather than adding to it.
+    function redoMeshPull(pull) {
+      undoMeshPull(pull);
+      const { shares } = meshPullShares(pull.start, pull);
+      pullMesh(pull, { shares, tugs: [] }, pull.end.x - pull.start.x, pull.end.y - pull.start.y);
+    }
+    function deleteMeshPull(pull) {
+      undoMeshPull(pull);
       meshPulls.splice(meshPulls.indexOf(pull), 1);
       if (meshPullSelected === pull) meshPullSelected = null;
     }
@@ -8904,7 +8915,7 @@
       if (inLocation() && (locationTool === 'add' || locationTool === 'polygon') && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const hit = pointer && !drag && meshPullAt(pointer);
-        canvas.style.cursor = drag?.meshPull ? 'grabbing' : hit?.part === 'start' ? 'pointer' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+        canvas.style.cursor = drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9079,6 +9090,7 @@
         const hit = meshPullAt(s);
         if (hit?.part === 'start') {
           meshPullSelected = hit.pull;
+          drag = { meshStart: hit.pull, last: toMesh(toBackground(s.x, s.y)) };
         } else if (hit) {
           // Dragging an arrow takes its pull up again from where it ended.
           meshPullSelected = null;
@@ -9222,6 +9234,15 @@
         draw();
         return;
       }
+      if (drag?.meshStart) {
+        const at = toMesh(toBackground(pointer.x, pointer.y));
+        const pull = drag.meshStart;
+        pull.start = { x: pull.start.x + at.x - drag.last.x, y: pull.start.y + at.y - drag.last.y };
+        drag.last = at;
+        redoMeshPull(pull);
+        draw();
+        return;
+      }
       if (drag?.meshPull) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const { end } = drag.meshPull;
@@ -9352,7 +9373,7 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
-      if (drag.meshPull) {
+      if (drag.meshPull || drag.meshStart) {
         drag = null;
         updateCursor();
         return;

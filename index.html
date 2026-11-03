@@ -1587,7 +1587,7 @@
         <button type="button" data-location-tool="mesh" aria-label="Pull mesh" aria-pressed="false">
           <span class="material-symbols-rounded">drag_pan</span>
         </button>
-        <button type="button" data-location-tool="add" aria-label="Add circle" aria-pressed="false">
+        <button type="button" data-location-tool="add" aria-label="Circle" aria-pressed="false">
           <span class="material-symbols-rounded">add_circle</span>
         </button>
         <button type="button" data-location-tool="polygon" aria-label="Polygon" aria-pressed="false">
@@ -4301,6 +4301,7 @@
     // start, end and what it moved each node by, until the count changes.
     const meshOffsets = new Map();
     const meshPulls = [];
+    const meshCircles = [];
     let meshPullSelected = null;
     let meshOffsetsCount = null;
     function meshLattice() {
@@ -4308,6 +4309,7 @@
       if (count !== meshOffsetsCount) {
         meshOffsets.clear();
         meshPulls.length = 0;
+        meshCircles.length = 0;
         meshPullSelected = null;
         meshOffsetsCount = count;
       }
@@ -4343,6 +4345,10 @@
       const p = toBackground(s.x, s.y);
       return p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h;
     }
+    function meshReach(count) {
+      const step = Math.min(board.w, board.h) / (count + 1);
+      return { step, spread: Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step };
+    }
     // How much of a pull from mesh point g each node takes, less the further
     // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
     // to about half the mesh at 100. Where other pulls ended, the sheet is
@@ -4350,8 +4356,7 @@
     // along a little, more the closer they are.
     function meshPullShares(g, pull) {
       const { count, node, from, to } = meshLattice();
-      const step = Math.min(board.w, board.h) / (count + 1);
-      const spread = Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step;
+      const { step, spread } = meshReach(count);
       // A pin holds the nodes round its cell still, and eases off past them.
       const pin = step * 1.5;
       const others = meshPulls.filter((other) => other !== pull);
@@ -4405,6 +4410,44 @@
       undoMeshPull(pull);
       meshPulls.splice(meshPulls.indexOf(pull), 1);
       if (meshPullSelected === pull) meshPullSelected = null;
+    }
+    // Circles drawn with the Circle tool, in the mesh's frame. Dragging from a
+    // circle's edge to a dot scales the mesh about its centre by how far the
+    // dot is from it against where the edge was taken: all of it inside the circle, less
+    // and less outside it as Rubber spreads it, none inside polygons.
+    function scaleMeshCircle(circle) {
+      for (const [key, moved] of circle.moves) moveMeshNode(key, -moved.x, -moved.y);
+      circle.moves.clear();
+      if (!circle.to) return;
+      const { c, r } = circle;
+      const k = Math.hypot(circle.to.x - c.x, circle.to.y - c.y) / Math.max(1e-6, Math.hypot(circle.from.x - c.x, circle.from.y - c.y));
+      const { count, node, from, to } = meshLattice();
+      const { spread } = meshReach(count);
+      for (let i = from.i; i <= to.i; i++) {
+        for (let j = from.j; j <= to.j; j++) {
+          const n = node(i, j);
+          if (inMeshKeep(fromMesh(n))) continue;
+          const d = Math.hypot(n.x - c.x, n.y - c.y);
+          const share = d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread));
+          if (share < 0.001) continue;
+          const moved = { x: (k - 1) * (n.x - c.x) * share, y: (k - 1) * (n.y - c.y) * share };
+          circle.moves.set(`${i},${j}`, moved);
+        }
+      }
+      for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
+    }
+    // The circle whose dot or edge is at screen point s.
+    function meshCircleAt(s) {
+      if (!meshOn.checked) return null;
+      for (const circle of [...meshCircles].reverse()) {
+        if (circle.to) {
+          const dot = toScreen(fromMesh(circle.to));
+          if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
+        }
+        const centre = toScreen(fromMesh(circle.c));
+        if (Math.abs(Math.hypot(centre.x - s.x, centre.y - s.y) - circle.r * view.scale) <= 6) return { circle, part: 'edge' };
+      }
+      return null;
     }
     // The pull whose arrow or start dot is at screen point s.
     function meshPullAt(s) {
@@ -4489,6 +4532,29 @@
           ctx.stroke();
           ctx.strokeStyle = colorOf(meshColor);
         }
+      }
+      // Each circle, with the circle it's scaled to ghosted, and a dashed
+      // line from where its edge was taken to the dot it was dropped at.
+      for (const { c, r, from: edge, to } of meshCircles) {
+        ctx.lineWidth = 1.5 * px;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+        ctx.stroke();
+        if (!to) continue;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, (r * Math.hypot(to.x - c.x, to.y - c.y)) / Math.max(1e-6, Math.hypot(edge.x - c.x, edge.y - c.y)), 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([3 * px, 3 * px]);
+        ctx.beginPath();
+        ctx.moveTo(edge.x, edge.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(to.x, to.y, 4 * px, 0, 2 * Math.PI);
+        ctx.fill();
       }
       ctx.restore();
     }
@@ -8973,7 +9039,9 @@
       if (inLocation() && locationTool === 'polygon' && !spaceHeld && !drag?.spacePan) {
         canvas.style.cursor = drag?.polygonCorners ? 'grabbing' : pointer && !meshDrawing && polygonCornersAt(pointer).length ? 'grab' : 'crosshair';
       }
-      else if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
+      else if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
+        canvas.style.cursor = drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
+      }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const hit = pointer && !drag && meshPullAt(pointer);
         canvas.style.cursor = drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
@@ -9140,8 +9208,26 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      // Add circle places nothing yet, so its clicks do nothing.
-      if (inLocation() && locationTool === 'add' && !spaceHeld) return;
+      // The Circle tool: a press on a circle's edge or dot scales the mesh by
+      // it; anywhere else on the map, a drag draws a new circle.
+      if (inLocation() && locationTool === 'add' && !spaceHeld) {
+        const at = toMesh(toBackground(s.x, s.y));
+        const hit = meshCircleAt(s);
+        if (hit?.part === 'edge') {
+          hit.circle.from = at;
+          hit.circle.to = at;
+          drag = { meshCircle: hit.circle, part: 'edge' };
+        } else if (hit) {
+          drag = { meshCircle: hit.circle, part: 'dot' };
+        } else if (meshGrabbable(s)) {
+          const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
+          meshCircles.push(meshCircle);
+          drag = { meshCircle, part: 'new' };
+        }
+        draw();
+        updateCursor();
+        return;
+      }
       if (inLocation() && locationTool === 'polygon' && !spaceHeld) {
         // A press on a corner drags it; one that doesn't move starts a polygon there.
         const polygonCorners = meshDrawing ? [] : polygonCornersAt(s);
@@ -9299,6 +9385,17 @@
         draw();
         return;
       }
+      if (drag?.meshCircle) {
+        const at = toMesh(toBackground(pointer.x, pointer.y));
+        const circle = drag.meshCircle;
+        if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
+        else {
+          circle.to = at;
+          scaleMeshCircle(circle);
+        }
+        draw();
+        return;
+      }
       if (drag?.polygonCorners) {
         drag.moved ||= Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         if (drag.moved) {
@@ -9447,6 +9544,15 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.meshCircle) {
+        const circle = drag.meshCircle;
+        // Too small to see, so taken as a click rather than a circle.
+        if (drag.part === 'new' && circle.r * view.scale < 4) meshCircles.splice(meshCircles.indexOf(circle), 1);
+        drag = null;
+        draw();
+        updateCursor();
+        return;
+      }
       if (drag.polygonCorners) {
         if (!drag.moved) addPolygonCorner(drag.from);
         drag = null;

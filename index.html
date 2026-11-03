@@ -1327,6 +1327,11 @@
       grid-template-columns: 44px minmax(60px, 130px);
       gap: 12px;
     }
+    /* Location's sliders are all one width, so their numbers line up too. */
+    #location-panel .field .slider {
+      flex: none;
+      grid-template-columns: 44px 110px;
+    }
     :is(#panel, #style-panel) .field .slider input[type="number"] {
       appearance: textfield;
       text-align: left;
@@ -2230,14 +2235,14 @@
     </div>
     <div id="location-panel" hidden>
       <div class="label-section">
-        <div class="section-heading">Transparency</div>
+        <div class="section-heading">Opacity</div>
         <label class="field">
           Background
-          <span class="slider"><span class="percent-field"><input id="location-background" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Background transparency"></span>
+          <span class="slider"><span class="percent-field"><input id="location-background" type="number" min="0" max="100" step="1" value="100"></span><input type="range" min="0" max="100" step="1" value="100" aria-label="Background opacity"></span>
         </label>
         <label class="field">
           Paths
-          <span class="slider"><span class="percent-field"><input id="location-paths" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Paths transparency"></span>
+          <span class="slider"><span class="percent-field"><input id="location-paths" type="number" min="0" max="100" step="1" value="100"></span><input type="range" min="0" max="100" step="1" value="100" aria-label="Paths opacity"></span>
         </label>
       </div>
     </div>
@@ -4137,8 +4142,8 @@
       layoutStack();
     }
 
-    // Location mode shows the map's background and its paths, each as see-
-    // through as its slider says, without labels. Each is painted on the
+    // Location mode shows the map's background and its paths, each as
+    // opaque as its slider says, without labels. Each is painted on the
     // canvas on its own, copied aside, and then laid back down faded.
     function inLocation() { return !document.getElementById('location-panel').hidden; }
     const locationInputs = { background: document.getElementById('location-background'), paths: document.getElementById('location-paths') };
@@ -4172,7 +4177,7 @@
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       for (const [part, layer] of Object.entries(locationLayers)) {
-        ctx.globalAlpha = 1 - Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100;
+        ctx.globalAlpha = Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100;
         ctx.drawImage(layer, 0, 0);
       }
       ctx.globalAlpha = 1;

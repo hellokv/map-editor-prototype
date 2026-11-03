@@ -2271,8 +2271,16 @@
             <input id="mesh-on" class="switch" type="checkbox">
           </label>
           <label class="field">
-            Mesh Color
-            <span class="color-field"><input id="mesh-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Opacity">%</span>
+            Mesh Count
+            <span class="slider"><input id="mesh-count" type="number" min="1" max="100" step="1" value="10"><input type="range" min="1" max="40" step="1" value="10" aria-label="Mesh count"></span>
+          </label>
+          <label class="field">
+            Line Color
+            <span class="color-field"><input id="mesh-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="80" aria-label="Opacity">%</span>
+          </label>
+          <label class="field">
+            Border Color
+            <span class="color-field"><input id="mesh-border" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="40" aria-label="Opacity">%</span>
           </label>
           <label class="field">
             Rotation
@@ -4238,13 +4246,16 @@
     // Made from the demo map's background, so it lines up with that one only.
     const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
-    // A mesh over the map, about ten lines each way, turned about the map's centre.
-    const MESH_LINES = 10;
+    // A mesh over the map: its count of lines each way, evenly spaced inside
+    // the map's box with none on its edges, turned about the map's centre.
+    // Each line has a border either side, drawn as a wider line under it.
     const meshOn = document.getElementById('mesh-on');
+    const meshCount = document.getElementById('mesh-count');
     const meshColor = document.getElementById('mesh-color');
+    const meshBorder = document.getElementById('mesh-border');
     const meshRotation = document.getElementById('mesh-rotation');
     function showMeshFields() {
-      for (const input of [meshColor, meshRotation]) input.closest('.field').hidden = !meshOn.checked;
+      for (const input of [meshCount, meshColor, meshBorder, meshRotation]) input.closest('.field').hidden = !meshOn.checked;
     }
     showMeshFields();
     meshOn.addEventListener('change', () => {
@@ -4253,8 +4264,9 @@
       draw();
     });
     meshColor.addEventListener('input', () => draw());
+    meshBorder.addEventListener('input', () => draw());
     function drawMesh() {
-      const step = Math.max(board.w, board.h) / MESH_LINES;
+      const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
       const reach = Math.hypot(board.w, board.h) / 2;
       ctx.save();
       ctx.beginPath();
@@ -4262,15 +4274,20 @@
       ctx.clip();
       ctx.translate(board.w / 2, board.h / 2);
       ctx.rotate(((Number(meshRotation.value) || 0) * Math.PI) / 180);
+      ctx.beginPath();
+      for (let i = 1; i <= count; i++) {
+        const x = -board.w / 2 + (board.w * i) / (count + 1);
+        const y = -board.h / 2 + (board.h * i) / (count + 1);
+        ctx.moveTo(x, -reach);
+        ctx.lineTo(x, reach);
+        ctx.moveTo(-reach, y);
+        ctx.lineTo(reach, y);
+      }
+      ctx.strokeStyle = colorOf(meshBorder);
+      ctx.lineWidth = 3 / view.scale;
+      ctx.stroke();
       ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = 1 / view.scale;
-      ctx.beginPath();
-      for (let at = -Math.ceil(reach / step) * step; at <= reach; at += step) {
-        ctx.moveTo(at, -reach);
-        ctx.lineTo(at, reach);
-        ctx.moveTo(-reach, at);
-        ctx.lineTo(reach, at);
-      }
       ctx.stroke();
       ctx.restore();
     }

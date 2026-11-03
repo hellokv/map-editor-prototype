@@ -4455,6 +4455,7 @@
           if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
         }
         const centre = toScreen(fromMesh(circle.c));
+        if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
         if (Math.abs(Math.hypot(centre.x - s.x, centre.y - s.y) - circle.r * view.scale) <= 6) return { circle, part: 'edge' };
       }
       return null;
@@ -4557,6 +4558,9 @@
         }
         ctx.lineWidth = 1.5 * px;
         ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
+        ctx.fill();
         if (!to) continue;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
@@ -9237,7 +9241,7 @@
           // just selects the circle and keeps its scale.
           drag = { meshCircle: hit.circle, part: 'edge', at, from: s, moved: false };
         } else if (hit) {
-          drag = { meshCircle: hit.circle, part: 'dot' };
+          drag = { meshCircle: hit.circle, part: hit.part, last: at };
         } else if (meshGrabbable(s)) {
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
@@ -9409,6 +9413,14 @@
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const circle = drag.meshCircle;
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
+        else if (drag.part === 'centre') {
+          // The whole circle moves, and its scaling is redone where it lands.
+          const dx = at.x - drag.last.x;
+          const dy = at.y - drag.last.y;
+          drag.last = at;
+          for (const q of [circle.c, circle.from, circle.to]) if (q) Object.assign(q, { x: q.x + dx, y: q.y + dy });
+          scaleMeshCircle(circle);
+        }
         else if (drag.part === 'edge' && !drag.moved) {
           if (Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) <= 2) return;
           drag.moved = true;

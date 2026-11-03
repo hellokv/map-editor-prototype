@@ -2246,6 +2246,17 @@
         </label>
       </div>
       <div class="label-section">
+        <div class="section-heading">Satellite</div>
+        <label class="field">
+          Scale
+          <span class="slider"><span class="percent-field"><input id="satellite-scale" type="number" min="10" max="1000" step="1" value="100"></span><input type="range" min="25" max="400" step="1" value="100" aria-label="Satellite scale"></span>
+        </label>
+        <label class="field">
+          Rotation
+          <span class="slider"><input id="satellite-rotation" type="number" min="-180" max="180" step="1" value="0"><input type="range" min="-180" max="180" step="1" value="0" aria-label="Satellite rotation"></span>
+        </label>
+      </div>
+      <div class="label-section">
         <label class="field">
           Path Color
           <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
@@ -4153,8 +4164,8 @@
     // canvas on its own, copied aside, and then laid back down faded.
     function inLocation() { return !document.getElementById('location-panel').hidden; }
     const locationInputs = { background: document.getElementById('location-background'), paths: document.getElementById('location-paths') };
-    for (const input of Object.values(locationInputs)) {
-      const slider = input.closest('.slider').querySelector('input[type="range"]');
+    for (const slider of document.querySelectorAll('#location-panel .slider input[type="range"]')) {
+      const input = slider.closest('.slider').querySelector('input[type="number"]');
       slider.addEventListener('input', () => {
         input.value = slider.value;
         draw();
@@ -4187,11 +4198,16 @@
       ctx.fillStyle = colorOf(canvasColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       // The satellite view, under everything: twice the map's box each way,
-      // with the box in its middle.
+      // centred on the box, then scaled and turned about that centre.
       if (satellite.complete && satellite.naturalWidth) {
+        const scale = (Number(document.getElementById('satellite-scale').value) || 100) / 100;
+        const turn = ((Number(document.getElementById('satellite-rotation').value) || 0) * Math.PI) / 180;
         ctx.translate(view.x, view.y);
         ctx.scale(view.scale, view.scale);
-        ctx.drawImage(satellite, -board.w / 2, -board.h / 2, board.w * 2, board.h * 2);
+        ctx.translate(board.w / 2, board.h / 2);
+        ctx.rotate(turn);
+        ctx.scale(scale, scale);
+        ctx.drawImage(satellite, -board.w, -board.h, board.w * 2, board.h * 2);
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       for (const [part, layer] of Object.entries(locationLayers)) {

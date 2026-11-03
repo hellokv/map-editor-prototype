@@ -4176,6 +4176,23 @@
         draw();
       });
     }
+    // Where the satellite view has been dragged to, from the map's centre, in map units.
+    const satelliteOffset = { x: 0, y: 0 };
+    const satelliteScale = () => (Number(document.getElementById('satellite-scale').value) || 100) / 100;
+    const satelliteTurn = () => ((Number(document.getElementById('satellite-rotation').value) || 0) * Math.PI) / 180;
+    // What a drag at map point p takes hold of in Location: the map, where it
+    // shows; else the satellite view, where it is; else the whole view.
+    function locationGrabAt(p) {
+      const background = Number(locationInputs.background.value) > 0;
+      if (background && p.x >= 0 && p.x <= board.w && p.y >= 0 && p.y <= board.h) return 'map';
+      const dx = p.x - board.w / 2 - satelliteOffset.x;
+      const dy = p.y - board.h / 2 - satelliteOffset.y;
+      const t = -satelliteTurn();
+      const k = satelliteScale();
+      const x = (dx * Math.cos(t) - dy * Math.sin(t)) / k;
+      const y = (dx * Math.sin(t) + dy * Math.cos(t)) / k;
+      return Math.abs(x) <= board.w && Math.abs(y) <= board.h ? 'satellite' : 'view';
+    }
     // Made from the demo map's background, so it lines up with that one only.
     const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
@@ -4198,14 +4215,14 @@
       ctx.fillStyle = colorOf(canvasColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       // The satellite view, under everything: twice the map's box each way,
-      // centred on the box, then scaled and turned about that centre.
+      // centred on the box and moved by its offset, then scaled and turned
+      // about its own centre.
       if (satellite.complete && satellite.naturalWidth) {
-        const scale = (Number(document.getElementById('satellite-scale').value) || 100) / 100;
-        const turn = ((Number(document.getElementById('satellite-rotation').value) || 0) * Math.PI) / 180;
+        const scale = satelliteScale();
         ctx.translate(view.x, view.y);
         ctx.scale(view.scale, view.scale);
-        ctx.translate(board.w / 2, board.h / 2);
-        ctx.rotate(turn);
+        ctx.translate(board.w / 2 + satelliteOffset.x, board.h / 2 + satelliteOffset.y);
+        ctx.rotate(satelliteTurn());
         ctx.scale(scale, scale);
         ctx.drawImage(satellite, -board.w, -board.h, board.w * 2, board.h * 2);
       }
@@ -8487,6 +8504,7 @@
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
+        if (inLocation() && !spaceHeld) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
         updateCursor();
         return;
       }
@@ -8698,8 +8716,20 @@
         // Stacked, the map follows the pointer across the background plane.
         const from = stackOn() ? fromStack({ x: drag.x, y: drag.y }) : { x: drag.x, y: drag.y };
         const to = stackOn() ? fromStack({ x: e.clientX, y: e.clientY }) : { x: e.clientX, y: e.clientY };
-        view.x += to.x - from.x;
-        view.y += to.y - from.y;
+        // In Location, the map and the satellite view under it are dragged
+        // apart; the satellite's offset is in map units, so it's undone to
+        // keep the satellite in place while the map moves.
+        if (drag.locationGrab === 'satellite') {
+          satelliteOffset.x += (to.x - from.x) / view.scale;
+          satelliteOffset.y += (to.y - from.y) / view.scale;
+        } else {
+          view.x += to.x - from.x;
+          view.y += to.y - from.y;
+          if (drag.locationGrab === 'map') {
+            satelliteOffset.x -= (to.x - from.x) / view.scale;
+            satelliteOffset.y -= (to.y - from.y) / view.scale;
+          }
+        }
         drag.x = e.clientX;
         drag.y = e.clientY;
       }

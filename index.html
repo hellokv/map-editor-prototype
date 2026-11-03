@@ -2766,6 +2766,8 @@
     function setLocationTool(name) {
       locationTool = name;
       meshDrawing = null;
+      meshPullSelected = null;
+      meshCircleSelected = null;
       for (const button of locationToolButtons) button.setAttribute('aria-pressed', button.dataset.locationTool === name);
       updateCursor();
     }
@@ -4303,6 +4305,7 @@
     const meshPulls = [];
     const meshCircles = [];
     let meshPullSelected = null;
+    let meshCircleSelected = null;
     let meshOffsetsCount = null;
     function meshLattice() {
       const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
@@ -4310,6 +4313,7 @@
         meshOffsets.clear();
         meshPulls.length = 0;
         meshCircles.length = 0;
+        meshCircleSelected = null;
         meshPullSelected = null;
         meshOffsetsCount = count;
       }
@@ -4436,6 +4440,12 @@
       }
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
     }
+    function deleteMeshCircle(circle) {
+      circle.to = null;
+      scaleMeshCircle(circle);
+      meshCircles.splice(meshCircles.indexOf(circle), 1);
+      if (meshCircleSelected === circle) meshCircleSelected = null;
+    }
     // The circle whose dot or edge is at screen point s.
     function meshCircleAt(s) {
       if (!meshOn.checked) return null;
@@ -4535,10 +4545,17 @@
       }
       // Each circle, with the circle it's scaled to ghosted, and a dashed
       // line from where its edge was taken to the dot it was dropped at.
-      for (const { c, r, from: edge, to } of meshCircles) {
-        ctx.lineWidth = 1.5 * px;
+      for (const circle of meshCircles) {
+        const { c, r, from: edge, to } = circle;
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+        if (circle === meshCircleSelected) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 4.5 * px;
+          ctx.stroke();
+          ctx.strokeStyle = colorOf(meshColor);
+        }
+        ctx.lineWidth = 1.5 * px;
         ctx.stroke();
         if (!to) continue;
         ctx.globalAlpha = 0.35;
@@ -8672,11 +8689,12 @@
       }
     }, true);
     document.addEventListener('keydown', (e) => {
-      if (!meshPullSelected || !inLocation() || e.target.closest('input, textarea, select')) return;
+      if (!(meshPullSelected || meshCircleSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        deleteMeshPull(meshPullSelected);
+        if (meshPullSelected) deleteMeshPull(meshPullSelected);
+        if (meshCircleSelected) deleteMeshCircle(meshCircleSelected);
         draw();
       }
     }, true);
@@ -9213,15 +9231,17 @@
       if (inLocation() && locationTool === 'add' && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
         const hit = meshCircleAt(s);
+        meshCircleSelected = hit?.circle ?? null;
         if (hit?.part === 'edge') {
-          hit.circle.from = at;
-          hit.circle.to = at;
-          drag = { meshCircle: hit.circle, part: 'edge' };
+          // The edge is taken afresh only once the press moves, so a click
+          // just selects the circle and keeps its scale.
+          drag = { meshCircle: hit.circle, part: 'edge', at, from: s, moved: false };
         } else if (hit) {
           drag = { meshCircle: hit.circle, part: 'dot' };
         } else if (meshGrabbable(s)) {
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
+          meshCircleSelected = meshCircle;
           drag = { meshCircle, part: 'new' };
         }
         draw();
@@ -9389,7 +9409,13 @@
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const circle = drag.meshCircle;
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
-        else {
+        else if (drag.part === 'edge' && !drag.moved) {
+          if (Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) <= 2) return;
+          drag.moved = true;
+          circle.from = drag.at;
+          circle.to = at;
+          scaleMeshCircle(circle);
+        } else {
           circle.to = at;
           scaleMeshCircle(circle);
         }
@@ -9547,7 +9573,7 @@
       if (drag.meshCircle) {
         const circle = drag.meshCircle;
         // Too small to see, so taken as a click rather than a circle.
-        if (drag.part === 'new' && circle.r * view.scale < 4) meshCircles.splice(meshCircles.indexOf(circle), 1);
+        if (drag.part === 'new' && circle.r * view.scale < 4) deleteMeshCircle(circle);
         drag = null;
         draw();
         updateCursor();

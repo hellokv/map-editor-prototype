@@ -1567,6 +1567,9 @@
       <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
       </button>
+      <button type="button" data-mode="location" aria-label="Location" aria-pressed="false">
+        <span class="material-symbols-rounded">my_location</span>
+      </button>
       <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
         <span class="material-symbols-rounded">responsive_layout</span>
       </button>
@@ -2225,6 +2228,19 @@
         </form>
       </div>
     </div>
+    <div id="location-panel" hidden>
+      <div class="label-section">
+        <div class="section-heading">Transparency</div>
+        <label class="field">
+          Background
+          <span class="slider"><span class="percent-field"><input id="location-background" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Background transparency"></span>
+        </label>
+        <label class="field">
+          Paths
+          <span class="slider"><span class="percent-field"><input id="location-paths" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Paths transparency"></span>
+        </label>
+      </div>
+    </div>
     <div id="preview-panel" hidden>
       <div class="label-section">
         <div class="section-heading">Device</div>
@@ -2717,6 +2733,7 @@
     }
 
     const modePanels = {
+      location: document.getElementById('location-panel'),
       preview: document.getElementById('preview-panel'),
       path: document.getElementById('path-panel'),
       background: document.getElementById('background-panel'),
@@ -2933,6 +2950,9 @@
       for (const [name, panel] of Object.entries(modePanels)) {
         panel.hidden = name !== mode;
       }
+      // Location shows no labels, so no levels, split screen or stack.
+      setSplit(splitOn());
+      showViewMenu();
       // Every mode starts on its cursor tool.
       const enteringLabels = mode === 'labels' && labelTools.hidden;
       const enteringPath = mode === 'path' && pathTools.hidden;
@@ -3778,6 +3798,7 @@
     // Split screen zooms each panel on its own.
     function showViewMenu() {
       zoomInput.parentElement.hidden = splitOn();
+      for (const id of ['layer-select', 'layers-button']) document.getElementById(id).hidden = inLocation();
     }
     const autoLayers = document.getElementById('auto-layers');
     // Clicking the levels Automatic shows switches to the first of them.
@@ -3863,10 +3884,11 @@
         const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
         autoLayers.textContent = names.join(', ') || 'None';
       }
-      if (layerSelect.value === 'Split Screen') paintSplit();
+      if (inLocation()) paintLocation();
+      else if (layerSelect.value === 'Split Screen') paintSplit();
       else if (layerSelect.value === 'Stacked') paintStack();
       else paintView();
-      stackView.hidden = layerSelect.value !== 'Stacked' || inPreview();
+      stackView.hidden = !stackOn();
       updatePanel();
     }
 
@@ -3880,7 +3902,7 @@
     let layerOverride = null;
     let panelViews = null;
     let activePanel = 0;
-    const splitOn = () => layerSelect.value === 'Split Screen';
+    const splitOn = () => layerSelect.value === 'Split Screen' && !inLocation();
     const splitPanels = () => {
       const w = canvas.clientWidth / 2;
       const h = canvas.clientHeight / 2;
@@ -4088,7 +4110,7 @@
         tag.style.top = `${at.top - origin.top - tag.offsetHeight / 2}px`;
       }
     }
-    const stackOn = () => layerSelect.value === 'Stacked' && !inPreview();
+    const stackOn = () => layerSelect.value === 'Stacked' && !inPreview() && !inLocation();
     // Each plane is the shape of the map's box, as large as fits the canvas,
     // and shows that part of the canvas.
     function paintStack() {
@@ -4115,6 +4137,47 @@
       layoutStack();
     }
 
+    // Location mode shows the map's background and its paths, each as see-
+    // through as its slider says, without labels. Each is painted on the
+    // canvas on its own, copied aside, and then laid back down faded.
+    function inLocation() { return !document.getElementById('location-panel').hidden; }
+    const locationInputs = { background: document.getElementById('location-background'), paths: document.getElementById('location-paths') };
+    for (const input of Object.values(locationInputs)) {
+      const slider = input.closest('.slider').querySelector('input[type="range"]');
+      slider.addEventListener('input', () => {
+        input.value = slider.value;
+        draw();
+      });
+      slider.addEventListener('change', () => slider.blur());
+      input.addEventListener('input', () => {
+        slider.value = input.value;
+        draw();
+      });
+    }
+    const locationLayers = { background: document.createElement('canvas'), paths: document.createElement('canvas') };
+    // The part of the map being painted, while it's painted.
+    let locationPart = null;
+    function paintLocation() {
+      for (const [part, layer] of Object.entries(locationLayers)) {
+        locationPart = part;
+        paintView();
+        layer.width = canvas.width;
+        layer.height = canvas.height;
+        layer.getContext('2d').drawImage(canvas, 0, 0);
+      }
+      locationPart = null;
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = colorOf(canvasColor);
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (const [part, layer] of Object.entries(locationLayers)) {
+        ctx.globalAlpha = 1 - Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100;
+        ctx.drawImage(layer, 0, 0);
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // The paths' filled areas and their widths, as the map shows them.
     function drawPaths() {
       for (const area of computeAreas()) {
@@ -4132,7 +4195,7 @@
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      if (stackPart !== 'level') {
+      if (stackPart !== 'level' && !locationPart) {
         ctx.fillStyle = colorOf(canvasColor);
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       }
@@ -4142,16 +4205,17 @@
       // The box's fill casts its shadow. Canvas shadows are in device
       // pixels, so they're scaled with the map.
       ctx.save();
-      if (board.shadow && stackPart !== 'level') {
+      const noBackground = stackPart === 'level' || locationPart === 'paths';
+      if (board.shadow && !noBackground) {
         ctx.shadowColor = board.shadow;
         ctx.shadowOffsetX = board.shadowX * view.scale * dpr;
         ctx.shadowOffsetY = board.shadowY * view.scale * dpr;
         ctx.shadowBlur = board.shadowBlur * view.scale * dpr;
       }
       ctx.fillStyle = colorOf(boardColor);
-      if (stackPart !== 'level') ctx.fill(boardShape());
+      if (!noBackground) ctx.fill(boardShape());
       ctx.restore();
-      if (backgroundImage && stackPart !== 'level') {
+      if (backgroundImage && !noBackground) {
         // As large as fits inside the padded box, centred, never stretched,
         // and cut to the box's rounded corners.
         const roomW = Math.max(0, board.w - 2 * board.padding);
@@ -4164,12 +4228,18 @@
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
         ctx.restore();
       }
-      drawShapes();
-      drawSketchFills();
-      if (board.outline && stackPart !== 'level') strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
+      if (locationPart !== 'paths') {
+        drawShapes();
+        drawSketchFills();
+      }
+      if (board.outline && !noBackground) strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
       if (stackPart) {
         if (stackPart === 'background') drawPaths();
         else drawLabels();
+        return;
+      }
+      if (locationPart) {
+        if (locationPart === 'paths') drawPaths();
         return;
       }
       if (pathTools.hidden) {
@@ -8205,7 +8275,7 @@
     }
 
     function updateCursor() {
-      if (spaceHeld || drag?.spacePan || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
+      if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'list' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -8367,7 +8437,7 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      if (spaceHeld || inPreview() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
+      if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true };
         updateCursor();
         return;
@@ -8918,6 +8988,7 @@
     const SHAPE_NAMES = { circle: 'Circle', square: 'Square', triangle: 'Triangle', polygon: 'Polygon', compass: 'Compass', image: 'Image' };
     function panelTitle() {
       if (inPreview()) return 'Preview';
+      if (inLocation()) return 'Location';
       if (!labelTools.hidden) {
         if (selectedPins.length) return selectedPins.length > 1 ? 'Pins' : 'Pin';
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';

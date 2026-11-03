@@ -2279,6 +2279,10 @@
             <span class="color-field"><input id="mesh-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="80" aria-label="Opacity">%</span>
           </label>
           <label class="field">
+            Line Thickness
+            <input id="mesh-thickness" type="number" min="0.1" max="20" step="0.1" value="1">
+          </label>
+          <label class="field">
             Border Color
             <span class="color-field"><input id="mesh-border" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="40" aria-label="Opacity">%</span>
           </label>
@@ -4253,9 +4257,11 @@
     const meshCount = document.getElementById('mesh-count');
     const meshColor = document.getElementById('mesh-color');
     const meshBorder = document.getElementById('mesh-border');
+    const meshThickness = document.getElementById('mesh-thickness');
+    meshThickness.addEventListener('input', () => draw());
     const meshRotation = document.getElementById('mesh-rotation');
     function showMeshFields() {
-      for (const input of [meshCount, meshColor, meshBorder, meshRotation]) input.closest('.field').hidden = !meshOn.checked;
+      for (const input of [meshCount, meshColor, meshThickness, meshBorder, meshRotation]) input.closest('.field').hidden = !meshOn.checked;
     }
     showMeshFields();
     meshOn.addEventListener('change', () => {
@@ -4283,11 +4289,13 @@
         ctx.moveTo(-reach, y);
         ctx.lineTo(reach, y);
       }
+      // Line thickness in screen pixels; the border is a pixel either side of it.
+      const thickness = Math.max(0.1, Number(meshThickness.value) || 1);
       ctx.strokeStyle = colorOf(meshBorder);
-      ctx.lineWidth = 3 / view.scale;
+      ctx.lineWidth = (thickness + 2) / view.scale;
       ctx.stroke();
       ctx.strokeStyle = colorOf(meshColor);
-      ctx.lineWidth = 1 / view.scale;
+      ctx.lineWidth = thickness / view.scale;
       ctx.stroke();
       ctx.restore();
     }

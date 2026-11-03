@@ -4422,9 +4422,11 @@
     function scaleMeshCircle(circle) {
       for (const [key, moved] of circle.moves) moveMeshNode(key, -moved.x, -moved.y);
       circle.moves.clear();
-      if (!circle.to) return;
+      if (!circle.to && !circle.shift) return;
       const { c, r } = circle;
-      const k = Math.hypot(circle.to.x - c.x, circle.to.y - c.y) / Math.max(1e-6, Math.hypot(circle.from.x - c.x, circle.from.y - c.y));
+      const k = meshCircleScale(circle);
+      const sx = circle.shift ? circle.shift.x - c.x : 0;
+      const sy = circle.shift ? circle.shift.y - c.y : 0;
       const { count, node, from, to } = meshLattice();
       const { spread } = meshReach(count);
       for (let i = from.i; i <= to.i; i++) {
@@ -4434,14 +4436,16 @@
           const d = Math.hypot(n.x - c.x, n.y - c.y);
           const share = d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread));
           if (share < 0.001) continue;
-          const moved = { x: (k - 1) * (n.x - c.x) * share, y: (k - 1) * (n.y - c.y) * share };
+          const moved = { x: ((k - 1) * (n.x - c.x) + sx) * share, y: ((k - 1) * (n.y - c.y) + sy) * share };
           circle.moves.set(`${i},${j}`, moved);
         }
       }
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
     }
+    const meshCircleScale = ({ c, from, to }) => (to ? Math.hypot(to.x - c.x, to.y - c.y) / Math.max(1e-6, Math.hypot(from.x - c.x, from.y - c.y)) : 1);
     function deleteMeshCircle(circle) {
       circle.to = null;
+      circle.shift = null;
       scaleMeshCircle(circle);
       meshCircles.splice(meshCircles.indexOf(circle), 1);
       if (meshCircleSelected === circle) meshCircleSelected = null;
@@ -4453,6 +4457,10 @@
         if (circle.to) {
           const dot = toScreen(fromMesh(circle.to));
           if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
+        }
+        if (circle.shift) {
+          const tip = toScreen(fromMesh(circle.shift));
+          if (Math.hypot(tip.x - s.x, tip.y - s.y) <= 10) return { circle, part: 'shift' };
         }
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
@@ -4514,9 +4522,9 @@
       const arrow = 10 * px;
       ctx.fillStyle = ctx.strokeStyle;
       ctx.lineWidth = 1.5 * px;
-      for (const { start, end } of meshPulls) {
+      const dashedArrow = (start, end) => {
         const length = Math.hypot(end.x - start.x, end.y - start.y);
-        if (length < px) continue;
+        if (length < px) return;
         const ux = (end.x - start.x) / length;
         const uy = (end.y - start.y) / length;
         const base = Math.max(0, length - arrow);
@@ -4532,7 +4540,8 @@
         ctx.lineTo(end.x - ux * arrow + uy * arrow * 0.5, end.y - uy * arrow - ux * arrow * 0.5);
         ctx.closePath();
         ctx.fill();
-      }
+      };
+      for (const { start, end } of meshPulls) dashedArrow(start, end);
       for (const pull of meshPulls) {
         ctx.beginPath();
         ctx.arc(pull.start.x, pull.start.y, (pull === meshPullSelected ? 5 : 4) * px, 0, 2 * Math.PI);
@@ -4544,10 +4553,11 @@
           ctx.strokeStyle = colorOf(meshColor);
         }
       }
-      // Each circle, with the circle it's scaled to ghosted, and a dashed
-      // line from where its edge was taken to the dot it was dropped at.
+      // Each circle, with the circle it's scaled and moved to ghosted, a dashed
+      // line from where its edge was taken to the dot it was dropped at, and
+      // a dashed arrow from its centre to where that was dragged.
       for (const circle of meshCircles) {
-        const { c, r, from: edge, to } = circle;
+        const { c, r, from: edge, to, shift } = circle;
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
         if (circle === meshCircleSelected) {
@@ -4561,12 +4571,15 @@
         ctx.beginPath();
         ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();
-        if (!to) continue;
+        if (shift) dashedArrow(c, shift);
+        if (!to && !shift) continue;
+        const ghost = shift ?? c;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, (r * Math.hypot(to.x - c.x, to.y - c.y)) / Math.max(1e-6, Math.hypot(edge.x - c.x, edge.y - c.y)), 0, 2 * Math.PI);
+        ctx.arc(ghost.x, ghost.y, r * meshCircleScale(circle), 0, 2 * Math.PI);
         ctx.stroke();
         ctx.globalAlpha = 1;
+        if (!to) continue;
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
         ctx.moveTo(edge.x, edge.y);
@@ -9241,7 +9254,7 @@
           // just selects the circle and keeps its scale.
           drag = { meshCircle: hit.circle, part: 'edge', at, from: s, moved: false };
         } else if (hit) {
-          drag = { meshCircle: hit.circle, part: hit.part, last: at };
+          drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift };
         } else if (meshGrabbable(s)) {
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
@@ -9413,12 +9426,11 @@
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const circle = drag.meshCircle;
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
-        else if (drag.part === 'centre') {
-          // The whole circle moves, and its scaling is redone where it lands.
-          const dx = at.x - drag.last.x;
-          const dy = at.y - drag.last.y;
-          drag.last = at;
-          for (const q of [circle.c, circle.from, circle.to]) if (q) Object.assign(q, { x: q.x + dx, y: q.y + dy });
+        else if (drag.part === 'centre' || drag.part === 'shift') {
+          // From the centre, a fresh move of everything in the circle; from
+          // the arrow's tip, more of the same one.
+          const base = drag.part === 'centre' ? circle.c : drag.tip;
+          circle.shift = { x: base.x + at.x - drag.last.x, y: base.y + at.y - drag.last.y };
           scaleMeshCircle(circle);
         }
         else if (drag.part === 'edge' && !drag.moved) {

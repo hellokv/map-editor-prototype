@@ -4301,10 +4301,13 @@
       const stepY = board.h / (count + 1);
       const extraX = Math.ceil((reach - board.w / 2) / stepX) + 1;
       const extraY = Math.ceil((reach - board.h / 2) / stepY) + 1;
+      const base = (i, j) => ({ x: -board.w / 2 + i * stepX, y: -board.h / 2 + j * stepY });
       const node = (i, j) => {
         const off = meshOffsets.get(`${i},${j}`);
-        return { x: -board.w / 2 + i * stepX + (off?.x ?? 0), y: -board.h / 2 + j * stepY + (off?.y ?? 0) };
+        const at = base(i, j);
+        return { x: at.x + (off?.x ?? 0), y: at.y + (off?.y ?? 0) };
       };
+      node.base = base;
       return { count, node, from: { i: -extraX, j: -extraY }, to: { i: count + 1 + extraX, j: count + 1 + extraY } };
     }
     const meshTurn = () => ((Number(meshRotation.value) || 0) * Math.PI) / 180;
@@ -4453,6 +4456,154 @@
       }
       ctx.restore();
     }
+    // Redraws a layer canvas as the mesh has bent it, on the GPU. The sheet
+    // between nodes bends as the mesh lines do, as Catmull-Rom curves, so each
+    // cell is cut into small triangles that follow them. Without WebGL the
+    // layer is left as it is.
+    const MESH_WARP_STEPS = 4;
+    const meshWarped = document.createElement('canvas');
+    let meshGl = null;
+    function meshWarpGl() {
+      if (meshGl !== null) return meshGl;
+      const gl = meshWarped.getContext('webgl', { premultipliedAlpha: true });
+      if (!gl) return (meshGl = false);
+      const shader = (type, source) => {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, source);
+        gl.compileShader(sh);
+        return sh;
+      };
+      const program = gl.createProgram();
+      gl.attachShader(program, shader(gl.VERTEX_SHADER, `
+        attribute vec2 dst;
+        attribute vec2 src;
+        uniform vec2 size;
+        varying vec2 uv;
+        void main() {
+          uv = src / size;
+          gl_Position = vec4(dst / size * vec2(2, -2) + vec2(-1, 1), 0, 1);
+        }`));
+      gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `
+        precision mediump float;
+        uniform sampler2D image;
+        uniform float alpha;
+        varying vec2 uv;
+        void main() { gl_FragColor = texture2D(image, uv) * alpha; }`));
+      gl.linkProgram(program);
+      gl.useProgram(program);
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const buffer = (name) => {
+        const b = gl.createBuffer();
+        const at = gl.getAttribLocation(program, name);
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.enableVertexAttribArray(at);
+        gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
+        return b;
+      };
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      return (meshGl = {
+        gl,
+        dst: buffer('dst'),
+        src: buffer('src'),
+        size: gl.getUniformLocation(program, 'size'),
+        alpha: gl.getUniformLocation(program, 'alpha'),
+      });
+    }
+    // Where the mesh takes each layer pixel, as triangles: source and
+    // destination corners in device pixels.
+    function meshWarpTriangles() {
+      const { node, from, to } = meshLattice();
+      const cols = to.i - from.i + 1;
+      const rows = to.j - from.j + 1;
+      const offsets = new Float32Array(cols * rows * 2);
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          const n = node(from.i + i, from.j + j);
+          const b = node.base(from.i + i, from.j + j);
+          offsets[(i * rows + j) * 2] = n.x - b.x;
+          offsets[(i * rows + j) * 2 + 1] = n.y - b.y;
+        }
+      }
+      const at = (i, j, k) => offsets[(Math.min(cols - 1, Math.max(0, i)) * rows + Math.min(rows - 1, Math.max(0, j))) * 2 + k];
+      const weights = (t) => [(-t * t * t + 2 * t * t - t) / 2, (3 * t * t * t - 5 * t * t + 2) / 2, (-3 * t * t * t + 4 * t * t + t) / 2, (t * t * t - t * t) / 2];
+      const n = MESH_WARP_STEPS;
+      const w = Array.from({ length: n + 1 }, (_, k) => weights(k / n));
+      const dpr = window.devicePixelRatio || 1;
+      const device = (q, list) => {
+        const p = toScreen(fromMesh(q));
+        list.push(p.x * dpr, p.y * dpr);
+      };
+      // Every sample point of the lattice, n to a cell each way.
+      const across = (cols - 1) * n + 1;
+      const down = (rows - 1) * n + 1;
+      const src = [];
+      const dst = [];
+      for (let a = 0; a < across; a++) {
+        const i = Math.min(cols - 2, Math.floor(a / n));
+        const wu = w[a - i * n];
+        for (let b = 0; b < down; b++) {
+          const j = Math.min(rows - 2, Math.floor(b / n));
+          const wv = w[b - j * n];
+          const base = node.base(from.i + a / n, from.j + b / n);
+          let x = base.x;
+          let y = base.y;
+          for (let p = 0; p < 4; p++) {
+            for (let q = 0; q < 4; q++) {
+              const k = wu[p] * wv[q];
+              x += at(i - 1 + p, j - 1 + q, 0) * k;
+              y += at(i - 1 + p, j - 1 + q, 1) * k;
+            }
+          }
+          device(base, src);
+          device({ x, y }, dst);
+        }
+      }
+      const triangles = { src: [], dst: [] };
+      const corner = (a, b) => {
+        const k = (a * down + b) * 2;
+        triangles.src.push(src[k], src[k + 1]);
+        triangles.dst.push(dst[k], dst[k + 1]);
+      };
+      for (let a = 0; a < across - 1; a++) {
+        for (let b = 0; b < down - 1; b++) {
+          corner(a, b); corner(a + 1, b); corner(a + 1, b + 1);
+          corner(a, b); corner(a + 1, b + 1); corner(a, b + 1);
+        }
+      }
+      return { src: new Float32Array(triangles.src), dst: new Float32Array(triangles.dst) };
+    }
+    // Draws the layers, each at its opacity, as the mesh has bent them.
+    // False without WebGL.
+    function warpByMesh(layers) {
+      const glState = meshWarpGl();
+      if (!glState) return false;
+      const { gl } = glState;
+      const triangles = meshWarpTriangles();
+      meshWarped.width = canvas.width;
+      meshWarped.height = canvas.height;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform2f(glState.size, canvas.width, canvas.height);
+      gl.bindBuffer(gl.ARRAY_BUFFER, glState.src);
+      gl.bufferData(gl.ARRAY_BUFFER, triangles.src, gl.STREAM_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, glState.dst);
+      gl.bufferData(gl.ARRAY_BUFFER, triangles.dst, gl.STREAM_DRAW);
+      for (const { layer, alpha } of layers) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, layer);
+        gl.uniform1f(glState.alpha, alpha);
+        gl.drawArrays(gl.TRIANGLES, 0, triangles.src.length / 2);
+      }
+      ctx.drawImage(meshWarped, 0, 0);
+      return true;
+    }
     const locationPathColor = document.getElementById('location-path-color');
     locationPathColor.addEventListener('input', () => draw());
     const locationLayers = { background: document.createElement('canvas'), paths: document.createElement('canvas') };
@@ -4484,11 +4635,17 @@
         ctx.drawImage(satellite, -board.w, -board.h, board.w * 2, board.h * 2);
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      for (const [part, layer] of Object.entries(locationLayers)) {
-        ctx.globalAlpha = Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100;
-        ctx.drawImage(layer, 0, 0);
+      const layers = Object.entries(locationLayers).map(([part, layer]) => ({
+        layer,
+        alpha: Math.min(100, Math.max(0, Number(locationInputs[part].value) || 0)) / 100,
+      }));
+      if (!(meshOffsets.size && warpByMesh(layers))) {
+        for (const { layer, alpha } of layers) {
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(layer, 0, 0);
+        }
+        ctx.globalAlpha = 1;
       }
-      ctx.globalAlpha = 1;
       if (meshOn.checked) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.translate(view.x, view.y);

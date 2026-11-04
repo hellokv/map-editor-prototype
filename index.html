@@ -1627,9 +1627,6 @@
         <button type="button" data-location-tool="add" aria-label="Circle" aria-pressed="false">
           <span class="material-symbols-rounded">add_circle</span>
         </button>
-        <button type="button" data-location-tool="polygon" aria-label="Polygon" aria-pressed="false">
-          <span class="material-symbols-rounded">pentagon</span>
-        </button>
       </div>
       <div id="label-tools" hidden>
         <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
@@ -2304,8 +2301,8 @@
           <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
         <label class="field">
-          Polygon Color
-          <span class="color-field"><input id="polygon-color" type="color" value="#00ffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          Tool Color
+          <span class="color-field"><input id="tool-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
       </div>
       <div class="label-section">
@@ -2354,14 +2351,6 @@
           <label class="field">
             Gravity
             <span class="slider"><span class="percent-field"><input id="mesh-gravity" type="number" min="0" max="100" step="1" value="25"></span><input type="range" min="0" max="100" step="1" value="25" aria-label="Gravity pull"></span>
-          </label>
-        </div>
-      </div>
-      <div class="label-section">
-        <div class="temporary-controls">
-          <label class="field">
-            Polygon Fuzziness
-            <span class="slider"><span class="percent-field px"><input id="polygon-fuzz" type="number" min="0" max="1000" step="1" value="80"></span><input type="range" min="0" max="200" step="1" value="80" aria-label="Polygon fuzziness"></span>
           </label>
         </div>
       </div>
@@ -2813,11 +2802,8 @@
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
-    // The Polygon tool's corners so far, while one is being drawn.
-    let meshDrawing = null;
     function setLocationTool(name) {
       locationTool = name;
-      meshDrawing = null;
       meshPullSelected = null;
       meshCircleSelected = null;
       for (const button of locationToolButtons) button.setAttribute('aria-pressed', button.dataset.locationTool === name);
@@ -4528,7 +4514,7 @@
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
-          let share = reach(n) * (1 - meshKeepHold(fromMesh(n)));
+          let share = reach(n);
           for (const q of pins) share *= hold(Math.hypot(n.x - q.x, n.y - q.y));
           if (share >= 0.001) shares.push([`${i},${j}`, share]);
         }
@@ -4592,7 +4578,7 @@
     // Circles drawn with the Circle tool, in the mesh's frame. Dragging from a
     // circle's edge to a dot scales the mesh about its centre by how far the
     // dot is from it against where the edge was taken: all of it inside the circle, less
-    // and less outside it as Rubber spreads it, none inside polygons.
+    // and less outside it as Rubber spreads it.
     function scaleMeshCircle(circle) {
       for (const [key, moved] of circle.moves) moveMeshNode(key, -moved.x, -moved.y);
       circle.moves.clear();
@@ -4608,7 +4594,7 @@
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           const d = Math.hypot(n.x - c.x, n.y - c.y);
-          const share = (d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread))) * (1 - meshKeepHold(fromMesh(n)));
+          const share = d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread));
           if (share < 0.001) continue;
           // Turned by the share of the turn, so the mesh twists rather than
           // tearing at the circle's edge.
@@ -4712,9 +4698,9 @@
       // Each pull: a dot where it started, dotted to an arrow where it ended.
       const px = 1 / (view.scale * mapPlace.scale);
       const arrow = 10 * px;
-      // Pull and circle markers are drawn solid in the polygon colour.
-      ctx.strokeStyle = polygonColor.value;
-      ctx.fillStyle = polygonColor.value;
+      // Pull and circle markers are drawn solid in the tool colour.
+      ctx.strokeStyle = toolColor.value;
+      ctx.fillStyle = toolColor.value;
       ctx.lineWidth = 1.5 * px;
       const dashedArrow = (start, end) => {
         const length = Math.hypot(end.x - start.x, end.y - start.y);
@@ -4749,7 +4735,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2 * px;
           ctx.stroke();
-          ctx.strokeStyle = polygonColor.value;
+          ctx.strokeStyle = toolColor.value;
         }
       }
       // Each circle, with the circle it's scaled and moved to ghosted, a dashed
@@ -4763,7 +4749,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
           ctx.stroke();
-          ctx.strokeStyle = polygonColor.value;
+          ctx.strokeStyle = toolColor.value;
         }
         ctx.lineWidth = 1.5 * px;
         ctx.stroke();
@@ -4791,143 +4777,8 @@
       }
       ctx.restore();
     }
-    // Closed polygons drawn with the Polygon tool, in map coordinates: the map
-    // inside them isn't bent by the mesh, and the mesh nodes inside don't move.
-    const meshKeeps = [];
-    function insidePolygon(p, points) {
-      let inside = false;
-      for (let k = 0, l = points.length - 1; k < points.length; l = k++) {
-        const a = points[k];
-        const b = points[l];
-        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-      }
-      return inside;
-    }
-    // How much a polygon holds map point p still, from none outside to all
-    // once Polygon Fuzziness deep inside, easing in between.
-    const polygonFuzz = document.getElementById('polygon-fuzz');
-    polygonFuzz.addEventListener('input', () => draw());
-    const meshFuzz = () => Math.max(0, Number(polygonFuzz.value) || 0);
-    function meshKeepHold(p) {
-      const fuzz = meshFuzz();
-      let hold = 0;
-      for (const points of meshKeeps) {
-        if (!insidePolygon(p, points)) continue;
-        if (!fuzz) return 1;
-        let depth = Infinity;
-        for (let k = 0; k < points.length; k++) {
-          const a = points[k];
-          const b = points[(k + 1) % points.length];
-          const length = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
-          const t = length ? Math.min(1, Math.max(0, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length)) : 0;
-          depth = Math.min(depth, Math.hypot(a.x + (b.x - a.x) * t - p.x, a.y + (b.y - a.y) * t - p.y));
-        }
-        const u = Math.min(1, depth / fuzz);
-        hold = Math.max(hold, u * u * (3 - 2 * u));
-      }
-      return hold;
-    }
-    const polygonColor = document.getElementById('polygon-color');
-    polygonColor.closest('.color-field').addEventListener('input', () => draw());
-    // Where the Polygon tool puts a corner for screen point s: on a corner
-    // within reach, else on an edge within reach, else at s. Corners in
-    // `moving` are left out, so a dragged corner doesn't snap to itself.
-    function polygonSnap(s, moving = []) {
-      const corners = [...meshKeeps.flat(), ...(meshDrawing ?? [])].filter((q) => !moving.includes(q));
-      let best = null;
-      let bestDistance = 10;
-      for (const q of corners) {
-        const at = toScreen(q);
-        const d = Math.hypot(at.x - s.x, at.y - s.y);
-        if (d <= bestDistance) {
-          best = { x: q.x, y: q.y, corner: q };
-          bestDistance = d;
-        }
-      }
-      if (best) return best;
-      bestDistance = 8;
-      for (const points of meshKeeps) {
-        for (let k = 0; k < points.length; k++) {
-          const a = points[k];
-          const b = points[(k + 1) % points.length];
-          if (moving.includes(a) || moving.includes(b)) continue;
-          const sa = toScreen(a);
-          const sb = toScreen(b);
-          const length = (sb.x - sa.x) ** 2 + (sb.y - sa.y) ** 2;
-          if (!length) continue;
-          const t = Math.min(1, Math.max(0, ((s.x - sa.x) * (sb.x - sa.x) + (s.y - sa.y) * (sb.y - sa.y)) / length));
-          const d = Math.hypot(sa.x + (sb.x - sa.x) * t - s.x, sa.y + (sb.y - sa.y) * t - s.y);
-          if (d <= bestDistance) {
-            best = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-            bestDistance = d;
-          }
-        }
-      }
-      return best ?? toBackground(s.x, s.y);
-    }
-    // The closed polygons' corners at screen point s: the nearest, and any
-    // others in the same place, so joined polygons move together.
-    function polygonCornersAt(s) {
-      let nearest = null;
-      let bestDistance = 8;
-      for (const q of meshKeeps.flat()) {
-        const at = toScreen(q);
-        const d = Math.hypot(at.x - s.x, at.y - s.y);
-        if (d <= bestDistance) {
-          nearest = q;
-          bestDistance = d;
-        }
-      }
-      return nearest ? meshKeeps.flat().filter((q) => Math.hypot(q.x - nearest.x, q.y - nearest.y) < 1e-6) : [];
-    }
-    // A click adds a corner; clicking the first corner again, or Enter, closes it.
-    function addPolygonCorner(s) {
-      const { x, y, corner } = polygonSnap(s);
-      if (meshDrawing?.length >= 3 && corner === meshDrawing[0]) closePolygon();
-      else if (meshDrawing) meshDrawing.push({ x, y });
-      else meshDrawing = [{ x, y }];
-    }
-    function closePolygon() {
-      if (meshDrawing?.length >= 3) meshKeeps.push(meshDrawing);
-      meshDrawing = null;
-    }
-    function traceMeshKeeps(out) {
-      out.beginPath();
-      for (const points of meshKeeps) {
-        out.moveTo(points[0].x, points[0].y);
-        for (const q of points.slice(1)) out.lineTo(q.x, q.y);
-        out.closePath();
-      }
-    }
-    // Lightly filled outlines with a dot on each corner, in map coordinates,
-    // with ctx set to the view.
-    function drawMeshKeeps() {
-      const px = 1 / (view.scale * mapPlace.scale);
-      ctx.strokeStyle = colorOf(polygonColor);
-      ctx.fillStyle = ctx.strokeStyle;
-      ctx.lineWidth = 1.5 * px;
-      traceMeshKeeps(ctx);
-      ctx.globalAlpha = 0.15;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.stroke();
-      if (meshDrawing) {
-        ctx.beginPath();
-        ctx.moveTo(meshDrawing[0].x, meshDrawing[0].y);
-        for (const q of meshDrawing.slice(1)) ctx.lineTo(q.x, q.y);
-        if (pointer && !drag) {
-          const at = polygonSnap(pointer);
-          ctx.lineTo(at.x, at.y);
-        }
-        ctx.stroke();
-      }
-      for (const q of [...meshKeeps.flat(), ...(meshDrawing ?? [])]) {
-        ctx.beginPath();
-        ctx.arc(q.x, q.y, 3.5 * px, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    }
-    const meshKept = document.createElement('canvas');
+    const toolColor = document.getElementById('tool-color');
+    toolColor.closest('.color-field').addEventListener('input', () => draw());
 
     // Redraws a layer canvas as the mesh has bent it, on the GPU. The sheet
     // between nodes bends as the mesh lines do, as Catmull-Rom curves, so each
@@ -5006,8 +4857,7 @@
       }
       const at = (i, j, k) => offsets[(Math.min(cols - 1, Math.max(0, i)) * rows + Math.min(rows - 1, Math.max(0, j))) * 2 + k];
       const weights = (t) => [(-t * t * t + 2 * t * t - t) / 2, (3 * t * t * t - 5 * t * t + 2) / 2, (-3 * t * t * t + 4 * t * t + t) / 2, (t * t * t - t * t) / 2];
-      // Finer where polygons taper the bend, so the taper reads as a curve.
-      const n = meshKeeps.length && meshFuzz() ? MESH_WARP_STEPS * 2 : MESH_WARP_STEPS;
+      const n = MESH_WARP_STEPS;
       const w = Array.from({ length: n + 1 }, (_, k) => weights(k / n));
       const dpr = window.devicePixelRatio || 1;
       const device = (q, list) => {
@@ -5034,11 +4884,6 @@
               x += at(i - 1 + p, j - 1 + q, 0) * k;
               y += at(i - 1 + p, j - 1 + q, 1) * k;
             }
-          }
-          if (meshKeeps.length) {
-            const keep = 1 - meshKeepHold(fromMesh(base));
-            x = base.x + (x - base.x) * keep;
-            y = base.y + (y - base.y) * keep;
           }
           device(base, src);
           device({ x, y }, dst);
@@ -5140,22 +4985,7 @@
         out.globalAlpha = 1;
       };
       const warped = meshOffsets.size ? warpByMesh(layers) : null;
-      // Fuzzy polygons bend less towards their middles in the warp itself;
-      // hard-edged ones are cut out of it, as the warp can't step that sharply.
-      if (warped && meshKeeps.length && !meshFuzz()) {
-        meshKept.width = canvas.width;
-        meshKept.height = canvas.height;
-        const out = meshKept.getContext('2d');
-        out.drawImage(warped, 0, 0);
-        out.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
-        placeMap(out);
-        traceMeshKeeps(out);
-        out.clip();
-        out.setTransform(1, 0, 0, 1, 0, 0);
-        out.clearRect(0, 0, meshKept.width, meshKept.height);
-        plain(out);
-        ctx.drawImage(meshKept, 0, 0);
-      } else if (warped) {
+      if (warped) {
         ctx.drawImage(warped, 0, 0);
       } else {
         plain(ctx);
@@ -5166,12 +4996,6 @@
         ctx.scale(view.scale, view.scale);
         placeMap(ctx);
         drawMesh();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-      }
-      if (meshKeeps.length || meshDrawing) {
-        ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
-        placeMap(ctx);
-        drawMeshKeeps();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       if (mapBoxShown()) {
@@ -8995,16 +8819,6 @@
     sketchStripeFields.bindEach(bindFigureInput, (fill, stripes) => { fill.stripes = stripes; });
 
     document.addEventListener('keydown', (e) => {
-      if (!meshDrawing || !inLocation() || e.target.closest('input, textarea, select')) return;
-      if (e.key === 'Escape' || e.key === 'Enter') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (e.key === 'Enter') closePolygon();
-        else meshDrawing = null;
-        draw();
-      }
-    }, true);
-    document.addEventListener('keydown', (e) => {
       if (!(meshPullSelected || meshCircleSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
@@ -9378,10 +9192,7 @@
         canvas.style.cursor = boxPart === 'turn' ? (drag ? 'grabbing' : 'grab') : 'nwse-resize';
         return;
       }
-      if (inLocation() && locationTool === 'polygon' && !spaceHeld && !drag?.spacePan) {
-        canvas.style.cursor = drag?.polygonCorners ? 'grabbing' : pointer && !meshDrawing && polygonCornersAt(pointer).length ? 'grab' : 'crosshair';
-      }
-      else if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
+      if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
         canvas.style.cursor = drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
@@ -9588,15 +9399,6 @@
         updateCursor();
         return;
       }
-      if (inLocation() && locationTool === 'polygon' && !spaceHeld) {
-        // A press on a corner drags it; one that doesn't move starts a polygon there.
-        const polygonCorners = meshDrawing ? [] : polygonCornersAt(s);
-        if (polygonCorners.length) drag = { polygonCorners, from: s, moved: false };
-        else addPolygonCorner(s);
-        draw();
-        updateCursor();
-        return;
-      }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
         const hit = meshPullAt(s, e.shiftKey);
         if (hit?.part === 'turn') {
@@ -9767,10 +9569,6 @@
         updateCursor();
         return;
       }
-      if (!drag && meshDrawing && inLocation()) {
-        draw();
-        return;
-      }
       if (drag?.mapBox) {
         // The centre doesn't move, so it's found with either place.
         const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
@@ -9815,15 +9613,6 @@
         } else {
           circle.to = at;
           scaleMeshCircle(circle);
-        }
-        draw();
-        return;
-      }
-      if (drag?.polygonCorners) {
-        drag.moved ||= Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
-        if (drag.moved) {
-          const at = polygonSnap(pointer, drag.polygonCorners);
-          for (const q of drag.polygonCorners) Object.assign(q, { x: at.x, y: at.y });
         }
         draw();
         return;
@@ -9988,13 +9777,6 @@
         const circle = drag.meshCircle;
         // Too small to see, so taken as a click rather than a circle.
         if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
-        drag = null;
-        draw();
-        updateCursor();
-        return;
-      }
-      if (drag.polygonCorners) {
-        if (!drag.moved) addPolygonCorner(drag.from);
         drag = null;
         draw();
         updateCursor();
@@ -10386,7 +10168,7 @@
       const file = JSON.parse(JSON.stringify(await mapFile()));
       openedMaps[openMap] = {
         file,
-        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], keeps: [...meshKeeps], place: { ...mapPlace } },
+        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], place: { ...mapPlace } },
         location: locationState(),
         satelliteOffset: { ...satelliteOffset },
       };
@@ -10400,7 +10182,7 @@
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           ...mapStarts[next]?.paths,
         },
-        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [], place: { turn: 0, scale: 1, ...start?.place } },
+        mesh: { offsets: new Map(), pulls: [], circles: [], place: { turn: 0, scale: 1, ...start?.place } },
         location: startLocationState(start?.location),
         satelliteOffset: { x: 0, y: 0, ...start?.satelliteOffset },
         fitSatellite: start?.fitSatellite,
@@ -10414,9 +10196,8 @@
       for (const [key, offset] of saved.mesh.offsets) meshOffsets.set(key, offset);
       meshPulls.splice(0, meshPulls.length, ...saved.mesh.pulls);
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
-      meshKeeps.splice(0, meshKeeps.length, ...saved.mesh.keeps);
       Object.assign(mapPlace, saved.mesh.place);
-      meshPullSelected = meshCircleSelected = meshDrawing = null;
+      meshPullSelected = meshCircleSelected = null;
       satelliteReach = mapSatellites[next].reach;
       satellite.src = mapSatellites[next].src;
       // Maps differ in size and shape, so each opens fitted to the view.

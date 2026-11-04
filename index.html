@@ -4673,6 +4673,8 @@
     }
     // An anchor's ring, in screen pixels at every zoom.
     const MESH_ANCHOR_RING = 20;
+    // How far out from an anchor its ring can be taken hold of.
+    const MESH_ANCHOR_REACH = MESH_ANCHOR_RING + 10;
     // The anchor whose ring Pull mesh is over, or turning.
     function meshAnchorLit() {
       if (!inLocation() || locationTool !== 'mesh') return null;
@@ -4680,7 +4682,7 @@
       if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
       return [...meshPulls].reverse().find((pull) => {
         const at = toScreen(fromMesh(pull.end));
-        return Math.hypot(at.x - pointer.x, at.y - pointer.y) <= MESH_ANCHOR_RING;
+        return Math.hypot(at.x - pointer.x, at.y - pointer.y) <= MESH_ANCHOR_REACH;
       }) ?? null;
     }
     let meshAnchorLitWas = null;
@@ -4700,7 +4702,7 @@
         return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
       };
       for (const pull of [...meshPulls].reverse()) {
-        if (shift && near(pull.end, MESH_ANCHOR_RING + 6)) return { pull, part: 'turn' };
+        if (shift && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
         if (near(pull.end, 10)) return { pull, part: 'end' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
       }
@@ -4799,11 +4801,13 @@
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
         if (pull === litAnchor) {
-          ctx.globalAlpha = 0.3;
+          ctx.globalAlpha = 0.1;
           ctx.fill();
           ctx.globalAlpha = 1;
         }
+        ctx.lineWidth = (pull === litAnchor ? 3.5 : 1.5) * px;
         ctx.stroke();
+        ctx.lineWidth = 1.5 * px;
         if (pull.turn) turnArc(end, (MESH_ANCHOR_RING + 6) * px, pull.turnFrom ?? -Math.PI / 2, pull.turn);
       }
       for (const pull of meshPulls) {

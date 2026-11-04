@@ -1357,10 +1357,11 @@
       grid-template-columns: 44px minmax(60px, 130px);
       gap: 12px;
     }
-    /* Location's sliders are all one width, so their numbers line up too. */
+    /* Location's sliders are all one width, so their numbers line up too,
+       narrowing only where a long name or an inset box leaves less room. */
     #location-panel .field .slider {
-      flex: none;
-      grid-template-columns: 44px 110px;
+      flex: 0 1 auto;
+      grid-template-columns: 44px minmax(60px, 110px);
     }
     :is(#panel, #style-panel) .field .slider input[type="number"] {
       appearance: textfield;
@@ -2312,6 +2313,9 @@
             Mesh
             <input id="mesh-on" class="switch" type="checkbox" checked>
           </label>
+        </div>
+        <div id="mesh-fields" class="temporary-controls">
+          <div class="section-heading">Temporary Controls</div>
           <label class="field">
             Mesh Count
             <span class="slider"><input id="mesh-count" type="number" min="1" max="100" step="1" value="12"><input type="range" min="1" max="40" step="1" value="12" aria-label="Mesh count"></span>
@@ -4345,7 +4349,7 @@
     const meshRubber = document.getElementById('mesh-rubber');
     const meshGravity = document.getElementById('mesh-gravity');
     function showMeshFields() {
-      for (const input of [meshCount, meshColor, meshThickness, meshBorder, meshRotation, meshRubber, meshGravity]) input.closest('.field').hidden = !meshOn.checked;
+      document.getElementById('mesh-fields').hidden = !meshOn.checked;
     }
     showMeshFields();
     meshOn.addEventListener('change', () => {

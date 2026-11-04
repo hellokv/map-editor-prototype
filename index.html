@@ -4299,11 +4299,25 @@
       const k = satelliteScale();
       const x = (dx * Math.cos(t) - dy * Math.sin(t)) / k;
       const y = (dx * Math.sin(t) + dy * Math.cos(t)) / k;
-      return Math.abs(x) <= board.w && Math.abs(y) <= board.h ? 'satellite' : 'view';
+      const half = satelliteHalf();
+      return Math.abs(x) <= half.w && Math.abs(y) <= half.h ? 'satellite' : 'view';
     }
-    // Made from the demo map's background, so it lines up with that one only.
-    const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
-    const mapSatellites = { demo: 'satellite.jpg', 'national-zoo': null };
+    // Each map's satellite and how far past the map's box it reaches at 100%:
+    // it keeps its shape and covers the box `reach` times over.
+    const mapSatellites = {
+      // Made from the demo map's background, so it lines up with that one only.
+      demo: { src: 'satellite.jpg', reach: 2 },
+      'national-zoo': { src: 'national-zoo-satellite.jpg', reach: 1 },
+    };
+    let satelliteReach = mapSatellites.demo.reach;
+    const satellite = Object.assign(new Image(), { src: mapSatellites.demo.src });
+    // Half the satellite's size at 100%, in map units.
+    function satelliteHalf() {
+      const w = satellite.naturalWidth || 1;
+      const h = satellite.naturalHeight || 1;
+      const k = satelliteReach * Math.max(board.w / w, board.h / h);
+      return { w: (w * k) / 2, h: (h * k) / 2 };
+    }
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
     // A mesh over the map: its count of lines each way, evenly spaced inside
     // the map's box with none on its edges, turned about the map's centre.
@@ -4944,7 +4958,8 @@
         ctx.translate(board.w / 2 + satelliteOffset.x, board.h / 2 + satelliteOffset.y);
         ctx.rotate(satelliteTurn());
         ctx.scale(scale, scale);
-        ctx.drawImage(satellite, -board.w, -board.h, board.w * 2, board.h * 2);
+        const half = satelliteHalf();
+        ctx.drawImage(satellite, -half.w, -half.h, half.w * 2, half.h * 2);
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const layers = Object.entries(locationLayers).map(([part, layer]) => ({
@@ -9993,7 +10008,7 @@
 
     // The pre-loaded maps. Switching keeps the one left, mesh and all, to
     // come back to. A map not opened yet starts from the open one's styles
-    // and settings, with no background, paths, labels or satellite.
+    // and settings, with no background, paths or labels.
     const mapExample = document.getElementById('map-example');
     const openedMaps = {};
     let openMap = mapExample.value;
@@ -10017,8 +10032,8 @@
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
       meshKeeps.splice(0, meshKeeps.length, ...saved.mesh.keeps);
       meshPullSelected = meshCircleSelected = meshDrawing = null;
-      if (mapSatellites[next]) satellite.src = mapSatellites[next];
-      else satellite.removeAttribute('src');
+      satelliteReach = mapSatellites[next].reach;
+      satellite.src = mapSatellites[next].src;
       draw();
     });
 

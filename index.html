@@ -1693,6 +1693,7 @@
         <option>Stacked</option>
       </select>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
+      <button id="turn-button" type="button" aria-label="Rotate 90°"><span class="material-symbols-rounded">rotate_90_degrees_cw</span></button>
       <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
     </div>
     <div id="layers-modal" hidden>
@@ -3950,6 +3951,7 @@
       zoomInput.parentElement.hidden = splitOn();
       for (const id of ['layer-select', 'layers-button']) document.getElementById(id).hidden = inLocation();
       document.getElementById('location-view').hidden = !inLocation();
+      document.getElementById('turn-button').hidden = !inLocation();
     }
     const autoLayers = document.getElementById('auto-layers');
     // Clicking the levels Automatic shows switches to the first of them.
@@ -5159,6 +5161,17 @@
         ctx.fillRect(halfWidth - dpr, 0, 2 * dpr, canvas.height);
       }
     }
+    // A quarter turn of the map and the satellite together, about the map's
+    // centre, so they stay lined up.
+    document.getElementById('turn-button').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      mapPlace.turn += Math.PI / 2;
+      [satelliteOffset.x, satelliteOffset.y] = [-satelliteOffset.y, satelliteOffset.x];
+      const rotation = document.getElementById('satellite-rotation');
+      rotation.value = ((((Number(rotation.value) || 0) + 90 + 180) % 360) + 360) % 360 - 180;
+      rotation.dispatchEvent(new Event('input'));
+      draw();
+    });
     // Location's Side by Side view: the map on the left, the satellite on the
     // right, each half with its own pan and zoom, in map units like `view`.
     // Points in the right half are measured from its own left edge.

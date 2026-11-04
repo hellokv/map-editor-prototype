@@ -4642,6 +4642,13 @@
     }
     // An anchor's ring, in screen pixels at every zoom.
     const MESH_ANCHOR_RING = 20;
+    // The circle part the Circle tool is over, or dragging.
+    function meshCircleLit() {
+      if (!inLocation() || locationTool !== 'add') return null;
+      if (drag?.meshCircle) return { circle: drag.meshCircle, part: drag.part };
+      return !drag && pointer ? meshCircleAt(pointer) : null;
+    }
+    let meshCircleLitWas = null;
     // The pull whose arrow or start dot is at screen point s; with Shift, the
     // anchor whose ring is there, to turn.
     function meshPullAt(s, shift = false) {
@@ -4741,18 +4748,25 @@
       // Each circle, with the circle it's scaled and moved to ghosted, a dashed
       // line from where its edge was taken to the dot it was dropped at, and
       // a dashed arrow from its centre to where that was dragged.
+      const lit = meshCircleLit();
       for (const circle of meshCircles) {
         const { c, r, from: edge, to, shift } = circle;
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+        if (lit?.circle === circle && lit.part === 'centre') {
+          ctx.globalAlpha = 0.3;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
         if (circle === meshCircleSelected) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
           ctx.stroke();
           ctx.strokeStyle = toolColor.value;
         }
-        ctx.lineWidth = 1.5 * px;
+        ctx.lineWidth = (lit?.circle === circle && lit.part === 'edge' ? 3.5 : 1.5) * px;
         ctx.stroke();
+        ctx.lineWidth = 1.5 * px;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();
@@ -9582,8 +9596,11 @@
       }
       if (!drag && inLocation()) {
         const hover = !!mapBoxAt(pointer);
-        if (hover !== mapBoxHover) {
+        const lit = meshCircleLit();
+        const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
+        if (hover !== mapBoxHover || litKey !== meshCircleLitWas) {
           mapBoxHover = hover;
+          meshCircleLitWas = litKey;
           draw();
         }
       }

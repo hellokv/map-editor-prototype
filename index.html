@@ -10270,14 +10270,43 @@
     // The pre-loaded maps. Switching keeps the one left, mesh and all, to
     // come back to. A map not opened yet starts from the open one's styles
     // and settings, with its own background, box size and paths if it has
-    // them, and no labels.
+    // them, and no labels. Location's settings, the map's place on the
+    // satellite and the satellite's offset are kept for each map too, starting
+    // from the panel's defaults with the map's own changes; a map placed on
+    // its satellite opens fitted to the satellite rather than the map.
     const mapStarts = {
       'national-zoo': {
         background: 'national-zoo-background.svg',
         settings: { 'board-width': '675', 'board-height': '1500' },
         paths: JSON.parse(document.getElementById('national-zoo-paths').textContent),
+        location: { 'location-background': '0', 'mesh-count': '16', 'mesh-color-opacity': '25' },
+        place: { turn: (-63.55 * Math.PI) / 180, scale: 1.5874 },
+        satelliteOffset: { x: 102.5, y: 63.6 },
+        fitSatellite: true,
       },
     };
+    const locationFields = () => [...document.querySelectorAll('#location-panel input')];
+    const locationState = () => locationFields().map((input) => (input.type === 'checkbox' ? input.checked : input.value));
+    function setLocationState(values) {
+      locationFields().forEach((input, k) => {
+        if (input.type === 'checkbox') input.checked = values[k];
+        else input.value = values[k];
+      });
+      for (const input of locationFields()) if (input.type === 'checkbox') input.dispatchEvent(new Event('change'));
+    }
+    function startLocationState(changes = {}) {
+      for (const input of locationFields()) {
+        if (input.type === 'checkbox') input.checked = input.defaultChecked;
+        else input.value = input.defaultValue;
+      }
+      for (const [id, value] of Object.entries(changes)) {
+        const input = id.endsWith('-opacity') ? document.getElementById(id.slice(0, -'-opacity'.length)).nextElementSibling : document.getElementById(id);
+        input.value = value;
+        const range = input.closest('.slider')?.querySelector('input[type="range"]');
+        if (range) range.value = value;
+      }
+      return locationState();
+    }
     const mapExample = document.getElementById('map-example');
     const openedMaps = {};
     let openMap = mapExample.value;
@@ -10288,8 +10317,11 @@
       openedMaps[openMap] = {
         file,
         mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], keeps: [...meshKeeps], place: { ...mapPlace } },
+        location: locationState(),
+        satelliteOffset: { ...satelliteOffset },
       };
       openMap = next;
+      const start = mapStarts[next];
       const saved = openedMaps[next] ?? {
         file: {
           ...file,
@@ -10298,9 +10330,16 @@
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           ...mapStarts[next]?.paths,
         },
-        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [], place: { turn: 0, scale: 1 } },
+        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [], place: { turn: 0, scale: 1, ...start?.place } },
+        location: startLocationState(start?.location),
+        satelliteOffset: { x: 0, y: 0, ...start?.satelliteOffset },
+        fitSatellite: start?.fitSatellite,
       };
       await loadMapFile(saved.file);
+      setLocationState(saved.location);
+      Object.assign(satelliteOffset, saved.satelliteOffset);
+      // A changed Mesh Count clears the mesh, so it's taken in before the mesh is put back.
+      meshLattice();
       meshOffsets.clear();
       for (const [key, offset] of saved.mesh.offsets) meshOffsets.set(key, offset);
       meshPulls.splice(0, meshPulls.length, ...saved.mesh.pulls);
@@ -10312,7 +10351,23 @@
       satellite.src = mapSatellites[next].src;
       // Maps differ in size and shape, so each opens fitted to the view.
       document.getElementById('fit-button').click();
+      if (saved.fitSatellite) {
+        delete saved.fitSatellite;
+        await satellite.decode().catch(() => {});
+        fitSatellite();
+        draw();
+      }
     });
+    // Fits the satellite, at its offset, to most of the view.
+    function fitSatellite() {
+      const half = satelliteHalf();
+      const k = satelliteScale();
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      view.scale = 0.785 * Math.min(w / (2 * half.w * k), h / (2 * half.h * k));
+      view.x = w / 2 - (board.w / 2 + satelliteOffset.x) * view.scale;
+      view.y = h / 2 - (board.h / 2 + satelliteOffset.y) * view.scale;
+    }
 
     renderLabelStyles();
     // Closing the panel gives the canvas the full width; the open button
@@ -10354,6 +10409,10 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode(START_IMAGE ? 'labels' : 'background');
+    // The editor opens on the National Zoo, lined up on its satellite.
+    mapExample.value = 'national-zoo';
+    mapExample.dispatchEvent(new Event('change'));
+    setMode('location');
   </script>
 </body>
 </html>

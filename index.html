@@ -1621,6 +1621,9 @@
         <button type="button" data-location-tool="select" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
+        <button type="button" data-location-tool="pan" aria-label="Pan" aria-pressed="false">
+          <span class="material-symbols-rounded">pan_tool</span>
+        </button>
         <button type="button" data-location-tool="mesh" aria-label="Pull mesh" aria-pressed="false">
           <span class="material-symbols-rounded">antigravity</span>
         </button>
@@ -2798,7 +2801,8 @@
         }
       });
     }
-    // Location's tools: the cursor, which drags the map and satellite, and Add circle.
+    // Location's tools: the cursor, which drags the map and satellite; Pan,
+    // which only moves the view; Pull mesh; and Circle.
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
@@ -9257,6 +9261,8 @@
         const hit = pointer && !drag && meshPullAt(pointer);
         canvas.style.cursor = drag?.meshPull || drag?.meshStart || drag?.meshTurn ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       }
+      // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
+      else if (inLocation() && locationTool === 'select' && !spaceHeld) canvas.style.cursor = '';
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9423,7 +9429,7 @@
       const s = canvasPoint(e);
       // The satellite half of Side by Side only moves the satellite.
       if (s.right) {
-        drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: spaceHeld ? 'view' : 'satellite', views: viewsAt(s, e) };
+        drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: spaceHeld || locationTool === 'pan' ? 'view' : 'satellite', views: viewsAt(s, e) };
         updateCursor();
         return;
       }
@@ -9510,7 +9516,7 @@
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true, views: viewsAt(s, e) };
         // Side by Side keeps the satellite in its own half, so this one just pans.
-        if (inLocation() && !spaceHeld && !sideBySide()) drag.locationGrab = locationGrabAt(s);
+        if (inLocation() && !spaceHeld && locationTool !== 'pan' && !sideBySide()) drag.locationGrab = locationGrabAt(s);
         updateCursor();
         return;
       }

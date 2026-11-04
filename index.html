@@ -4563,8 +4563,29 @@
       const { shares } = meshPullShares(pull.start, pull);
       pullMesh(pull, { shares, tugs: [] }, pull.end.x - pull.start.x, pull.end.y - pull.start.y);
     }
+    // Twists the mesh about a pull's end by its turn, each node by its share
+    // of it, in place of the twist it had.
+    function turnMeshPull(pull, shares) {
+      for (const [key, moved] of pull.turnMoves ?? []) moveMeshNode(key, -moved.x, -moved.y);
+      pull.turnMoves = new Map();
+      if (!pull.turn) return;
+      const { node } = meshLattice();
+      const { end } = pull;
+      for (const [key, share] of shares) {
+        const [i, j] = key.split(',').map(Number);
+        const n = node(i, j);
+        const cos = Math.cos(pull.turn * share);
+        const sin = Math.sin(pull.turn * share);
+        const vx = n.x - end.x;
+        const vy = n.y - end.y;
+        pull.turnMoves.set(key, { x: vx * cos - vy * sin - vx, y: vx * sin + vy * cos - vy });
+      }
+      for (const [key, moved] of pull.turnMoves) moveMeshNode(key, moved.x, moved.y);
+    }
     function deleteMeshPull(pull) {
       undoMeshPull(pull);
+      pull.turn = 0;
+      turnMeshPull(pull, []);
       meshPulls.splice(meshPulls.indexOf(pull), 1);
       if (meshPullSelected === pull) meshPullSelected = null;
     }
@@ -4633,14 +4654,18 @@
       }
       return null;
     }
-    // The pull whose arrow or start dot is at screen point s.
-    function meshPullAt(s) {
+    // An anchor's ring, in screen pixels at every zoom.
+    const MESH_ANCHOR_RING = 20;
+    // The pull whose arrow or start dot is at screen point s; with Shift, the
+    // anchor whose ring is there, to turn.
+    function meshPullAt(s, shift = false) {
       if (!meshOn.checked) return null;
       const near = (q, reach) => {
         const p = toScreen(fromMesh(q));
         return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
       };
       for (const pull of [...meshPulls].reverse()) {
+        if (shift && near(pull.end, MESH_ANCHOR_RING + 6)) return { pull, part: 'turn' };
         if (near(pull.end, 10)) return { pull, part: 'end' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
       }
@@ -4711,6 +4736,11 @@
         ctx.fill();
       };
       for (const { start, end } of meshPulls) dashedArrow(start, end);
+      for (const { end } of meshPulls) {
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
       for (const pull of meshPulls) {
         ctx.beginPath();
         ctx.arc(pull.start.x, pull.start.y, (pull === meshPullSelected ? 5 : 4) * px, 0, 2 * Math.PI);
@@ -9356,7 +9386,7 @@
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const hit = pointer && !drag && meshPullAt(pointer);
-        canvas.style.cursor = drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+        canvas.style.cursor = drag?.meshPull || drag?.meshStart || drag?.meshTurn ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9568,8 +9598,20 @@
         return;
       }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
-        const hit = meshPullAt(s);
-        if (hit?.part === 'start') {
+        const hit = meshPullAt(s, e.shiftKey);
+        if (hit?.part === 'turn') {
+          meshPullSelected = null;
+          const end = toScreen(fromMesh(hit.pull.end));
+          // Shares are taken with the old twist out, so a turn replaces it.
+          hit.pull.turn ??= 0;
+          const turn = hit.pull.turn;
+          hit.pull.turn = 0;
+          turnMeshPull(hit.pull, []);
+          hit.pull.turn = turn;
+          const { shares } = meshPullShares(hit.pull.end, hit.pull);
+          turnMeshPull(hit.pull, shares);
+          drag = { meshTurn: hit.pull, shares, turn, angle: Math.atan2(s.y - end.y, s.x - end.x), centre: end };
+        } else if (hit?.part === 'start') {
           meshPullSelected = hit.pull;
           drag = { meshStart: hit.pull, last: toMesh(toBackground(s.x, s.y)) };
         } else if (hit) {
@@ -9786,6 +9828,14 @@
         draw();
         return;
       }
+      if (drag?.meshTurn) {
+        let delta = Math.atan2(pointer.y - drag.centre.y, pointer.x - drag.centre.x) - drag.angle;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        drag.meshTurn.turn = drag.turn + delta;
+        turnMeshPull(drag.meshTurn, drag.shares);
+        draw();
+        return;
+      }
       if (drag?.meshStart) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const pull = drag.meshStart;
@@ -9950,7 +10000,7 @@
         updateCursor();
         return;
       }
-      if (drag.meshPull || drag.meshStart) {
+      if (drag.meshPull || drag.meshStart || drag.meshTurn) {
         drag = null;
         updateCursor();
         return;

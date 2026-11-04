@@ -9189,7 +9189,7 @@
       let boxPart = inLocation() && !spaceHeld && (drag?.mapBox ?? (pointer && !drag && mapBoxAt(pointer)?.part));
       if (boxPart === 'scale' && !drag && shiftHeld) boxPart = 'turn';
       if (boxPart === 'turn' || boxPart === 'scale') {
-        canvas.style.cursor = boxPart === 'turn' ? (drag ? 'grabbing' : 'grab') : 'nwse-resize';
+        canvas.style.cursor = boxPart === 'turn' ? rotateCursor : 'nwse-resize';
         return;
       }
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {

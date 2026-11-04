@@ -4308,13 +4308,93 @@
     }
     // Where the satellite view has been dragged to, from the map's centre, in map units.
     const satelliteOffset = { x: 0, y: 0 };
+    // In Location, the map (background, paths and everything on them) can be
+    // turned and scaled about its centre to line it up with the satellite,
+    // which stays where it is. Map units turn into location units, which
+    // the satellite and `view` use, by this.
+    const mapPlace = { turn: 0, scale: 1 };
+    function toLocation(p) {
+      if (!inLocation()) return p;
+      const cx = board.w / 2;
+      const cy = board.h / 2;
+      const cos = Math.cos(mapPlace.turn) * mapPlace.scale;
+      const sin = Math.sin(mapPlace.turn) * mapPlace.scale;
+      return { x: cx + (p.x - cx) * cos - (p.y - cy) * sin, y: cy + (p.x - cx) * sin + (p.y - cy) * cos };
+    }
+    function fromLocation(p) {
+      if (!inLocation()) return p;
+      const cx = board.w / 2;
+      const cy = board.h / 2;
+      const cos = Math.cos(-mapPlace.turn) / mapPlace.scale;
+      const sin = Math.sin(-mapPlace.turn) / mapPlace.scale;
+      return { x: cx + (p.x - cx) * cos - (p.y - cy) * sin, y: cy + (p.x - cx) * sin + (p.y - cy) * cos };
+    }
+    // The map's box, shown in Location's Select tool while the pointer is over
+    // the map or the box is being dragged: corners scale it, keeping its
+    // shape, and the handle above it turns it, both about its centre.
+    let mapBoxHover = false;
+    const mapBoxShown = () => inLocation() && locationTool === 'select' && (mapBoxHover || !!drag?.mapBox || drag?.locationGrab === 'map');
+    function mapBoxCorners() {
+      return [{ x: 0, y: 0 }, { x: board.w, y: 0 }, { x: board.w, y: board.h }, { x: 0, y: board.h }].map((q) => toScreen(q));
+    }
+    function mapBoxHandle() {
+      const top = toScreen({ x: board.w / 2, y: 0 });
+      const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
+      const length = Math.hypot(top.x - centre.x, top.y - centre.y) || 1;
+      return { x: top.x + ((top.x - centre.x) / length) * 24, y: top.y + ((top.y - centre.y) / length) * 24, top };
+    }
+    // What of the box is at screen point s: its turn handle, a corner, or
+    // inside it.
+    function mapBoxAt(s) {
+      if (!inLocation() || locationTool !== 'select' || s.right) return null;
+      const handle = mapBoxHandle();
+      if (Math.hypot(handle.x - s.x, handle.y - s.y) <= 8) return { part: 'turn' };
+      const corner = mapBoxCorners().findIndex((q) => Math.hypot(q.x - s.x, q.y - s.y) <= 8);
+      if (corner >= 0) return { part: 'scale', corner };
+      const m = toBackground(s.x, s.y);
+      return m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h ? { part: 'inside' } : null;
+    }
+    function drawMapBox() {
+      const corners = mapBoxCorners();
+      const handle = mapBoxHandle();
+      ctx.strokeStyle = colorOf(locationPathColor);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      corners.forEach((q, k) => (k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
+      ctx.moveTo(handle.top.x, handle.top.y);
+      ctx.lineTo(handle.x, handle.y);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      for (const q of corners) {
+        ctx.beginPath();
+        ctx.rect(q.x - 4, q.y - 4, 8, 8);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(handle.x, handle.y, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Turns ctx, already in location units, to draw in map units.
+    function placeMap(context) {
+      if (!inLocation()) return;
+      context.translate(board.w / 2, board.h / 2);
+      context.rotate(mapPlace.turn);
+      context.scale(mapPlace.scale, mapPlace.scale);
+      context.translate(-board.w / 2, -board.h / 2);
+    }
     const satelliteScale = () => (Number(document.getElementById('satellite-scale').value) || 100) / 100;
     const satelliteTurn = () => ((Number(document.getElementById('satellite-rotation').value) || 0) * Math.PI) / 180;
-    // What a drag at map point p takes hold of in Location: the map, where it
-    // shows; else the satellite view, where it is; else the whole view.
-    function locationGrabAt(p) {
+    // What a drag at screen point s takes hold of in Location: the map, where
+    // it shows; else the satellite view, where it is; else the whole view.
+    function locationGrabAt(s) {
       const background = Number(locationInputs.background.value) > 0;
-      if (background && p.x >= 0 && p.x <= board.w && p.y >= 0 && p.y <= board.h) return 'map';
+      const m = toBackground(s.x, s.y);
+      if (background && m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h) return 'map';
+      const p = { x: (s.x - view.x) / view.scale, y: (s.y - view.y) / view.scale };
       const dx = p.x - board.w / 2 - satelliteOffset.x;
       const dy = p.y - board.h / 2 - satelliteOffset.y;
       const t = -satelliteTurn();
@@ -4597,13 +4677,13 @@
       // Line thickness in screen pixels; the border is a pixel either side of it.
       const thickness = Math.max(0.1, Number(meshThickness.value) || 1);
       ctx.strokeStyle = colorOf(meshBorder);
-      ctx.lineWidth = (thickness + 2) / view.scale;
+      ctx.lineWidth = (thickness + 2) / (view.scale * mapPlace.scale);
       ctx.stroke();
       ctx.strokeStyle = colorOf(meshColor);
-      ctx.lineWidth = thickness / view.scale;
+      ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
       // Each pull: a dot where it started, dotted to an arrow where it ended.
-      const px = 1 / view.scale;
+      const px = 1 / (view.scale * mapPlace.scale);
       const arrow = 10 * px;
       // Markers are drawn solid; the colour's opacity is the lines' alone.
       ctx.strokeStyle = meshColor.value;
@@ -4790,7 +4870,7 @@
     // Lightly filled outlines with a dot on each corner, in map coordinates,
     // with ctx set to the view.
     function drawMeshKeeps() {
-      const px = 1 / view.scale;
+      const px = 1 / (view.scale * mapPlace.scale);
       ctx.strokeStyle = colorOf(polygonColor);
       ctx.fillStyle = ctx.strokeStyle;
       ctx.lineWidth = 1.5 * px;
@@ -5036,6 +5116,7 @@
         const out = meshKept.getContext('2d');
         out.drawImage(warped, 0, 0);
         out.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
+        placeMap(out);
         traceMeshKeeps(out);
         out.clip();
         out.setTransform(1, 0, 0, 1, 0, 0);
@@ -5051,12 +5132,19 @@
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.translate(view.x, view.y);
         ctx.scale(view.scale, view.scale);
+        placeMap(ctx);
         drawMesh();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       if (meshKeeps.length || meshDrawing) {
         ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
+        placeMap(ctx);
         drawMeshKeeps();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      if (mapBoxShown()) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawMapBox();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       if (side) {
@@ -5110,6 +5198,7 @@
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
+      placeMap(ctx);
       // The box's fill casts its shadow. Canvas shadows are in device
       // pixels, so they're scaled with the map.
       ctx.save();
@@ -8611,7 +8700,10 @@
         sketchFills: sketchFills.map((fill) => newLoop([...fill].map((point) => copies.get(point)), lookOf(fill))),
       };
     }
-    const toScreen = (p) => ({ x: p.x * view.scale + view.x, y: p.y * view.scale + view.y });
+    const toScreen = (p) => {
+      const q = toLocation(p);
+      return { x: q.x * view.scale + view.x, y: q.y * view.scale + view.y };
+    };
     // The nearest point within reach of a screen point, in screen pixels.
     function sketchPointAt(s, reach = SKETCH_HIT_DISTANCE, exclude = null, among = sketch.points) {
       let best = null;
@@ -9069,7 +9161,7 @@
     }, { passive: false });
 
     function toBackground(sx, sy) {
-      return { x: (sx - view.x) / view.scale, y: (sy - view.y) / view.scale };
+      return fromLocation({ x: (sx - view.x) / view.scale, y: (sy - view.y) / view.scale });
     }
 
     function inBackground(p) {
@@ -9231,6 +9323,11 @@
     }
 
     function updateCursor() {
+      const boxPart = inLocation() && !spaceHeld && (drag?.mapBox ?? (pointer && !drag && mapBoxAt(pointer)?.part));
+      if (boxPart === 'turn' || boxPart === 'scale') {
+        canvas.style.cursor = boxPart === 'turn' ? (drag ? 'grabbing' : 'grab') : 'nwse-resize';
+        return;
+      }
       if (inLocation() && locationTool === 'polygon' && !spaceHeld && !drag?.spacePan) {
         canvas.style.cursor = drag?.polygonCorners ? 'grabbing' : pointer && !meshDrawing && polygonCornersAt(pointer).length ? 'grab' : 'crosshair';
       }
@@ -9472,10 +9569,22 @@
         updateCursor();
         return;
       }
+      const boxHit = !spaceHeld && mapBoxAt(s);
+      if (boxHit && boxHit.part !== 'inside') {
+        const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
+        drag = {
+          mapBox: boxHit.part,
+          angle: Math.atan2(s.y - centre.y, s.x - centre.x),
+          distance: Math.hypot(s.x - centre.x, s.y - centre.y),
+          from: { ...mapPlace },
+        };
+        updateCursor();
+        return;
+      }
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
         drag = { x: e.clientX, y: e.clientY, spacePan: true, views: viewsAt(s, e) };
         // Side by Side keeps the satellite in its own half, so this one just pans.
-        if (inLocation() && !spaceHeld && !sideBySide()) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
+        if (inLocation() && !spaceHeld && !sideBySide()) drag.locationGrab = locationGrabAt(s);
         updateCursor();
         return;
       }
@@ -9598,6 +9707,24 @@
       if (!drag && meshDrawing && inLocation()) {
         draw();
         return;
+      }
+      if (drag?.mapBox) {
+        // The centre doesn't move, so it's found with either place.
+        const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
+        if (drag.mapBox === 'turn') {
+          mapPlace.turn = drag.from.turn + Math.atan2(pointer.y - centre.y, pointer.x - centre.x) - drag.angle;
+        } else {
+          mapPlace.scale = Math.max(0.05, drag.from.scale * (Math.hypot(pointer.x - centre.x, pointer.y - centre.y) / Math.max(1, drag.distance)));
+        }
+        draw();
+        return;
+      }
+      if (!drag && inLocation()) {
+        const hover = !!mapBoxAt(pointer);
+        if (hover !== mapBoxHover) {
+          mapBoxHover = hover;
+          draw();
+        }
       }
       if (drag?.meshCircle) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
@@ -9780,6 +9907,12 @@
 
     canvas.addEventListener('pointerup', (e) => {
       if (!drag) return;
+      if (drag.mapBox) {
+        drag = null;
+        draw();
+        updateCursor();
+        return;
+      }
       if (drag.meshCircle) {
         const circle = drag.meshCircle;
         // Too small to see, so taken as a click rather than a circle.
@@ -10133,7 +10266,7 @@
       const file = JSON.parse(JSON.stringify(await mapFile()));
       openedMaps[openMap] = {
         file,
-        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], keeps: [...meshKeeps] },
+        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], keeps: [...meshKeeps], place: { ...mapPlace } },
       };
       openMap = next;
       const saved = openedMaps[next] ?? {
@@ -10144,7 +10277,7 @@
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           ...mapStarts[next]?.paths,
         },
-        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [] },
+        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [], place: { turn: 0, scale: 1 } },
       };
       await loadMapFile(saved.file);
       meshOffsets.clear();
@@ -10152,6 +10285,7 @@
       meshPulls.splice(0, meshPulls.length, ...saved.mesh.pulls);
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
       meshKeeps.splice(0, meshKeeps.length, ...saved.mesh.keeps);
+      Object.assign(mapPlace, saved.mesh.place);
       meshPullSelected = meshCircleSelected = meshDrawing = null;
       satelliteReach = mapSatellites[next].reach;
       satellite.src = mapSatellites[next].src;

@@ -4771,6 +4771,27 @@
         ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();
         if (shift) dashedArrow(c, shift);
+        if (circle.turn) {
+          // Just outside the circle, from where the turn was taken round by it.
+          const rr = r + 12 * px;
+          const start = circle.turnFrom ?? -Math.PI / 2;
+          const end = start + circle.turn;
+          const sweep = Math.max(0, Math.abs(circle.turn) * rr - arrow) / rr;
+          ctx.setLineDash([3 * px, 3 * px]);
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, rr, start, start + Math.sign(circle.turn) * sweep, circle.turn < 0);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          const tip = { x: c.x + rr * Math.cos(end), y: c.y + rr * Math.sin(end) };
+          const ux = -Math.sin(end) * Math.sign(circle.turn);
+          const uy = Math.cos(end) * Math.sign(circle.turn);
+          ctx.beginPath();
+          ctx.moveTo(tip.x, tip.y);
+          ctx.lineTo(tip.x - ux * arrow - uy * arrow * 0.5, tip.y - uy * arrow + ux * arrow * 0.5);
+          ctx.lineTo(tip.x - ux * arrow + uy * arrow * 0.5, tip.y - uy * arrow - ux * arrow * 0.5);
+          ctx.closePath();
+          ctx.fill();
+        }
         if (!to && !shift) continue;
         const ghost = shift ?? c;
         ctx.globalAlpha = 0.35;
@@ -9398,6 +9419,8 @@
         meshCircleSelected = hit?.circle ?? null;
         if (turning) {
           drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - turning.c.y, at.x - turning.c.x), turn: turning.turn ?? 0 };
+          // A turn's arc starts where the first turn was taken.
+          if (!turning.turn) turning.turnFrom = drag.angle;
         } else if (hit?.part === 'edge') {
           // The edge is taken afresh only once the press moves, so a click
           // just selects the circle and keeps its scale.

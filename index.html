@@ -4687,9 +4687,9 @@
       // Each pull: a dot where it started, dotted to an arrow where it ended.
       const px = 1 / (view.scale * mapPlace.scale);
       const arrow = 10 * px;
-      // Markers are drawn solid; the colour's opacity is the lines' alone.
-      ctx.strokeStyle = meshColor.value;
-      ctx.fillStyle = meshColor.value;
+      // Pull and circle markers are drawn solid in the polygon colour.
+      ctx.strokeStyle = polygonColor.value;
+      ctx.fillStyle = polygonColor.value;
       ctx.lineWidth = 1.5 * px;
       const dashedArrow = (start, end) => {
         const length = Math.hypot(end.x - start.x, end.y - start.y);
@@ -4719,7 +4719,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2 * px;
           ctx.stroke();
-          ctx.strokeStyle = meshColor.value;
+          ctx.strokeStyle = polygonColor.value;
         }
       }
       // Each circle, with the circle it's scaled and moved to ghosted, a dashed
@@ -4733,7 +4733,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
           ctx.stroke();
-          ctx.strokeStyle = meshColor.value;
+          ctx.strokeStyle = polygonColor.value;
         }
         ctx.lineWidth = 1.5 * px;
         ctx.stroke();

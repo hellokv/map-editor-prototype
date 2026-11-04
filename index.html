@@ -4637,7 +4637,7 @@
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
         const shown = toScreen(fromMesh(meshCircleShown(circle)));
-        if (Math.abs(Math.hypot(shown.x - s.x, shown.y - s.y) - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
+        if (Math.abs(Math.hypot(shown.x - s.x, shown.y - s.y) - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
       }
       return null;
     }
@@ -4645,6 +4645,15 @@
     // along with it, so its circles stay concentric.
     function meshCircleOffset({ c, shift }) {
       return shift ? { x: shift.x - c.x, y: shift.y - c.y } : { x: 0, y: 0 };
+    }
+    // Taking the edge to mesh point at: the transformed circle's radius
+    // follows it, against the original circle's edge in line with it.
+    function meshCircleEdgeTo(circle, at) {
+      const o = meshCircleShown(circle);
+      const off = meshCircleOffset(circle);
+      const away = Math.max(1e-6, Math.hypot(at.x - o.x, at.y - o.y));
+      circle.from = { x: circle.c.x + ((at.x - o.x) * circle.r) / away, y: circle.c.y + ((at.y - o.y) * circle.r) / away };
+      circle.to = { x: at.x - off.x, y: at.y - off.y };
     }
     function meshCircleShown(circle, q = circle.c) {
       const off = meshCircleOffset(circle);
@@ -4763,8 +4772,10 @@
         const { c, r, shift } = circle;
         const o = meshCircleShown(circle);
         const to = circle.to && meshCircleShown(circle, circle.to);
+        // The transformed circle is the one drawn solid; the original is ghosted.
+        const rk = r * meshCircleScale(circle);
         ctx.beginPath();
-        ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, rk, 0, 2 * Math.PI);
         if (lit?.circle === circle && lit.part === 'centre') {
           ctx.globalAlpha = 0.3;
           ctx.fill();
@@ -4785,7 +4796,7 @@
         if (shift) dashedArrow(c, shift);
         if (circle.turn) {
           // Just outside the circle, from where the turn was taken round by it.
-          const rr = r + 12 * px;
+          const rr = rk + 12 * px;
           const start = circle.turnFrom ?? -Math.PI / 2;
           const end = start + circle.turn;
           const sweep = Math.max(0, Math.abs(circle.turn) * rr - arrow) / rr;
@@ -4807,7 +4818,7 @@
         if (!to && !shift) continue;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
-        ctx.arc(o.x, o.y, r * meshCircleScale(circle), 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
         ctx.stroke();
         ctx.globalAlpha = 1;
         if (!to) continue;
@@ -9424,7 +9435,7 @@
         // With Shift, a press on or in a circle turns it.
         const turning = e.shiftKey && [...meshCircles].reverse().find((circle) => {
           const centre = toScreen(fromMesh(meshCircleShown(circle)));
-          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * view.scale * mapPlace.scale + 6;
+          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 6;
         });
         const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
@@ -9436,8 +9447,7 @@
         } else if (hit?.part === 'edge') {
           // The edge is taken afresh only once the press moves, so a click
           // just selects the circle and keeps its scale.
-          const off = meshCircleOffset(hit.circle);
-          drag = { meshCircle: hit.circle, part: 'edge', at: { x: at.x - off.x, y: at.y - off.y }, from: s, moved: false };
+          drag = { meshCircle: hit.circle, part: 'edge', from: s, moved: false };
         } else if (hit) {
           drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift };
         } else if (meshGrabbable(s)) {
@@ -9662,9 +9672,10 @@
         else if (drag.part === 'edge' && !drag.moved) {
           if (Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) <= 2) return;
           drag.moved = true;
-          const off = meshCircleOffset(circle);
-          circle.from = drag.at;
-          circle.to = { x: at.x - off.x, y: at.y - off.y };
+          meshCircleEdgeTo(circle, at);
+          scaleMeshCircle(circle);
+        } else if (drag.part === 'edge') {
+          meshCircleEdgeTo(circle, at);
           scaleMeshCircle(circle);
         } else {
           const off = meshCircleOffset(circle);

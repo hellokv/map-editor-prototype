@@ -4762,9 +4762,11 @@
         ctx.closePath();
         ctx.fill();
       };
-      // A dashed arc round o at radius rr, from angle start round by turn,
-      // with an arrowhead showing which way.
-      const turnArc = (o, rr, start, turn) => {
+      // A dashed arc round o at radius rr, from angle start the way it turned,
+      // with an arrowhead showing which way. The arc is drawn at twice the
+      // turn, so the largest turn reads as a quarter of the circle.
+      const turnArc = (o, rr, start, turnBy) => {
+        const turn = (turnBy * (Math.PI / 2)) / MESH_MAX_TURN;
         const end = start + turn;
         const sweep = Math.max(0, Math.abs(turn) * rr - arrow) / rr;
         ctx.setLineDash([3 * px, 3 * px]);

@@ -4678,7 +4678,7 @@
     // The anchor whose ring Pull mesh is over, or turning.
     function meshAnchorLit() {
       if (!inLocation() || locationTool !== 'mesh') return null;
-      if (drag?.meshTurn) return drag.meshTurn;
+      if (drag?.meshTurn || drag?.meshPull) return drag.meshTurn ?? drag.meshPull;
       if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
       return [...meshPulls].reverse().find((pull) => {
         const at = toScreen(fromMesh(pull.end));
@@ -4693,8 +4693,8 @@
       return !drag && pointer ? meshCircleAt(pointer) : null;
     }
     let meshCircleLitWas = null;
-    // The pull whose arrow or start dot is at screen point s; with Shift, the
-    // anchor whose ring is there, to turn.
+    // The pull whose start dot or anchor ring is at screen point s; with Shift,
+    // the anchor, to turn.
     function meshPullAt(s, shift = false) {
       if (!meshOn.checked) return null;
       const near = (q, reach) => {
@@ -4703,8 +4703,8 @@
       };
       for (const pull of [...meshPulls].reverse()) {
         if (shift && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
-        if (near(pull.end, 10)) return { pull, part: 'end' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
+        if (near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'end' };
       }
       return null;
     }

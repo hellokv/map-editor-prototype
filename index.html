@@ -3996,6 +3996,7 @@
         loadPanelView(activePanel);
       } else {
         centerBackground(sideBySide() ? canvas.clientWidth / 2 : canvas.clientWidth, canvas.clientHeight);
+        if (sideBySide()) rightView = { ...view };
       }
       e.currentTarget.blur();
       draw();
@@ -4991,12 +4992,12 @@
       // right half, at the same place in it as the map is in the left: twice
       // the map's box each way, centred on the box and moved by its offset,
       // then scaled and turned about its own centre.
-      const drawSatellite = (dx) => {
+      const drawSatellite = (dx, at) => {
         if (!satellite.complete || !satellite.naturalWidth) return;
         const scale = satelliteScale();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.translate(dx + view.x, view.y);
-        ctx.scale(view.scale, view.scale);
+        ctx.translate(dx + at.x, at.y);
+        ctx.scale(at.scale, at.scale);
         ctx.translate(board.w / 2 + satelliteOffset.x, board.h / 2 + satelliteOffset.y);
         ctx.rotate(satelliteTurn());
         ctx.scale(scale, scale);
@@ -5012,7 +5013,7 @@
         ctx.rect(0, 0, halfWidth, canvas.height);
         ctx.clip();
       } else {
-        drawSatellite(0);
+        drawSatellite(0, view);
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const layers = Object.entries(locationLayers).map(([part, layer]) => ({
@@ -5064,17 +5065,22 @@
         ctx.beginPath();
         ctx.rect(halfWidth, 0, halfWidth, canvas.height);
         ctx.clip();
-        drawSatellite(canvas.clientWidth / 2);
+        drawSatellite(canvas.clientWidth / 2, satelliteView());
         ctx.restore();
         ctx.fillStyle = '#fff';
         ctx.fillRect(halfWidth - dpr, 0, 2 * dpr, canvas.height);
       }
     }
     // Location's Side by Side view: the map on the left, the satellite on the
-    // right, both under the one view. A point in the right half stands for
-    // the same map point as the one half a canvas to its left.
+    // right, each half with its own pan and zoom, in map units like `view`.
+    // Points in the right half are measured from its own left edge.
     const locationView = document.getElementById('location-view');
     const sideBySide = () => inLocation() && locationView.value === 'side';
+    let rightView = null;
+    const satelliteView = () => (sideBySide() && rightView ? rightView : view);
+    // The views a pan or zoom at screen point p moves: its half's, or with
+    // Command (or Ctrl) held, both.
+    const viewsAt = (p, e) => (!sideBySide() ? [view] : e.metaKey || e.ctrlKey ? [view, satelliteView()] : [p.right ? satelliteView() : view]);
     locationView.addEventListener('change', () => {
       locationView.blur();
       document.getElementById('fit-button').click();
@@ -9037,7 +9043,8 @@
       // In Location, Shift zooms just the satellite view, about the pointer.
       // Browsers turn a Shift-scroll sideways, so either direction counts.
       if (inLocation() && e.shiftKey) {
-        const at = toBackground(mx, my);
+        const v = sideBySide() && pointer.right ? satelliteView() : view;
+        const at = { x: (mx - v.x) / v.scale, y: (my - v.y) / v.scale };
         const before = satelliteScale();
         // Whole percents, as the Scale field shows them.
         const after = Math.round(Math.min(10, Math.max(0.1, before * Math.exp(-(e.deltaY || e.deltaX) * 0.001))) * 100) / 100;
@@ -9050,11 +9057,13 @@
         field.dispatchEvent(new Event('input'));
         return;
       }
-      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * Math.exp(-e.deltaY * 0.001)));
       // Keep the point under the cursor fixed while zooming.
-      view.x = mx - (mx - view.x) * (next / view.scale);
-      view.y = my - (my - view.y) * (next / view.scale);
-      view.scale = next;
+      for (const zoomed of viewsAt(pointer, e)) {
+        const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoomed.scale * Math.exp(-e.deltaY * 0.001)));
+        zoomed.x = mx - (mx - zoomed.x) * (next / zoomed.scale);
+        zoomed.y = my - (my - zoomed.y) * (next / zoomed.scale);
+        zoomed.scale = next;
+      }
       draw();
       updateCursor();
     }, { passive: false });
@@ -9397,8 +9406,8 @@
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
       // The satellite half of Side by Side only moves the satellite.
-      if (s.right && !spaceHeld) {
-        drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: 'satellite' };
+      if (s.right) {
+        drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: spaceHeld ? 'view' : 'satellite', views: viewsAt(s, e) };
         updateCursor();
         return;
       }
@@ -9464,8 +9473,9 @@
         return;
       }
       if (spaceHeld || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) {
-        drag = { x: e.clientX, y: e.clientY, spacePan: true };
-        if (inLocation() && !spaceHeld) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
+        drag = { x: e.clientX, y: e.clientY, spacePan: true, views: viewsAt(s, e) };
+        // Side by Side keeps the satellite in its own half, so this one just pans.
+        if (inLocation() && !spaceHeld && !sideBySide()) drag.locationGrab = locationGrabAt(toBackground(s.x, s.y));
         updateCursor();
         return;
       }
@@ -9742,11 +9752,14 @@
         // apart; the satellite's offset is in map units, so it's undone to
         // keep the satellite in place while the map moves.
         if (drag.locationGrab === 'satellite') {
-          satelliteOffset.x += (to.x - from.x) / view.scale;
-          satelliteOffset.y += (to.y - from.y) / view.scale;
+          const { scale } = satelliteView();
+          satelliteOffset.x += (to.x - from.x) / scale;
+          satelliteOffset.y += (to.y - from.y) / scale;
         } else {
-          view.x += to.x - from.x;
-          view.y += to.y - from.y;
+          for (const panned of drag.views ?? [view]) {
+            panned.x += to.x - from.x;
+            panned.y += to.y - from.y;
+          }
           if (drag.locationGrab === 'map') {
             satelliteOffset.x -= (to.x - from.x) / view.scale;
             satelliteOffset.y -= (to.y - from.y) / view.scale;

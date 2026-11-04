@@ -10106,6 +10106,8 @@
       'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur',
     ];
     function imageData(image) {
+      // The published page may not fetch data: URLs, and these need no fetching.
+      if (image.src.startsWith('data:')) return Promise.resolve(image.src);
       return fetch(image.src)
         .then((response) => response.blob())
         .then((blob) => new Promise((resolve) => {
@@ -10327,7 +10329,7 @@
     mapExample.addEventListener('change', () => {
       const next = mapExample.value;
       mapExample.blur();
-      mapSwitching = mapSwitching.then(() => switchMap(next));
+      mapSwitching = mapSwitching.then(() => switchMap(next)).catch((error) => console.error(error));
     });
     async function switchMap(next) {
       if (next === openMap) return;

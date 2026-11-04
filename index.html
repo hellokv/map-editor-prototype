@@ -10008,7 +10008,11 @@
 
     // The pre-loaded maps. Switching keeps the one left, mesh and all, to
     // come back to. A map not opened yet starts from the open one's styles
-    // and settings, with no background, paths or labels.
+    // and settings, with its own background and box size if it has them, and
+    // no paths or labels.
+    const mapStarts = {
+      'national-zoo': { background: 'national-zoo-background.svg', settings: { 'board-width': '675', 'board-height': '1500' } },
+    };
     const mapExample = document.getElementById('map-example');
     const openedMaps = {};
     let openMap = mapExample.value;
@@ -10022,7 +10026,12 @@
       };
       openMap = next;
       const saved = openedMaps[next] ?? {
-        file: { ...file, background: null, points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null },
+        file: {
+          ...file,
+          settings: { ...file.settings, ...mapStarts[next]?.settings },
+          background: mapStarts[next]?.background ?? null,
+          points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
+        },
         mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [] },
       };
       await loadMapFile(saved.file);
@@ -10034,7 +10043,8 @@
       meshPullSelected = meshCircleSelected = meshDrawing = null;
       satelliteReach = mapSatellites[next].reach;
       satellite.src = mapSatellites[next].src;
-      draw();
+      // Maps differ in size and shape, so each opens fitted to the view.
+      document.getElementById('fit-button').click();
     });
 
     renderLabelStyles();

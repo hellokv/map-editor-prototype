@@ -4693,16 +4693,23 @@
       return !drag && pointer ? meshCircleAt(pointer) : null;
     }
     let meshCircleLitWas = null;
-    // The pull whose start dot or anchor ring is at screen point s; with Shift,
-    // the anchor, to turn.
-    function meshPullAt(s, shift = false) {
+    // The circle a press at screen point s turns, with Command held: one it's on or in.
+    function meshCircleTurnAt(s) {
+      return [...meshCircles].reverse().find((circle) => {
+        const centre = toScreen(fromMesh(meshCircleShown(circle)));
+        return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 6;
+      });
+    }
+    // The pull whose start dot or anchor ring is at screen point s; with
+    // Command, the anchor, to turn.
+    function meshPullAt(s, turn = false) {
       if (!meshOn.checked) return null;
       const near = (q, reach) => {
         const p = toScreen(fromMesh(q));
         return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
       };
       for (const pull of [...meshPulls].reverse()) {
-        if (shift && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
+        if (turn && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
         if (near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'end' };
       }
@@ -9289,10 +9296,11 @@
         return;
       }
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
-        canvas.style.cursor = drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
+        const turning = drag?.meshCircle ? drag.part === 'turn' : commandHeld && pointer && meshCircleTurnAt(pointer);
+        canvas.style.cursor = turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
-        const turning = drag?.meshTurn || (shiftHeld && !drag && meshAnchorLit());
+        const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
         canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
@@ -9472,11 +9480,7 @@
       // it; anywhere else on the map, a drag draws a new circle.
       if (inLocation() && locationTool === 'add' && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
-        // With Shift, a press on or in a circle turns it.
-        const turning = e.shiftKey && [...meshCircles].reverse().find((circle) => {
-          const centre = toScreen(fromMesh(meshCircleShown(circle)));
-          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 6;
-        });
+        const turning = (e.metaKey || e.ctrlKey) && meshCircleTurnAt(s);
         const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
         if (turning) {
@@ -9501,7 +9505,7 @@
         return;
       }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
-        const hit = meshPullAt(s, e.shiftKey);
+        const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
         if (hit?.part === 'turn') {
           meshPullSelected = null;
           const end = hit.pull.end;

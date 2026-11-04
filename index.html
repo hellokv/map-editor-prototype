@@ -4627,7 +4627,7 @@
       if (!meshOn.checked) return null;
       for (const circle of [...meshCircles].reverse()) {
         if (circle.to) {
-          const dot = toScreen(fromMesh(circle.to));
+          const dot = toScreen(fromMesh(meshCircleShown(circle, circle.to)));
           if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
         }
         if (circle.shift) {
@@ -4636,9 +4636,19 @@
         }
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
-        if (Math.abs(Math.hypot(centre.x - s.x, centre.y - s.y) - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
+        const shown = toScreen(fromMesh(meshCircleShown(circle)));
+        if (Math.abs(Math.hypot(shown.x - s.x, shown.y - s.y) - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
       }
       return null;
+    }
+    // A circle is shown where its centre was moved to, with its dot moved
+    // along with it, so its circles stay concentric.
+    function meshCircleOffset({ c, shift }) {
+      return shift ? { x: shift.x - c.x, y: shift.y - c.y } : { x: 0, y: 0 };
+    }
+    function meshCircleShown(circle, q = circle.c) {
+      const off = meshCircleOffset(circle);
+      return { x: q.x + off.x, y: q.y + off.y };
     }
     // An anchor's ring, in screen pixels at every zoom.
     const MESH_ANCHOR_RING = 20;
@@ -4750,9 +4760,11 @@
       // a dashed arrow from its centre to where that was dragged.
       const lit = meshCircleLit();
       for (const circle of meshCircles) {
-        const { c, r, to, shift } = circle;
+        const { c, r, shift } = circle;
+        const o = meshCircleShown(circle);
+        const to = circle.to && meshCircleShown(circle, circle.to);
         ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
         if (lit?.circle === circle && lit.part === 'centre') {
           ctx.globalAlpha = 0.3;
           ctx.fill();
@@ -4779,10 +4791,10 @@
           const sweep = Math.max(0, Math.abs(circle.turn) * rr - arrow) / rr;
           ctx.setLineDash([3 * px, 3 * px]);
           ctx.beginPath();
-          ctx.arc(c.x, c.y, rr, start, start + Math.sign(circle.turn) * sweep, circle.turn < 0);
+          ctx.arc(o.x, o.y, rr, start, start + Math.sign(circle.turn) * sweep, circle.turn < 0);
           ctx.stroke();
           ctx.setLineDash([]);
-          const tip = { x: c.x + rr * Math.cos(end), y: c.y + rr * Math.sin(end) };
+          const tip = { x: o.x + rr * Math.cos(end), y: o.y + rr * Math.sin(end) };
           const ux = -Math.sin(end) * Math.sign(circle.turn);
           const uy = Math.cos(end) * Math.sign(circle.turn);
           ctx.beginPath();
@@ -4793,18 +4805,17 @@
           ctx.fill();
         }
         if (!to && !shift) continue;
-        const ghost = shift ?? c;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
-        ctx.arc(ghost.x, ghost.y, r * meshCircleScale(circle), 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, r * meshCircleScale(circle), 0, 2 * Math.PI);
         ctx.stroke();
         ctx.globalAlpha = 1;
         if (!to) continue;
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
-        const away = Math.max(1e-6, Math.hypot(to.x - c.x, to.y - c.y));
+        const away = Math.max(1e-6, Math.hypot(to.x - o.x, to.y - o.y));
         ctx.moveTo(to.x, to.y);
-        ctx.lineTo(c.x + ((to.x - c.x) * r) / away, c.y + ((to.y - c.y) * r) / away);
+        ctx.lineTo(o.x + ((to.x - o.x) * r) / away, o.y + ((to.y - o.y) * r) / away);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();
@@ -9412,19 +9423,21 @@
         const at = toMesh(toBackground(s.x, s.y));
         // With Shift, a press on or in a circle turns it.
         const turning = e.shiftKey && [...meshCircles].reverse().find((circle) => {
-          const centre = toScreen(fromMesh(circle.c));
+          const centre = toScreen(fromMesh(meshCircleShown(circle)));
           return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * view.scale * mapPlace.scale + 6;
         });
         const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
         if (turning) {
-          drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - turning.c.y, at.x - turning.c.x), turn: turning.turn ?? 0 };
+          const o = meshCircleShown(turning);
+          drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - o.y, at.x - o.x), turn: turning.turn ?? 0 };
           // A turn's arc starts where the first turn was taken.
           if (!turning.turn) turning.turnFrom = drag.angle;
         } else if (hit?.part === 'edge') {
           // The edge is taken afresh only once the press moves, so a click
           // just selects the circle and keeps its scale.
-          drag = { meshCircle: hit.circle, part: 'edge', at, from: s, moved: false };
+          const off = meshCircleOffset(hit.circle);
+          drag = { meshCircle: hit.circle, part: 'edge', at: { x: at.x - off.x, y: at.y - off.y }, from: s, moved: false };
         } else if (hit) {
           drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift };
         } else if (meshGrabbable(s)) {
@@ -9633,7 +9646,8 @@
         const circle = drag.meshCircle;
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
         else if (drag.part === 'turn') {
-          let delta = Math.atan2(at.y - circle.c.y, at.x - circle.c.x) - drag.angle;
+          const o = meshCircleShown(circle);
+          let delta = Math.atan2(at.y - o.y, at.x - o.x) - drag.angle;
           delta = Math.atan2(Math.sin(delta), Math.cos(delta));
           circle.turn = Math.max(-MESH_CIRCLE_MAX_TURN, Math.min(MESH_CIRCLE_MAX_TURN, drag.turn + delta));
           scaleMeshCircle(circle);
@@ -9648,11 +9662,13 @@
         else if (drag.part === 'edge' && !drag.moved) {
           if (Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) <= 2) return;
           drag.moved = true;
+          const off = meshCircleOffset(circle);
           circle.from = drag.at;
-          circle.to = at;
+          circle.to = { x: at.x - off.x, y: at.y - off.y };
           scaleMeshCircle(circle);
         } else {
-          circle.to = at;
+          const off = meshCircleOffset(circle);
+          circle.to = { x: at.x - off.x, y: at.y - off.y };
           scaleMeshCircle(circle);
         }
         draw();

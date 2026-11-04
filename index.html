@@ -4617,7 +4617,15 @@
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
     }
     const meshCircleScale = ({ c, from, to }) => (to ? Math.hypot(to.x - c.x, to.y - c.y) / Math.max(1e-6, Math.hypot(from.x - c.x, from.y - c.y)) : 1);
-    const MESH_MAX_TURN = (45 * Math.PI) / 180;
+    const MESH_MAX_TURN = Math.PI;
+    // A turning drag's turn with the pointer at angle: what it started at plus
+    // how far the pointer has gone round, step by step so it can pass half a turn.
+    function dragTurn(drag, angle) {
+      const step = angle - drag.angle;
+      drag.swept = (drag.swept ?? 0) + Math.atan2(Math.sin(step), Math.cos(step));
+      drag.angle = angle;
+      return Math.max(-MESH_MAX_TURN, Math.min(MESH_MAX_TURN, drag.turn + drag.swept));
+    }
     function deleteMeshCircle(circle) {
       circle.to = null;
       circle.shift = null;
@@ -4764,9 +4772,9 @@
       };
       // A dashed arc round o at radius rr, from angle start the way it turned,
       // with an arrowhead showing which way. The arc is drawn at twice the
-      // turn, so the largest turn reads as a quarter of the circle.
+      // turn, so the largest, half a turn, goes all the way round.
       const turnArc = (o, rr, start, turnBy) => {
-        const turn = (turnBy * (Math.PI / 2)) / MESH_MAX_TURN;
+        const turn = turnBy * 2;
         const end = start + turn;
         const sweep = Math.max(0, Math.abs(turn) * rr - arrow) / rr;
         ctx.setLineDash([3 * px, 3 * px]);
@@ -9688,9 +9696,7 @@
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
         else if (drag.part === 'turn') {
           const o = meshCircleShown(circle);
-          let delta = Math.atan2(at.y - o.y, at.x - o.x) - drag.angle;
-          delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-          circle.turn = Math.max(-MESH_MAX_TURN, Math.min(MESH_MAX_TURN, drag.turn + delta));
+          circle.turn = dragTurn(drag, Math.atan2(at.y - o.y, at.x - o.x));
           scaleMeshCircle(circle);
         }
         else if (drag.part === 'centre' || drag.part === 'shift') {
@@ -9719,9 +9725,7 @@
       if (drag?.meshTurn) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const { end } = drag.meshTurn;
-        let delta = Math.atan2(at.y - end.y, at.x - end.x) - drag.angle;
-        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-        drag.meshTurn.turn = Math.max(-MESH_MAX_TURN, Math.min(MESH_MAX_TURN, drag.turn + delta));
+        drag.meshTurn.turn = dragTurn(drag, Math.atan2(at.y - end.y, at.x - end.x));
         turnMeshPull(drag.meshTurn, drag.shares);
         draw();
         return;

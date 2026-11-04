@@ -439,9 +439,30 @@
       font: inherit;
     }
     /* The modes and, below them, the mode's tools, each a floating menu. */
-    #mode-menu {
+    #map-menu {
       position: absolute;
       top: 8px;
+      left: 8px;
+      padding: 4px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+    }
+    #map-menu select {
+      height: 32px;
+      padding: 0 4px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      font: 13px 'National Park', system-ui, sans-serif;
+      cursor: pointer;
+    }
+    #map-menu select:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    #mode-menu {
+      position: absolute;
+      top: 64px;
       left: 8px;
       display: flex;
       flex-direction: column;
@@ -1560,6 +1581,12 @@
       Create list?
       <button id="list-yes" type="button">Yes</button>
       <button id="list-no" type="button">No</button>
+    </div>
+    <div id="map-menu">
+      <select id="map-example" aria-label="Map">
+        <option value="demo">Demo</option>
+        <option value="national-zoo">National Zoo</option>
+      </select>
     </div>
     <div id="mode-menu">
       <div class="menu-card">
@@ -4276,6 +4303,7 @@
     }
     // Made from the demo map's background, so it lines up with that one only.
     const satellite = Object.assign(new Image(), { src: 'satellite.jpg' });
+    const mapSatellites = { demo: 'satellite.jpg', 'national-zoo': null };
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
     // A mesh over the map: its count of lines each way, evenly spaced inside
     // the map's box with none on its edges, turned about the map's centre.
@@ -9959,6 +9987,37 @@
       } catch {
         alert('That file could not be loaded as a map.');
       }
+    });
+
+    // The pre-loaded maps. Switching keeps the one left, mesh and all, to
+    // come back to. A map not opened yet starts from the open one's styles
+    // and settings, with no background, paths, labels or satellite.
+    const mapExample = document.getElementById('map-example');
+    const openedMaps = {};
+    let openMap = mapExample.value;
+    mapExample.addEventListener('change', async () => {
+      const next = mapExample.value;
+      mapExample.blur();
+      const file = JSON.parse(JSON.stringify(await mapFile()));
+      openedMaps[openMap] = {
+        file,
+        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], keeps: [...meshKeeps] },
+      };
+      openMap = next;
+      const saved = openedMaps[next] ?? {
+        file: { ...file, background: null, points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null },
+        mesh: { offsets: new Map(), pulls: [], circles: [], keeps: [] },
+      };
+      await loadMapFile(saved.file);
+      meshOffsets.clear();
+      for (const [key, offset] of saved.mesh.offsets) meshOffsets.set(key, offset);
+      meshPulls.splice(0, meshPulls.length, ...saved.mesh.pulls);
+      meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
+      meshKeeps.splice(0, meshKeeps.length, ...saved.mesh.keeps);
+      meshPullSelected = meshCircleSelected = meshDrawing = null;
+      if (mapSatellites[next]) satellite.src = mapSatellites[next];
+      else satellite.removeAttribute('src');
+      draw();
     });
 
     renderLabelStyles();

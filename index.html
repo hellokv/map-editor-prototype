@@ -4617,7 +4617,7 @@
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
     }
     const meshCircleScale = ({ c, from, to }) => (to ? Math.hypot(to.x - c.x, to.y - c.y) / Math.max(1e-6, Math.hypot(from.x - c.x, from.y - c.y)) : 1);
-    const MESH_CIRCLE_MAX_TURN = (30 * Math.PI) / 180;
+    const MESH_MAX_TURN = (45 * Math.PI) / 180;
     function deleteMeshCircle(circle) {
       circle.to = null;
       circle.shift = null;
@@ -4665,6 +4665,17 @@
     }
     // An anchor's ring, in screen pixels at every zoom.
     const MESH_ANCHOR_RING = 20;
+    // The anchor whose ring Pull mesh is over, or turning.
+    function meshAnchorLit() {
+      if (!inLocation() || locationTool !== 'mesh') return null;
+      if (drag?.meshTurn) return drag.meshTurn;
+      if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
+      return [...meshPulls].reverse().find((pull) => {
+        const at = toScreen(fromMesh(pull.end));
+        return Math.hypot(at.x - pointer.x, at.y - pointer.y) <= MESH_ANCHOR_RING;
+      }) ?? null;
+    }
+    let meshAnchorLitWas = null;
     // The circle part the Circle tool is over, or dragging.
     function meshCircleLit() {
       if (!inLocation() || locationTool !== 'add') return null;
@@ -4751,11 +4762,39 @@
         ctx.closePath();
         ctx.fill();
       };
+      // A dashed arc round o at radius rr, from angle start round by turn,
+      // with an arrowhead showing which way.
+      const turnArc = (o, rr, start, turn) => {
+        const end = start + turn;
+        const sweep = Math.max(0, Math.abs(turn) * rr - arrow) / rr;
+        ctx.setLineDash([3 * px, 3 * px]);
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, rr, start, start + Math.sign(turn) * sweep, turn < 0);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const tip = { x: o.x + rr * Math.cos(end), y: o.y + rr * Math.sin(end) };
+        const ux = -Math.sin(end) * Math.sign(turn);
+        const uy = Math.cos(end) * Math.sign(turn);
+        ctx.beginPath();
+        ctx.moveTo(tip.x, tip.y);
+        ctx.lineTo(tip.x - ux * arrow - uy * arrow * 0.5, tip.y - uy * arrow + ux * arrow * 0.5);
+        ctx.lineTo(tip.x - ux * arrow + uy * arrow * 0.5, tip.y - uy * arrow - ux * arrow * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      };
       for (const { start, end } of meshPulls) dashedArrow(start, end);
-      for (const { end } of meshPulls) {
+      const litAnchor = meshAnchorLit();
+      for (const pull of meshPulls) {
+        const { end } = pull;
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
+        if (pull === litAnchor) {
+          ctx.globalAlpha = 0.3;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
         ctx.stroke();
+        if (pull.turn) turnArc(end, (MESH_ANCHOR_RING + 6) * px, pull.turnFrom ?? -Math.PI / 2, pull.turn);
       }
       for (const pull of meshPulls) {
         ctx.beginPath();
@@ -4798,27 +4837,7 @@
         ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();
         if (shift) dashedArrow(c, shift);
-        if (circle.turn) {
-          // Just outside the circle, from where the turn was taken round by it.
-          const rr = rk + 12 * px;
-          const start = circle.turnFrom ?? -Math.PI / 2;
-          const end = start + circle.turn;
-          const sweep = Math.max(0, Math.abs(circle.turn) * rr - arrow) / rr;
-          ctx.setLineDash([3 * px, 3 * px]);
-          ctx.beginPath();
-          ctx.arc(o.x, o.y, rr, start, start + Math.sign(circle.turn) * sweep, circle.turn < 0);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          const tip = { x: o.x + rr * Math.cos(end), y: o.y + rr * Math.sin(end) };
-          const ux = -Math.sin(end) * Math.sign(circle.turn);
-          const uy = Math.cos(end) * Math.sign(circle.turn);
-          ctx.beginPath();
-          ctx.moveTo(tip.x, tip.y);
-          ctx.lineTo(tip.x - ux * arrow - uy * arrow * 0.5, tip.y - uy * arrow + ux * arrow * 0.5);
-          ctx.lineTo(tip.x - ux * arrow + uy * arrow * 0.5, tip.y - uy * arrow - ux * arrow * 0.5);
-          ctx.closePath();
-          ctx.fill();
-        }
+        if (circle.turn) turnArc(o, rk + 12 * px, circle.turnFrom ?? -Math.PI / 2, circle.turn);
         if (!to && !shift) continue;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
@@ -9258,8 +9277,8 @@
         canvas.style.cursor = drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
-        const hit = pointer && !drag && meshPullAt(pointer);
-        canvas.style.cursor = drag?.meshPull || drag?.meshStart || drag?.meshTurn ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+        const turning = drag?.meshTurn || (shiftHeld && !drag && meshAnchorLit());
+        canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) canvas.style.cursor = '';
@@ -9470,7 +9489,8 @@
         const hit = meshPullAt(s, e.shiftKey);
         if (hit?.part === 'turn') {
           meshPullSelected = null;
-          const end = toScreen(fromMesh(hit.pull.end));
+          const end = hit.pull.end;
+          const at = toMesh(toBackground(s.x, s.y));
           // Shares are taken with the old twist out, so a turn replaces it.
           hit.pull.turn ??= 0;
           const turn = hit.pull.turn;
@@ -9479,7 +9499,8 @@
           hit.pull.turn = turn;
           const { shares } = meshPullShares(hit.pull.end, hit.pull);
           turnMeshPull(hit.pull, shares);
-          drag = { meshTurn: hit.pull, shares, turn, angle: Math.atan2(s.y - end.y, s.x - end.x), centre: end };
+          drag = { meshTurn: hit.pull, shares, turn, angle: Math.atan2(at.y - end.y, at.x - end.x) };
+          if (!turn) hit.pull.turnFrom = drag.angle;
         } else if (hit?.part === 'start') {
           meshPullSelected = hit.pull;
           drag = { meshStart: hit.pull, last: toMesh(toBackground(s.x, s.y)) };
@@ -9651,9 +9672,11 @@
         const hover = !!mapBoxAt(pointer);
         const lit = meshCircleLit();
         const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
-        if (hover !== mapBoxHover || litKey !== meshCircleLitWas) {
+        const anchor = meshAnchorLit();
+        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas) {
           mapBoxHover = hover;
           meshCircleLitWas = litKey;
+          meshAnchorLitWas = anchor;
           draw();
         }
       }
@@ -9665,7 +9688,7 @@
           const o = meshCircleShown(circle);
           let delta = Math.atan2(at.y - o.y, at.x - o.x) - drag.angle;
           delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-          circle.turn = Math.max(-MESH_CIRCLE_MAX_TURN, Math.min(MESH_CIRCLE_MAX_TURN, drag.turn + delta));
+          circle.turn = Math.max(-MESH_MAX_TURN, Math.min(MESH_MAX_TURN, drag.turn + delta));
           scaleMeshCircle(circle);
         }
         else if (drag.part === 'centre' || drag.part === 'shift') {
@@ -9692,9 +9715,11 @@
         return;
       }
       if (drag?.meshTurn) {
-        let delta = Math.atan2(pointer.y - drag.centre.y, pointer.x - drag.centre.x) - drag.angle;
+        const at = toMesh(toBackground(pointer.x, pointer.y));
+        const { end } = drag.meshTurn;
+        let delta = Math.atan2(at.y - end.y, at.x - end.x) - drag.angle;
         delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-        drag.meshTurn.turn = drag.turn + delta;
+        drag.meshTurn.turn = Math.max(-MESH_MAX_TURN, Math.min(MESH_MAX_TURN, drag.turn + delta));
         turnMeshPull(drag.meshTurn, drag.shares);
         draw();
         return;

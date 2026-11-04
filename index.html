@@ -4551,7 +4551,9 @@
       // Each pull: a dot where it started, dotted to an arrow where it ended.
       const px = 1 / view.scale;
       const arrow = 10 * px;
-      ctx.fillStyle = ctx.strokeStyle;
+      // Markers are drawn solid; the colour's opacity is the lines' alone.
+      ctx.strokeStyle = meshColor.value;
+      ctx.fillStyle = meshColor.value;
       ctx.lineWidth = 1.5 * px;
       const dashedArrow = (start, end) => {
         const length = Math.hypot(end.x - start.x, end.y - start.y);
@@ -4581,7 +4583,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2 * px;
           ctx.stroke();
-          ctx.strokeStyle = colorOf(meshColor);
+          ctx.strokeStyle = meshColor.value;
         }
       }
       // Each circle, with the circle it's scaled and moved to ghosted, a dashed
@@ -4595,7 +4597,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
           ctx.stroke();
-          ctx.strokeStyle = colorOf(meshColor);
+          ctx.strokeStyle = meshColor.value;
         }
         ctx.lineWidth = 1.5 * px;
         ctx.stroke();

@@ -1679,6 +1679,10 @@
     <span id="auto-layers" hidden></span>
     <div id="view-menu">
       <button id="layers-button" type="button" aria-label="Layer zoom levels"><span class="material-symbols-rounded">layers</span></button>
+      <select id="location-view" aria-label="Location view">
+        <option value="overlapped">Overlapped</option>
+        <option value="side">Side by Side</option>
+      </select>
       <select id="layer-select" aria-label="Layer">
         <option selected>All</option>
         <option>Sky</option>
@@ -3945,6 +3949,7 @@
     function showViewMenu() {
       zoomInput.parentElement.hidden = splitOn();
       for (const id of ['layer-select', 'layers-button']) document.getElementById(id).hidden = inLocation();
+      document.getElementById('location-view').hidden = !inLocation();
     }
     const autoLayers = document.getElementById('auto-layers');
     // Clicking the levels Automatic shows switches to the first of them.
@@ -3990,7 +3995,7 @@
         panelViews = panelViews.map(() => ({ ...view }));
         loadPanelView(activePanel);
       } else {
-        centerBackground(canvas.clientWidth, canvas.clientHeight);
+        centerBackground(sideBySide() ? canvas.clientWidth / 2 : canvas.clientWidth, canvas.clientHeight);
       }
       e.currentTarget.blur();
       draw();
@@ -4982,18 +4987,32 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = colorOf(canvasColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      // The satellite view, under everything: twice the map's box each way,
-      // centred on the box and moved by its offset, then scaled and turned
-      // about its own centre.
-      if (satellite.complete && satellite.naturalWidth) {
+      // The satellite view, under everything, or in Side by Side alone in the
+      // right half, at the same place in it as the map is in the left: twice
+      // the map's box each way, centred on the box and moved by its offset,
+      // then scaled and turned about its own centre.
+      const drawSatellite = (dx) => {
+        if (!satellite.complete || !satellite.naturalWidth) return;
         const scale = satelliteScale();
-        ctx.translate(view.x, view.y);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.translate(dx + view.x, view.y);
         ctx.scale(view.scale, view.scale);
         ctx.translate(board.w / 2 + satelliteOffset.x, board.h / 2 + satelliteOffset.y);
         ctx.rotate(satelliteTurn());
         ctx.scale(scale, scale);
         const half = satelliteHalf();
         ctx.drawImage(satellite, -half.w, -half.h, half.w * 2, half.h * 2);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      };
+      const side = sideBySide();
+      const halfWidth = canvas.width / 2;
+      if (side) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, halfWidth, canvas.height);
+        ctx.clip();
+      } else {
+        drawSatellite(0);
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const layers = Object.entries(locationLayers).map(([part, layer]) => ({
@@ -5039,7 +5058,27 @@
         drawMeshKeeps();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
+      if (side) {
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(halfWidth, 0, halfWidth, canvas.height);
+        ctx.clip();
+        drawSatellite(canvas.clientWidth / 2);
+        ctx.restore();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(halfWidth - dpr, 0, 2 * dpr, canvas.height);
+      }
     }
+    // Location's Side by Side view: the map on the left, the satellite on the
+    // right, both under the one view. A point in the right half stands for
+    // the same map point as the one half a canvas to its left.
+    const locationView = document.getElementById('location-view');
+    const sideBySide = () => inLocation() && locationView.value === 'side';
+    locationView.addEventListener('change', () => {
+      locationView.blur();
+      document.getElementById('fit-button').click();
+    });
 
     // The paths' filled areas and their widths, as the map shows them.
     function drawPaths() {
@@ -8993,8 +9032,7 @@
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const pointer = canvasPoint(e);
       const { x: mx, y: my } = stackOn() ? fromStack(pointer) : pointer;
       // In Location, Shift zooms just the satellite view, about the pointer.
       // Browsers turn a Shift-scroll sideways, so either direction counts.
@@ -9348,13 +9386,22 @@
 
     function canvasPoint(e) {
       const rect = canvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const x = e.clientX - rect.left;
+      const half = canvas.clientWidth / 2;
+      if (sideBySide() && x >= half) return { x: x - half, y: e.clientY - rect.top, right: true };
+      return { x, y: e.clientY - rect.top };
     }
 
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       const s = canvasPoint(e);
+      // The satellite half of Side by Side only moves the satellite.
+      if (s.right && !spaceHeld) {
+        drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: 'satellite' };
+        updateCursor();
+        return;
+      }
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
       // The Circle tool: a press on a circle's edge or dot scales the mesh by
       // it; anywhere else on the map, a drag draws a new circle.

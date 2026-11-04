@@ -4469,9 +4469,10 @@
     function scaleMeshCircle(circle) {
       for (const [key, moved] of circle.moves) moveMeshNode(key, -moved.x, -moved.y);
       circle.moves.clear();
-      if (!circle.to && !circle.shift) return;
+      if (!circle.to && !circle.shift && !circle.turn) return;
       const { c, r } = circle;
       const k = meshCircleScale(circle);
+      const turn = circle.turn ?? 0;
       const sx = circle.shift ? circle.shift.x - c.x : 0;
       const sy = circle.shift ? circle.shift.y - c.y : 0;
       const { count, node, from, to } = meshLattice();
@@ -4482,16 +4483,28 @@
           const d = Math.hypot(n.x - c.x, n.y - c.y);
           const share = (d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread))) * (1 - meshKeepHold(fromMesh(n)));
           if (share < 0.001) continue;
-          const moved = { x: ((k - 1) * (n.x - c.x) + sx) * share, y: ((k - 1) * (n.y - c.y) + sy) * share };
+          // Turned by the share of the turn, so the mesh twists rather than
+          // tearing at the circle's edge.
+          const scale = 1 + (k - 1) * share;
+          const cos = Math.cos(turn * share);
+          const sin = Math.sin(turn * share);
+          const vx = n.x - c.x;
+          const vy = n.y - c.y;
+          const moved = {
+            x: (vx * cos - vy * sin) * scale - vx + sx * share,
+            y: (vx * sin + vy * cos) * scale - vy + sy * share,
+          };
           circle.moves.set(`${i},${j}`, moved);
         }
       }
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
     }
     const meshCircleScale = ({ c, from, to }) => (to ? Math.hypot(to.x - c.x, to.y - c.y) / Math.max(1e-6, Math.hypot(from.x - c.x, from.y - c.y)) : 1);
+    const MESH_CIRCLE_MAX_TURN = (30 * Math.PI) / 180;
     function deleteMeshCircle(circle) {
       circle.to = null;
       circle.shift = null;
+      circle.turn = 0;
       scaleMeshCircle(circle);
       meshCircles.splice(meshCircles.indexOf(circle), 1);
       if (meshCircleSelected === circle) meshCircleSelected = null;
@@ -9327,9 +9340,16 @@
       // it; anywhere else on the map, a drag draws a new circle.
       if (inLocation() && locationTool === 'add' && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
-        const hit = meshCircleAt(s);
+        // With Shift, a press on or in a circle turns it.
+        const turning = e.shiftKey && [...meshCircles].reverse().find((circle) => {
+          const centre = toScreen(fromMesh(circle.c));
+          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * view.scale + 6;
+        });
+        const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
-        if (hit?.part === 'edge') {
+        if (turning) {
+          drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - turning.c.y, at.x - turning.c.x), turn: turning.turn ?? 0 };
+        } else if (hit?.part === 'edge') {
           // The edge is taken afresh only once the press moves, so a click
           // just selects the circle and keeps its scale.
           drag = { meshCircle: hit.circle, part: 'edge', at, from: s, moved: false };
@@ -9506,6 +9526,12 @@
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const circle = drag.meshCircle;
         if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
+        else if (drag.part === 'turn') {
+          let delta = Math.atan2(at.y - circle.c.y, at.x - circle.c.x) - drag.angle;
+          delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+          circle.turn = Math.max(-MESH_CIRCLE_MAX_TURN, Math.min(MESH_CIRCLE_MAX_TURN, drag.turn + delta));
+          scaleMeshCircle(circle);
+        }
         else if (drag.part === 'centre' || drag.part === 'shift') {
           // From the centre, a fresh move of everything in the circle; from
           // the arrow's tip, more of the same one.

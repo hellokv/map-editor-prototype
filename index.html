@@ -4746,11 +4746,11 @@
         }
       }
       // Each circle, with the circle it's scaled and moved to ghosted, a dashed
-      // line from where its edge was taken to the dot it was dropped at, and
+      // line from the dot it was dropped at to the nearest point on it, and
       // a dashed arrow from its centre to where that was dragged.
       const lit = meshCircleLit();
       for (const circle of meshCircles) {
-        const { c, r, from: edge, to, shift } = circle;
+        const { c, r, to, shift } = circle;
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
         if (lit?.circle === circle && lit.part === 'centre') {
@@ -4781,8 +4781,9 @@
         if (!to) continue;
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
-        ctx.moveTo(edge.x, edge.y);
-        ctx.lineTo(to.x, to.y);
+        const away = Math.max(1e-6, Math.hypot(to.x - c.x, to.y - c.y));
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(c.x + ((to.x - c.x) * r) / away, c.y + ((to.y - c.y) * r) / away);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();

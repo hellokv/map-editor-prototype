@@ -5161,14 +5161,20 @@
         ctx.fillRect(halfWidth - dpr, 0, 2 * dpr, canvas.height);
       }
     }
-    // A quarter turn of the map and the satellite together, about the map's
-    // centre, so they stay lined up.
+    // Turns the map on to the next whole quarter turn, and the satellite by
+    // the same amount about the map's centre, so they stay lined up.
     document.getElementById('turn-button').addEventListener('click', (e) => {
       e.currentTarget.blur();
-      mapPlace.turn += Math.PI / 2;
-      [satelliteOffset.x, satelliteOffset.y] = [-satelliteOffset.y, satelliteOffset.x];
+      const quarter = Math.PI / 2;
+      const next = (Math.floor(mapPlace.turn / quarter + 1e-6) + 1) * quarter;
+      const delta = next - mapPlace.turn;
+      mapPlace.turn = next;
+      const cos = Math.cos(delta);
+      const sin = Math.sin(delta);
+      [satelliteOffset.x, satelliteOffset.y] = [satelliteOffset.x * cos - satelliteOffset.y * sin, satelliteOffset.x * sin + satelliteOffset.y * cos];
       const rotation = document.getElementById('satellite-rotation');
-      rotation.value = ((((Number(rotation.value) || 0) + 90 + 180) % 360) + 360) % 360 - 180;
+      const degrees = (Number(rotation.value) || 0) + (delta * 180) / Math.PI;
+      rotation.value = Math.round(((((degrees + 180) % 360) + 360) % 360 - 180) * 1000) / 1000;
       rotation.dispatchEvent(new Event('input'));
       draw();
     });

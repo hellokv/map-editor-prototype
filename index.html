@@ -10047,17 +10047,28 @@
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
 
+    // Loads finish out of order, so only the latest asked for is shown.
+    let backgroundRequest = 0;
     function setBackgroundImage(src, onError) {
+      const request = ++backgroundRequest;
       const img = new Image();
-      img.onload = () => {
-        backgroundImage = img;
-        previewImg.src = img.src;
-        upload.closest('.field').hidden = true;
-        preview.hidden = false;
-        draw();
-      };
-      if (onError) img.onerror = onError;
-      img.src = src;
+      return new Promise((resolve) => {
+        img.onload = () => {
+          if (request === backgroundRequest) {
+            backgroundImage = img;
+            previewImg.src = img.src;
+            upload.closest('.field').hidden = true;
+            preview.hidden = false;
+            draw();
+          }
+          resolve();
+        };
+        img.onerror = () => {
+          if (request === backgroundRequest) onError?.();
+          resolve();
+        };
+        img.src = src;
+      });
     }
 
     upload.addEventListener('change', () => {
@@ -10068,12 +10079,13 @@
     // The editor opens on labelling a map that has a background, and on
     // making one when it hasn't.
     const START_IMAGE = 'demo-park.svg';
-    if (START_IMAGE) setBackgroundImage(START_IMAGE, () => setMode('background'));
+    const startImageLoaded = START_IMAGE && setBackgroundImage(START_IMAGE, () => setMode('background'));
     // The demo background's paths, traced over it, to start with.
     if (START_IMAGE) loadPaths(JSON.parse(document.getElementById('starter-paths').textContent));
 
     function clearBackgroundImage() {
       if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
+      backgroundRequest++;
       backgroundImage = null;
       previewImg.removeAttribute('src');
       upload.value = '';
@@ -10218,7 +10230,7 @@
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new Event('change'));
       }
-      if (file.background) setBackgroundImage(file.background);
+      if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       undoState = null;
       selected = null;
@@ -10310,9 +10322,15 @@
     const mapExample = document.getElementById('map-example');
     const openedMaps = {};
     let openMap = mapExample.value;
-    mapExample.addEventListener('change', async () => {
+    // Switches run one at a time, so a quick second one can't stash a half-loaded map.
+    let mapSwitching = Promise.resolve();
+    mapExample.addEventListener('change', () => {
       const next = mapExample.value;
       mapExample.blur();
+      mapSwitching = mapSwitching.then(() => switchMap(next));
+    });
+    async function switchMap(next) {
+      if (next === openMap) return;
       const file = JSON.parse(JSON.stringify(await mapFile()));
       openedMaps[openMap] = {
         file,
@@ -10357,7 +10375,7 @@
         fitSatellite();
         draw();
       }
-    });
+    }
     // Fits the satellite, at its offset, to most of the view.
     function fitSatellite() {
       const half = satelliteHalf();
@@ -10409,10 +10427,14 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode(START_IMAGE ? 'labels' : 'background');
-    // The editor opens on the National Zoo, lined up on its satellite.
-    mapExample.value = 'national-zoo';
-    mapExample.dispatchEvent(new Event('change'));
-    setMode('location');
+    // The editor opens on the National Zoo, lined up on its satellite. The
+    // demo is kept as it's left, so its background must be in first.
+    (async () => {
+      await startImageLoaded;
+      mapExample.value = 'national-zoo';
+      mapExample.dispatchEvent(new Event('change'));
+      setMode('location');
+    })();
   </script>
 </body>
 </html>

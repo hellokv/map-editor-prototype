@@ -4335,8 +4335,8 @@
       return { w: (w * k) / 2, h: (h * k) / 2 };
     }
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
-    // A mesh over the map: its count of lines each way, evenly spaced inside
-    // the map's box with none on its edges, turned about the map's centre.
+    // A mesh over the map: lines evenly spaced inside the map's box, turned
+    // about the map's centre.
     // Each line has a border either side, drawn as a wider line under it.
     const meshOn = document.getElementById('mesh-on');
     const meshCount = document.getElementById('mesh-count');
@@ -4359,7 +4359,9 @@
     meshColor.addEventListener('input', () => draw());
     meshBorder.addEventListener('input', () => draw());
     // The mesh is a lattice of nodes in its own frame: centred on the map,
-    // unturned. Its lines are those through nodes 1 to count, and the lattice
+    // unturned. Mesh Count sets how many lines cross the map's width; as many
+    // run the other way as fit at the same spacing, centred. Its lines are
+    // those through nodes 1 to count across and 1 to rows down, and the lattice
     // runs on past the map's edges so a turned mesh still covers it. Nodes
     // moved with the Pull mesh tool keep their offsets here, and each pull its
     // start, end and what it moved each node by, until the count changes.
@@ -4380,18 +4382,19 @@
         meshOffsetsCount = count;
       }
       const reach = Math.hypot(board.w, board.h) / 2;
-      const stepX = board.w / (count + 1);
-      const stepY = board.h / (count + 1);
-      const extraX = Math.ceil((reach - board.w / 2) / stepX) + 1;
-      const extraY = Math.ceil((reach - board.h / 2) / stepY) + 1;
-      const base = (i, j) => ({ x: -board.w / 2 + i * stepX, y: -board.h / 2 + j * stepY });
+      const step = board.w / (count + 1);
+      const rows = Math.max(1, Math.round(board.h / step) - 1);
+      const top = -board.h / 2 + (board.h - (rows + 1) * step) / 2;
+      const extraX = Math.ceil((reach - board.w / 2) / step) + 1;
+      const extraY = Math.ceil((reach - board.h / 2) / step) + 1;
+      const base = (i, j) => ({ x: -board.w / 2 + i * step, y: top + j * step });
       const node = (i, j) => {
         const off = meshOffsets.get(`${i},${j}`);
         const at = base(i, j);
         return { x: at.x + (off?.x ?? 0), y: at.y + (off?.y ?? 0) };
       };
       node.base = base;
-      return { count, node, from: { i: -extraX, j: -extraY }, to: { i: count + 1 + extraX, j: count + 1 + extraY } };
+      return { count, rows, node, from: { i: -extraX, j: -extraY }, to: { i: count + 1 + extraX, j: rows + 1 + extraY } };
     }
     const meshTurn = () => ((Number(meshRotation.value) || 0) * Math.PI) / 180;
     // Between a map point and the mesh's own frame.
@@ -4412,7 +4415,7 @@
       return p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h;
     }
     function meshReach(count) {
-      const step = Math.min(board.w, board.h) / (count + 1);
+      const step = board.w / (count + 1);
       return { step, spread: Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step };
     }
     // How much of a pull from mesh point g each node takes, less the further
@@ -4567,7 +4570,7 @@
       }
     }
     function drawMesh() {
-      const { count, node, from, to } = meshLattice();
+      const { count, rows, node, from, to } = meshLattice();
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, board.w, board.h);
@@ -4575,12 +4578,14 @@
       ctx.translate(board.w / 2, board.h / 2);
       ctx.rotate(meshTurn());
       ctx.beginPath();
-      for (let k = 1; k <= count; k++) {
+      for (let i = 1; i <= count; i++) {
         const down = [];
-        const across = [];
-        for (let j = from.j; j <= to.j; j++) down.push(node(k, j));
-        for (let i = from.i; i <= to.i; i++) across.push(node(i, k));
+        for (let j = from.j; j <= to.j; j++) down.push(node(i, j));
         traceThrough(down);
+      }
+      for (let j = 1; j <= rows; j++) {
+        const across = [];
+        for (let i = from.i; i <= to.i; i++) across.push(node(i, j));
         traceThrough(across);
       }
       // Line thickness in screen pixels; the border is a pixel either side of it.

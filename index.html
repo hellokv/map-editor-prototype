@@ -2295,6 +2295,14 @@
           Paths
           <span class="slider"><span class="percent-field"><input id="location-paths" type="number" min="0" max="100" step="1" value="100"></span><input type="range" min="0" max="100" step="1" value="100" aria-label="Paths opacity"></span>
         </label>
+        <label class="field">
+          Path Color
+          <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
+        <label class="field">
+          Polygon Color
+          <span class="color-field"><input id="polygon-color" type="color" value="#00ffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+        </label>
       </div>
       <div class="label-section">
         <div class="section-heading">Satellite</div>
@@ -2346,18 +2354,12 @@
         </div>
       </div>
       <div class="label-section">
-        <label class="field">
-          Path Color
-          <span class="color-field"><input id="location-path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-        </label>
-        <label class="field">
-          Polygon Fuzziness
-          <span class="slider"><span class="percent-field px"><input id="polygon-fuzz" type="number" min="0" max="1000" step="1" value="80"></span><input type="range" min="0" max="200" step="1" value="80" aria-label="Polygon fuzziness"></span>
-        </label>
-        <label class="field">
-          Polygon Color
-          <span class="color-field"><input id="polygon-color" type="color" value="#00ffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-        </label>
+        <div class="temporary-controls">
+          <label class="field">
+            Polygon Fuzziness
+            <span class="slider"><span class="percent-field px"><input id="polygon-fuzz" type="number" min="0" max="1000" step="1" value="80"></span><input type="range" min="0" max="200" step="1" value="80" aria-label="Polygon fuzziness"></span>
+          </label>
+        </div>
       </div>
     </div>
     <div id="preview-panel" hidden>

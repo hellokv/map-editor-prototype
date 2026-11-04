@@ -4731,7 +4731,7 @@
         ctx.fill();
       }
     }
-    const [meshKept, meshKeepMask, meshKeepSoft, meshKeepFlat] = Array.from({ length: 4 }, () => document.createElement('canvas'));
+    const meshKept = document.createElement('canvas');
 
     // Redraws a layer canvas as the mesh has bent it, on the GPU. The sheet
     // between nodes bends as the mesh lines do, as Catmull-Rom curves, so each
@@ -4810,7 +4810,8 @@
       }
       const at = (i, j, k) => offsets[(Math.min(cols - 1, Math.max(0, i)) * rows + Math.min(rows - 1, Math.max(0, j))) * 2 + k];
       const weights = (t) => [(-t * t * t + 2 * t * t - t) / 2, (3 * t * t * t - 5 * t * t + 2) / 2, (-3 * t * t * t + 4 * t * t + t) / 2, (t * t * t - t * t) / 2];
-      const n = MESH_WARP_STEPS;
+      // Finer where polygons taper the bend, so the taper reads as a curve.
+      const n = meshKeeps.length && meshFuzz() ? MESH_WARP_STEPS * 2 : MESH_WARP_STEPS;
       const w = Array.from({ length: n + 1 }, (_, k) => weights(k / n));
       const dpr = window.devicePixelRatio || 1;
       const device = (q, list) => {
@@ -4837,6 +4838,11 @@
               x += at(i - 1 + p, j - 1 + q, 0) * k;
               y += at(i - 1 + p, j - 1 + q, 1) * k;
             }
+          }
+          if (meshKeeps.length) {
+            const keep = 1 - meshKeepHold(fromMesh(base));
+            x = base.x + (x - base.x) * keep;
+            y = base.y + (y - base.y) * keep;
           }
           device(base, src);
           device({ x, y }, dst);
@@ -4923,43 +4929,19 @@
         out.globalAlpha = 1;
       };
       const warped = meshOffsets.size ? warpByMesh(layers) : null;
-      if (warped && meshKeeps.length) {
-        // The unbent layers show through a mask of the polygons that fades in
-        // from their edges over the fuzziness: an inner band blurred.
-        const fresh = (canvas2) => {
-          canvas2.width = canvas.width;
-          canvas2.height = canvas.height;
-          return canvas2.getContext('2d');
-        };
-        const mask = fresh(meshKeepMask);
-        const fuzz = meshFuzz() * view.scale * dpr;
-        mask.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
-        traceMeshKeeps(mask);
-        mask.fillStyle = '#000';
-        mask.fill();
-        if (fuzz > 0) {
-          mask.save();
-          mask.clip();
-          mask.globalCompositeOperation = 'destination-out';
-          mask.lineWidth = meshFuzz();
-          mask.lineJoin = 'round';
-          mask.stroke();
-          mask.restore();
-          const soft = fresh(meshKeepSoft);
-          soft.filter = `blur(${fuzz / 4}px)`;
-          soft.drawImage(meshKeepMask, 0, 0);
-        }
-        const fade = fuzz > 0 ? meshKeepSoft : meshKeepMask;
-        const out = fresh(meshKept);
+      // Fuzzy polygons bend less towards their middles in the warp itself;
+      // hard-edged ones are cut out of it, as the warp can't step that sharply.
+      if (warped && meshKeeps.length && !meshFuzz()) {
+        meshKept.width = canvas.width;
+        meshKept.height = canvas.height;
+        const out = meshKept.getContext('2d');
         out.drawImage(warped, 0, 0);
-        out.globalCompositeOperation = 'destination-out';
-        out.drawImage(fade, 0, 0);
-        const flat = fresh(meshKeepFlat);
-        plain(flat);
-        flat.globalCompositeOperation = 'destination-in';
-        flat.drawImage(fade, 0, 0);
-        out.globalCompositeOperation = 'lighter';
-        out.drawImage(meshKeepFlat, 0, 0);
+        out.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
+        traceMeshKeeps(out);
+        out.clip();
+        out.setTransform(1, 0, 0, 1, 0, 0);
+        out.clearRect(0, 0, meshKept.width, meshKept.height);
+        plain(out);
         ctx.drawImage(meshKept, 0, 0);
       } else if (warped) {
         ctx.drawImage(warped, 0, 0);

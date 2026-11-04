@@ -4629,7 +4629,7 @@
         }
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
-        if (Math.abs(Math.hypot(centre.x - s.x, centre.y - s.y) - circle.r * view.scale) <= 6) return { circle, part: 'edge' };
+        if (Math.abs(Math.hypot(centre.x - s.x, centre.y - s.y) - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
       }
       return null;
     }
@@ -9536,7 +9536,7 @@
         // With Shift, a press on or in a circle turns it.
         const turning = e.shiftKey && [...meshCircles].reverse().find((circle) => {
           const centre = toScreen(fromMesh(circle.c));
-          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * view.scale + 6;
+          return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * view.scale * mapPlace.scale + 6;
         });
         const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
@@ -9937,7 +9937,7 @@
       if (drag.meshCircle) {
         const circle = drag.meshCircle;
         // Too small to see, so taken as a click rather than a circle.
-        if (drag.part === 'new' && circle.r * view.scale < 4) deleteMeshCircle(circle);
+        if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
         drag = null;
         draw();
         updateCursor();

@@ -948,6 +948,15 @@
       gap: 8px;
       padding: 16px;
     }
+    /* Settings kept only while the prototype is being tuned. */
+    .temporary-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #eadfc8;
+    }
     .label-section + .label-section {
       border-top: 1px solid var(--label-rule);
     }
@@ -2375,26 +2384,29 @@
           Show Labels
           <input id="show-labels" class="switch" type="checkbox" checked>
         </label>
-        <label class="field">
-          <span class="field-name">Snap Distance</span>
-          <span class="slider"><output for="snap-distance"></output><input id="snap-distance" type="range" min="0" max="50" value="15"></span>
-        </label>
-        <label class="field">
-          <span class="field-name">Segment Hover Distance</span>
-          <span class="slider"><output for="segment-distance"></output><input id="segment-distance" type="range" min="1" max="50" value="10"></span>
-        </label>
-        <label class="field">
-          <span class="field-name">Bend Focus</span>
-          <span class="slider"><output for="bend-focus"></output><input id="bend-focus" type="range" min="0" max="100" value="0"></span>
-        </label>
-        <label class="field">
-          <span class="field-name">Nudge Amount</span>
-          <span class="slider"><output for="nudge-amount"></output><input id="nudge-amount" type="range" min="1" max="20" value="1"></span>
-        </label>
-        <label class="field">
-          Path Color
-          <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-        </label>
+        <div class="temporary-controls">
+          <div class="section-heading">Temporary Controls</div>
+          <label class="field">
+            <span class="field-name">Snap Distance</span>
+            <span class="slider"><output for="snap-distance"></output><input id="snap-distance" type="range" min="0" max="50" value="15"></span>
+          </label>
+          <label class="field">
+            <span class="field-name">Segment Hover Distance</span>
+            <span class="slider"><output for="segment-distance"></output><input id="segment-distance" type="range" min="1" max="50" value="10"></span>
+          </label>
+          <label class="field">
+            <span class="field-name">Bend Focus</span>
+            <span class="slider"><output for="bend-focus"></output><input id="bend-focus" type="range" min="0" max="100" value="0"></span>
+          </label>
+          <label class="field">
+            <span class="field-name">Nudge Amount</span>
+            <span class="slider"><output for="nudge-amount"></output><input id="nudge-amount" type="range" min="1" max="20" value="1"></span>
+          </label>
+          <label class="field">
+            Path Color
+            <span class="color-field"><input id="path-color" type="color" value="#ffbf17"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+          </label>
+        </div>
       </div>
       <div class="label-section">
         <label id="intersection-field" class="field" hidden>

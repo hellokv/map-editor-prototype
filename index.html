@@ -2385,6 +2385,10 @@
             Mesh
             <input id="mesh-on" class="switch" type="checkbox" checked>
           </label>
+          <label class="field">
+            Distortion
+            <input id="mesh-warp" class="switch" type="checkbox" checked>
+          </label>
         </div>
         <div id="mesh-fields" class="temporary-controls">
           <label class="field">
@@ -4542,6 +4546,12 @@
       meshOn.blur();
       draw();
     });
+    // Off, the map is drawn as it is, though the gravity tools keep their work.
+    const meshWarp = document.getElementById('mesh-warp');
+    meshWarp.addEventListener('change', () => {
+      meshWarp.blur();
+      draw();
+    });
     meshColor.addEventListener('input', () => draw());
     meshBorder.addEventListener('input', () => draw());
     // The mesh is a lattice of nodes in its own frame: centred on the map,
@@ -5700,7 +5710,7 @@
         }
         out.globalAlpha = 1;
       };
-      const warped = meshOffsets.size ? warpByMesh(layers) : null;
+      const warped = meshWarp.checked && meshOffsets.size ? warpByMesh(layers) : null;
       if (warped) {
         ctx.drawImage(warped, 0, 0);
       } else {

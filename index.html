@@ -10200,12 +10200,8 @@
       }
       if (drag.meshCircle) {
         const circle = drag.meshCircle;
-        // A new circle is selected once it's drawn; too small to see, it's
-        // taken as a click rather than a circle.
-        if (drag.part === 'new') {
-          if (circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
-          else meshCircleSelected = circle;
-        }
+        // Too small to see, so taken as a click rather than a circle.
+        if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
         // A resized circle is let go of, not left selected.
         const resized = ['edge', 'original'].includes(drag.part) && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         if (resized && meshCircleSelected === circle) meshCircleSelected = null;

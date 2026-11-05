@@ -4736,7 +4736,7 @@
     // An anchor's ring, in screen pixels at every zoom.
     const MESH_ANCHOR_RING = 20;
     // How far out from an anchor its ring can be taken hold of.
-    const MESH_ANCHOR_REACH = MESH_ANCHOR_RING + 10;
+    const MESH_ANCHOR_REACH = MESH_ANCHOR_RING + 24;
     // Cursors Pull mesh can show over the map, each drawn black with a white
     // halo so it reads on any map. The picker previews the same images.
     const pullCursorShapes = {
@@ -4821,7 +4821,7 @@
     // It sits a little back from the arc's tail, clear of the dashes.
     function meshUnturnAt(pull) {
       const rr = (MESH_ANCHOR_RING + 6) / (view.scale * mapPlace.scale);
-      const a = (pull.turnFrom ?? -Math.PI / 2) - Math.sign(pull.turn) * (16 / (MESH_ANCHOR_RING + 6));
+      const a = (pull.turnFrom ?? -Math.PI / 2) - Math.sign(pull.turn) * (20 / (MESH_ANCHOR_RING + 6));
       return { x: pull.end.x + rr * Math.cos(a), y: pull.end.y + rr * Math.sin(a) };
     }
     const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select');
@@ -4869,7 +4869,7 @@
         return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
       };
       for (const pull of [...meshPulls].reverse()) {
-        if (pull.turn && near(meshUnturnAt(pull), 8)) return { pull, part: 'unturn' };
+        if (pull.turn && near(meshUnturnAt(pull), 12)) return { pull, part: 'unturn' };
         if (turn && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
         if (near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'end' };
@@ -4989,9 +4989,9 @@
         if (pull.turn && !drag) {
           // The X that clears the turn: white on a black disc.
           const x = meshUnturnAt(pull);
-          const k = 3 * px;
+          const k = 4 * px;
           ctx.beginPath();
-          ctx.arc(x.x, x.y, 8 * px, 0, 2 * Math.PI);
+          ctx.arc(x.x, x.y, 12 * px, 0, 2 * Math.PI);
           ctx.fillStyle = '#000000';
           ctx.fill();
           ctx.beginPath();

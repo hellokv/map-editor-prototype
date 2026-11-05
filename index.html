@@ -5043,6 +5043,12 @@
       circle.from = { x: circle.c.x + ((at.x - o.x) * circle.r) / away, y: circle.c.y + ((at.y - o.y) * circle.r) / away };
       circle.to = { x: at.x - off.x, y: at.y - off.y };
     }
+    // With Shift, a scaled circle's edge resizes both circles, keeping its scale.
+    function meshCircleEdgeDrag(circle, at) {
+      if (!shiftHeld || !circle.to) return meshCircleEdgeTo(circle, at);
+      const o = meshCircleShown(circle);
+      circle.r = Math.max(1e-3, Math.hypot(at.x - o.x, at.y - o.y) / meshCircleScale(circle));
+    }
     function meshCircleShown(circle, q = circle.c) {
       const off = meshCircleOffset(circle);
       return { x: q.x + off.x, y: q.y + off.y };
@@ -10449,12 +10455,14 @@
           const sin = Math.sin(pin.angle);
           pin.rx = Math.max(1, Math.abs(dx * cos + dy * sin));
           pin.ry = Math.max(1, Math.abs(dy * cos - dx * sin));
-        } else if (drag.part === 'edge') {
-          // The inner edge follows the pointer, keeping its shape; the outer one stays put.
-          const grow = Math.max(0.01, meshPinReach(pin, at));
+        } else if (drag.part === 'edge' || shiftHeld) {
+          // The edge taken follows the pointer, keeping its shape. Alone, the
+          // inner edge leaves the outer one where it is; with Shift, either
+          // takes the other with it.
+          const grow = Math.max(0.01, meshPinReach(pin, at) / (drag.part === 'edge' ? 1 : pin.k));
           pin.rx *= grow;
           pin.ry *= grow;
-          pin.k = Math.max(1.05, pin.k / grow);
+          if (!shiftHeld) pin.k = Math.max(1.05, pin.k / grow);
         } else pin.k = Math.max(1.05, meshPinReach(pin, at));
         draw();
         return;
@@ -10514,16 +10522,17 @@
         else if (drag.part === 'edge' && !drag.moved) {
           if (Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) <= 2) return;
           drag.moved = true;
-          meshCircleEdgeTo(circle, at);
+          meshCircleEdgeDrag(circle, at);
           scaleMeshCircle(circle);
         } else if (drag.part === 'edge') {
-          meshCircleEdgeTo(circle, at);
+          meshCircleEdgeDrag(circle, at);
           scaleMeshCircle(circle);
         } else if (drag.part === 'original') {
-          // The circle it bends from grows or shrinks; the scaled one stays put.
+          // The circle it bends from grows or shrinks; the scaled one stays put,
+          // or with Shift grows and shrinks with it.
           const o = meshCircleShown(circle);
           const r = Math.max(1e-3, Math.hypot(at.x - o.x, at.y - o.y));
-          if (circle.from) {
+          if (circle.from && !shiftHeld) {
             const k = r / circle.r;
             circle.from = { x: circle.c.x + (circle.from.x - circle.c.x) * k, y: circle.c.y + (circle.from.y - circle.c.y) * k };
           }

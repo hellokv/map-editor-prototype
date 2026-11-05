@@ -4649,7 +4649,10 @@
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
         const shown = toScreen(fromMesh(meshCircleShown(circle)));
-        if (Math.abs(Math.hypot(shown.x - s.x, shown.y - s.y) - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
+        const away = Math.hypot(shown.x - s.x, shown.y - s.y);
+        if (Math.abs(away - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
+        // The ghosted original, shown once the circle has been scaled or moved.
+        if ((circle.to || circle.shift) && Math.abs(away - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'original' };
       }
       return null;
     }
@@ -4873,7 +4876,9 @@
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
         ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
+        ctx.lineWidth = (lit?.circle === circle && lit.part === 'original' ? 3.5 : 1.5) * px;
         ctx.stroke();
+        ctx.lineWidth = 1.5 * px;
         ctx.globalAlpha = 1;
         if (!to) continue;
         ctx.setLineDash([3 * px, 3 * px]);
@@ -9740,6 +9745,16 @@
           scaleMeshCircle(circle);
         } else if (drag.part === 'edge') {
           meshCircleEdgeTo(circle, at);
+          scaleMeshCircle(circle);
+        } else if (drag.part === 'original') {
+          // The circle it bends from grows or shrinks; the scaled one stays put.
+          const o = meshCircleShown(circle);
+          const r = Math.max(1e-3, Math.hypot(at.x - o.x, at.y - o.y));
+          if (circle.from) {
+            const k = r / circle.r;
+            circle.from = { x: circle.c.x + (circle.from.x - circle.c.x) * k, y: circle.c.y + (circle.from.y - circle.c.y) * k };
+          }
+          circle.r = r;
           scaleMeshCircle(circle);
         } else {
           const off = meshCircleOffset(circle);

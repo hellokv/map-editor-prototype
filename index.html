@@ -4972,12 +4972,18 @@
       for (const { start, end } of meshPulls) dashedArrow(start, end);
       const litAnchor = meshAnchorLit();
       const litStart = meshStartLit();
-      // An anchor's ring and turn arc show only while it's hovered or held.
+      // An anchor's ring and turn arc show only while it's hovered, held or selected.
       for (const pull of meshPulls) {
-        if (pull !== litAnchor) continue;
+        if (pull !== litAnchor && pull !== meshPullSelected) continue;
         const { end } = pull;
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
+        if (pull === meshPullSelected) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 6.5 * px;
+          ctx.stroke();
+          ctx.strokeStyle = toolColor.value;
+        }
         ctx.lineWidth = 3.5 * px;
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;
@@ -9723,7 +9729,7 @@
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
         const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
         if (hit) {
-          meshPullSelected = hit.part === 'start' ? hit.pull : null;
+          meshPullSelected = hit.pull;
           pressMeshPull(hit, s);
         } else if (meshGrabbable(s)) {
           meshPullSelected = null;

@@ -4380,12 +4380,11 @@
     }
     const satelliteScale = () => (Number(document.getElementById('satellite-scale').value) || 100) / 100;
     const satelliteTurn = () => ((Number(document.getElementById('satellite-rotation').value) || 0) * Math.PI) / 180;
-    // What a drag at screen point s takes hold of in Location: the map, where
-    // it shows; else the satellite view, where it is; else the whole view.
+    // What a drag at screen point s takes hold of in Location: the map, within
+    // its box, however faint; else the satellite view, where it is; else the whole view.
     function locationGrabAt(s) {
-      const background = Number(locationInputs.background.value) > 0;
       const m = toBackground(s.x, s.y);
-      if (background && m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h) return 'map';
+      if (m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h) return 'map';
       const p = { x: (s.x - view.x) / view.scale, y: (s.y - view.y) / view.scale };
       const dx = p.x - board.w / 2 - satelliteOffset.x;
       const dy = p.y - board.h / 2 - satelliteOffset.y;

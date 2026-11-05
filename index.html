@@ -207,6 +207,10 @@
       white-space: nowrap;
       pointer-events: none;
     }
+    /* A selected gravity element's settings take the Location settings' place. */
+    #panel.gravity-element #location-panel {
+      display: none;
+    }
     #tooltip .shortcut {
       margin-left: 8px;
       opacity: 0.6;
@@ -2432,6 +2436,23 @@
         </div>
       </div>
     </div>
+    <div id="gravity-panel" hidden>
+      <div class="label-section">
+        <label id="gravity-rubber-field" class="field">
+          Rubber
+          <span class="slider"><span class="percent-field"><input id="gravity-rubber" type="number" min="0" max="100" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Rubber strength"><button type="button" class="reset" aria-label="Use the Location Rubber"><span class="material-symbols-rounded">replay</span></button></span>
+        </label>
+        <label id="gravity-width-field" class="field">
+          Width
+          <span class="slider"><input id="gravity-width" type="number" min="1" max="2000" step="1"><input type="range" min="20" max="800" step="1" aria-label="Wall width"></span>
+        </label>
+        <label id="gravity-back-width-field" class="field">
+          Back Width
+          <span class="slider"><input id="gravity-back-width" type="number" min="1" max="2000" step="1"><input type="range" min="20" max="800" step="1" aria-label="Back wall width"></span>
+        </label>
+        <button id="gravity-delete" class="new-style" type="button">Delete<span class="material-symbols-rounded">delete</span></button>
+      </div>
+    </div>
     <div id="preview-panel" hidden>
       <div class="label-section">
         <div class="section-heading">Device</div>
@@ -2902,6 +2923,82 @@
         button.blur();
       });
     }
+    // The selected gravity element, its kind's name, and how to redo its work on the mesh.
+    function gravitySelected() {
+      if (!inLocation()) return null;
+      if (meshPullSelected) return { item: meshPullSelected, name: 'Gravity vector', redo: redoMeshPullAll, remove: deleteMeshPull };
+      if (meshCircleSelected) return { item: meshCircleSelected, name: 'Gravity field', redo: scaleMeshCircle, remove: deleteMeshCircle };
+      if (meshWallSelected) return { item: meshWallSelected, name: 'Gravity wall', redo: pushMeshWall, remove: deleteMeshWall };
+      if (meshPinSelected) return { item: meshPinSelected, name: 'Gravity anchor', remove: deleteMeshPin };
+      return null;
+    }
+    // A pull again from its start, then turned again as it was.
+    function redoMeshPullAll(pull) {
+      redoMeshPull(pull);
+      if (pull.turn) turnMeshPull(pull, meshPullShares(pull.end, pull).shares);
+    }
+    const gravityPanel = document.getElementById('gravity-panel');
+    const gravityRubber = document.getElementById('gravity-rubber');
+    const gravityWidth = document.getElementById('gravity-width');
+    const gravityBackWidth = document.getElementById('gravity-back-width');
+    const showSlider = (input, value) => {
+      if (document.activeElement === input) return;
+      input.value = Math.round(value);
+      input.closest('.slider').querySelector('input[type="range"]').value = input.value;
+    };
+    function showGravityPanel() {
+      const selection = gravitySelected();
+      document.getElementById('panel').classList.toggle('gravity-element', !!selection);
+      gravityPanel.hidden = !selection;
+      if (!selection) return;
+      const { item } = selection;
+      const rubbery = !!selection.redo;
+      document.getElementById('gravity-rubber-field').hidden = !rubbery;
+      if (rubbery) showSlider(gravityRubber, meshRubberOf(item));
+      gravityRubber.closest('.slider').querySelector('.reset').hidden = item.rubber == null;
+      const wall = item === meshWallSelected;
+      document.getElementById('gravity-width-field').hidden = !wall;
+      document.getElementById('gravity-back-width-field').hidden = !(wall && item.backWidth != null);
+      if (wall) showSlider(gravityWidth, item.width);
+      if (wall && item.backWidth != null) showSlider(gravityBackWidth, item.backWidth);
+    }
+    // Each field sets its value on the selected element and redoes its work.
+    const gravityField = (input, apply) => {
+      const slider = input.closest('.slider');
+      const range = slider.querySelector('input[type="range"]');
+      const set = (value) => {
+        const selection = gravitySelected();
+        if (!selection || !Number.isFinite(value)) return;
+        apply(selection.item, value);
+        selection.redo?.(selection.item);
+        draw();
+      };
+      input.addEventListener('input', () => {
+        range.value = input.value;
+        set(Number(input.value));
+      });
+      range.addEventListener('input', () => {
+        input.value = range.value;
+        set(Number(range.value));
+      });
+      range.addEventListener('change', () => range.blur());
+    };
+    gravityField(gravityRubber, (item, value) => { item.rubber = Math.min(100, Math.max(0, value)); });
+    gravityField(gravityWidth, (item, value) => { item.width = Math.max(1, value); });
+    gravityField(gravityBackWidth, (item, value) => { item.backWidth = Math.max(1, value); });
+    gravityRubber.closest('.slider').querySelector('.reset').addEventListener('click', (e) => {
+      e.preventDefault();
+      const selection = gravitySelected();
+      if (!selection) return;
+      selection.item.rubber = null;
+      selection.redo?.(selection.item);
+      draw();
+    });
+    document.getElementById('gravity-delete').addEventListener('click', (e) => {
+      gravitySelected()?.remove(gravitySelected().item);
+      e.currentTarget.blur();
+      draw();
+    });
     document.getElementById('mesh-clear').addEventListener('click', (e) => {
       meshOffsets.clear();
       for (const list of [meshPulls, meshCircles, meshWalls, meshPins]) list.length = 0;
@@ -4650,8 +4747,10 @@
       meshOn.checked = true;
       showMeshFields();
     }
-    function meshReach(step) {
-      return { step, spread: Math.max(0.35 * step, ((Number(meshRubber.value) || 0) / 100) * (board.w / 2)) };
+    // An element's own Rubber, or the panel's when it has none.
+    const meshRubberOf = (item) => item?.rubber ?? (Number(meshRubber.value) || 0);
+    function meshReach(step, item) {
+      return { step, spread: Math.max(0.35 * step, (meshRubberOf(item) / 100) * (board.w / 2)) };
     }
     // Pulls and circles move nodes as far past the view as they reach, so
     // panning to them later shows no seam.
@@ -4665,8 +4764,8 @@
     // pinned and takes only the Gravity share of it, so pins are tugged
     // along a little, more the closer they are.
     function meshPullShares(g, pull) {
-      const { step, node, from, to } = meshLatticeFor(0);
-      const { spread } = meshReach(step);
+      const { spread } = meshReach(meshLattice().step, pull);
+      const { step, node, from, to } = meshLatticeFor(0, spread);
       // A pin holds the nodes round its cell still, and eases off past them.
       const pin = step * 1.5;
       const others = meshPulls.filter((other) => other !== pull);
@@ -4757,7 +4856,7 @@
       const sy = circle.shift ? circle.shift.y - c.y : 0;
       // A circle's pull spreads with its size: at Rubber 50, about its radius past its edge.
       const step = meshLattice().step;
-      const spread = Math.max(0.35 * step, ((Number(meshRubber.value) || 0) / 100) * 2 * r);
+      const spread = Math.max(0.35 * step, (meshRubberOf(circle) / 100) * 2 * r);
       const { node, from, to } = meshLatticeFor(r * Math.max(1, k) + Math.hypot(sx, sy), spread);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
@@ -4817,8 +4916,8 @@
       const { length, u, v } = meshWallFrame(wall);
       if (!length) return;
       const backLength = backWidth != null ? wall.backLength : 0;
-      const { step, node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + Math.max(length, backLength));
-      const { spread } = meshReach(step);
+      const { spread } = meshReach(meshLattice().step, wall);
+      const { node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + Math.max(length, backLength), spread);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
@@ -4877,8 +4976,6 @@
       return !drag && pointer ? meshWallAt(pointer) : null;
     }
     let meshWallLitWas = null;
-    // Which side's width Wall Width shows and sets for the selected wall.
-    let meshWallBack = false;
     // Takes hold of a wall's part at screen point s, selecting the wall. With
     // Command, its start dot draws out its other side, which a click alone
     // takes away again.
@@ -4888,21 +4985,8 @@
       const backing = command && hit.part === 'start';
       const fresh = backing && wall.backWidth == null;
       if (fresh) Object.assign(wall, { backWidth: wall.width, backLength: 0 });
-      meshWallBack = backing || !!hit.back;
-      showMeshWallWidth(wall);
-      drag = { meshWall: wall, part: backing ? 'end' : hit.part, back: meshWallBack, backing, fresh, last: toMesh(toBackground(s.x, s.y)), from: s };
+      drag = { meshWall: wall, part: backing ? 'end' : hit.part, back: backing || !!hit.back, backing, fresh, last: toMesh(toBackground(s.x, s.y)), from: s };
     }
-    function showMeshWallWidth(wall) {
-      meshWallWidth.value = Math.round(meshWallBack ? wall.backWidth : wall.width);
-      meshWallWidth.closest('.slider').querySelector('input[type="range"]').value = meshWallWidth.value;
-    }
-    meshWallWidth.closest('.slider').addEventListener('input', () => {
-      if (!meshWallSelected) return;
-      const key = meshWallBack ? 'backWidth' : 'width';
-      meshWallSelected[key] = Math.max(1, Number(meshWallWidth.value) || meshWallSelected[key]);
-      pushMeshWall(meshWallSelected);
-      draw();
-    });
     const meshPinTool = () => inLocation() && (locationTool === 'pin' || locationTool === 'select');
     // The anchor part at screen point s: its dot, to move it, or its inner
     // or outer edge, to resize it.
@@ -7066,6 +7150,7 @@
     // Whether anything is selected in the mode on show.
     function hasSelection() {
       if (inPreview()) return false;
+      if (inLocation()) return !!gravitySelected();
       if (!labelTools.hidden) return selectedLabels.length > 0 || selectedPins.length > 0 || !!selectedList || selectedShapes.length > 0;
       if (!backgroundTools.hidden) return selectedShapes.length > 0 || !!sketchSelected;
       return !!selected;
@@ -7078,6 +7163,7 @@
       selectedShapes = [];
       sketchSelected = null;
       selected = null;
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
       draw();
       updateCursor();
     });
@@ -7354,6 +7440,7 @@
       placeCrossingDialog();
       placeListDialog();
       document.getElementById('panel-title').textContent = panelTitle();
+      showGravityPanel();
       const selecting = hasSelection();
       document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
@@ -10475,7 +10562,6 @@
           const { v } = meshWallFrame(wall);
           const bar = drag.back ? meshWallBackEnd(wall) : wall.end;
           wall[drag.back ? 'backWidth' : 'width'] = Math.max(1, 2 * Math.abs((at.x - bar.x) * v.x + (at.y - bar.y) * v.y));
-          showMeshWallWidth(wall);
         } else if (drag.back) {
           // The other side keeps square behind the wall; only its distance changes.
           const { u } = meshWallFrame(wall);
@@ -10740,9 +10826,7 @@
         // leaves the wall one-sided.
         else if (drag.backing && (!moved || wall.backLength * view.scale * mapPlace.scale < 4)) {
           wall.backWidth = null;
-          meshWallBack = false;
           pushMeshWall(wall);
-          showMeshWallWidth(wall);
         }
         // A wall that's been dragged is let go of, not left selected.
         else if (moved) meshWallSelected = null;
@@ -11212,7 +11296,7 @@
     const SHAPE_NAMES = { circle: 'Circle', square: 'Square', triangle: 'Triangle', polygon: 'Polygon', compass: 'Compass', image: 'Image' };
     function panelTitle() {
       if (inPreview()) return 'Preview';
-      if (inLocation()) return 'Location';
+      if (inLocation()) return gravitySelected()?.name ?? 'Location';
       if (!labelTools.hidden) {
         if (selectedPins.length) return selectedPins.length > 1 ? 'Pins' : 'Pin';
         if (selectedLabels.length) return selectedLabels.length > 1 ? 'Labels' : 'Label';

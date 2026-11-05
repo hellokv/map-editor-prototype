@@ -2424,6 +2424,7 @@
             <button type="button" id="pull-cursor" aria-haspopup="listbox" aria-expanded="false"></button>
             <div id="pull-cursor-list" role="listbox" hidden></div>
           </div>
+          <button id="mesh-clear" class="new-style" type="button">Clear Gravity Tools<span class="material-symbols-rounded">delete</span></button>
         </div>
       </div>
     </div>
@@ -2897,6 +2898,13 @@
         button.blur();
       });
     }
+    document.getElementById('mesh-clear').addEventListener('click', (e) => {
+      meshOffsets.clear();
+      for (const list of [meshPulls, meshCircles, meshWalls, meshPins]) list.length = 0;
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
+      e.currentTarget.blur();
+      draw();
+    });
     // The gravity tools' letters pick them in Location.
     document.addEventListener('keydown', (e) => {
       if (!inLocation() || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.target.closest('input, textarea, select, [contenteditable]')) return;

@@ -1122,7 +1122,8 @@
        one line up with those without. */
     #label-icon-size-field .slider,
     #label-icon-gap-field .slider,
-    #label-icon-offset-field .slider {
+    #label-icon-offset-field .slider,
+    #gravity-rubber-field .slider {
       grid-template-columns: 44px minmax(60px, 110px) 16px;
       gap: 10px;
     }
@@ -1133,6 +1134,9 @@
       border-radius: 4px;
       background: none;
       color: var(--label-ink);
+    }
+    #gravity-rubber-field .reset .material-symbols-rounded {
+      font-size: 16px;
     }
     #panel .field .reset:hover {
       background: rgba(0, 0, 0, 0.06);
@@ -2442,8 +2446,8 @@
     <div id="gravity-panel" hidden>
       <div class="label-section">
         <label id="gravity-rubber-field" class="field">
-          Rubber
-          <span class="slider"><span class="percent-field"><input id="gravity-rubber" type="number" min="0" max="100" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Rubber strength"><button type="button" class="reset" aria-label="Use the Location Rubber"><span class="material-symbols-rounded">replay</span></button></span>
+          Force
+          <span class="slider"><input id="gravity-rubber" type="number" min="1" max="5" step="0.1"><input type="range" min="1" max="5" step="0.1" aria-label="Force"><button type="button" class="reset" aria-label="Use the Location Rubber"><span class="material-symbols-rounded">replay</span></button></span>
         </label>
         <label id="gravity-width-field" class="field">
           Width
@@ -2944,9 +2948,12 @@
     const gravityRubber = document.getElementById('gravity-rubber');
     const gravityWidth = document.getElementById('gravity-width');
     const gravityBackWidth = document.getElementById('gravity-back-width');
-    const showSlider = (input, value) => {
+    // Force runs 1 to 5 over the top half of Rubber, 50% to 100%.
+    const forceOf = (rubber) => Math.min(5, Math.max(1, 1 + ((rubber - 50) / 50) * 4));
+    const rubberOf = (force) => 50 + ((Math.min(5, Math.max(1, force)) - 1) / 4) * 50;
+    const showSlider = (input, value, digits = 0) => {
       if (document.activeElement === input) return;
-      input.value = Math.round(value);
+      input.value = value.toFixed(digits);
       input.closest('.slider').querySelector('input[type="range"]').value = input.value;
     };
     function showGravityPanel() {
@@ -2957,7 +2964,7 @@
       const { item } = selection;
       const rubbery = !!selection.redo;
       document.getElementById('gravity-rubber-field').hidden = !rubbery;
-      if (rubbery) showSlider(gravityRubber, meshRubberOf(item));
+      if (rubbery) showSlider(gravityRubber, forceOf(meshRubberOf(item)), 1);
       gravityRubber.closest('.slider').querySelector('.reset').hidden = item.rubber == null;
       const wall = item === meshWallSelected;
       document.getElementById('gravity-width-field').hidden = !wall;
@@ -2986,7 +2993,7 @@
       });
       range.addEventListener('change', () => range.blur());
     };
-    gravityField(gravityRubber, (item, value) => { item.rubber = Math.min(100, Math.max(0, value)); });
+    gravityField(gravityRubber, (item, value) => { item.rubber = rubberOf(value); });
     gravityField(gravityWidth, (item, value) => { item.width = Math.max(1, value); });
     gravityField(gravityBackWidth, (item, value) => { item.backWidth = Math.max(1, value); });
     gravityRubber.closest('.slider').querySelector('.reset').addEventListener('click', (e) => {

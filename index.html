@@ -10001,6 +10001,15 @@
           circle.turn = dragTurn(drag, Math.atan2(at.y - o.y, at.x - o.x));
           scaleMeshCircle(circle);
         }
+        else if (drag.part === 'centre' && drag.tip) {
+          // A moved circle's dot moves where it was moved from; the arrow's tip stays.
+          const dx = at.x - drag.last.x;
+          const dy = at.y - drag.last.y;
+          const by = (q) => q && { x: q.x + dx, y: q.y + dy };
+          Object.assign(circle, { c: by(circle.c), from: by(circle.from), to: by(circle.to) });
+          drag.last = at;
+          scaleMeshCircle(circle);
+        }
         else if (drag.part === 'centre' || drag.part === 'shift') {
           // From the centre, a fresh move of everything in the circle; from
           // the arrow's tip, more of the same one.

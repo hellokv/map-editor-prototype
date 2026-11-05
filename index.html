@@ -4819,6 +4819,36 @@
       }
     });
     showPullCursor();
+    // The circle part a press at screen point s takes hold of; with Command,
+    // anywhere on or in a circle turns it.
+    function meshCirclePressAt(s, command) {
+      const turning = command && meshCircleTurnAt(s);
+      return turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
+    }
+    // Takes hold of a circle's part at screen point s: its turn's X, to clear
+    // the turn; else it's selected, and the part dragged.
+    function pressMeshCircle(hit, s) {
+      const at = toMesh(toBackground(s.x, s.y));
+      const { circle, part } = hit;
+      if (part === 'unturn') {
+        circle.turn = 0;
+        scaleMeshCircle(circle);
+        return;
+      }
+      meshCircleSelected = circle;
+      if (part === 'turn') {
+        const o = meshCircleShown(circle);
+        drag = { meshCircle: circle, part, angle: Math.atan2(at.y - o.y, at.x - o.x), turn: circle.turn ?? 0 };
+        // A turn's arc starts where the first turn was taken.
+        if (!circle.turn) circle.turnFrom = drag.angle;
+      } else if (part === 'edge') {
+        // The edge is taken afresh only once the press moves, so a click
+        // just selects the circle and keeps its scale.
+        drag = { meshCircle: circle, part, from: s, moved: false };
+      } else {
+        drag = { meshCircle: circle, part, last: at, tip: circle.shift, from: s };
+      }
+    }
     // Takes hold of a pull's marker at screen point s: its turn's X, to clear
     // the turn; its ring, to turn, with Command; its start dot, to pull again
     // from there; its anchor, to pull further.
@@ -4888,7 +4918,7 @@
     let meshAnchorEdgeLitWas = null;
     // The circle part the Gravity field tool is over, or dragging.
     function meshCircleLit() {
-      if (!inLocation() || locationTool !== 'add') return null;
+      if (!inLocation() || !(locationTool === 'add' || locationTool === 'select') || spaceHeld) return null;
       if (drag?.meshCircle) return { circle: drag.meshCircle, part: drag.part };
       return !drag && pointer ? meshCircleAt(pointer) : null;
     }
@@ -9559,13 +9589,15 @@
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
         canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
-      // The cursor tool moves things under the regular cursor, but a pull's
-      // anchor or start dot shows the hand; Pan and Space show the hand.
+      // The cursor tool moves things under the regular cursor, but shows the
+      // hand over pulls' and circles' markers; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) {
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
-        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh);
-        const over = !drag && (meshAnchorLit() || meshStartLit());
-        canvas.style.cursor = unturn ? 'pointer' : drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
+        const circleAt = !drag && pointer && meshCircleAt(pointer);
+        const turning = drag?.meshTurn || (drag?.meshCircle && drag.part === 'turn') || (commandHeld && !drag && (meshAnchorLit() || (pointer && meshCircleTurnAt(pointer))));
+        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle;
+        const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt);
+        canvas.style.cursor = unturn || circleAt?.part === 'unturn' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9744,25 +9776,10 @@
       // it; anywhere else on the map, a drag draws a new circle.
       if (inLocation() && locationTool === 'add' && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
-        const turning = (e.metaKey || e.ctrlKey) && meshCircleTurnAt(s);
-        const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
-        meshCircleSelected = hit?.circle ?? null;
-        if (hit?.part === 'unturn') {
-          hit.circle.turn = 0;
-          scaleMeshCircle(hit.circle);
-          meshCircleSelected = null;
-        } else if (turning) {
-          const o = meshCircleShown(turning);
-          drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - o.y, at.x - o.x), turn: turning.turn ?? 0 };
-          // A turn's arc starts where the first turn was taken.
-          if (!turning.turn) turning.turnFrom = drag.angle;
-        } else if (hit?.part === 'edge') {
-          // The edge is taken afresh only once the press moves, so a click
-          // just selects the circle and keeps its scale.
-          drag = { meshCircle: hit.circle, part: 'edge', from: s, moved: false };
-        } else if (hit) {
-          drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift, from: s };
-        } else if (meshGrabbable(s)) {
+        const hit = meshCirclePressAt(s, e.metaKey || e.ctrlKey);
+        meshCircleSelected = null;
+        if (hit) pressMeshCircle(hit, s);
+        else if (meshGrabbable(s)) {
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
           meshCircleSelected = meshCircle;
@@ -9790,21 +9807,17 @@
         updateCursor();
         return;
       }
-      // The cursor tool selects anchors and circles by their markers, to
-      // delete; a pull's markers can be dragged and turned as with Gravity vector.
+      // The cursor tool takes hold of pulls and circles as their own tools do,
+      // but adds none.
       if (inLocation() && locationTool === 'select' && !spaceHeld && !s.right) {
         const pullHit = meshPullAt(s, e.metaKey || e.ctrlKey);
         meshPullSelected = pullHit?.pull ?? null;
-        const circleHit = meshPullSelected ? null : meshCircleAt(s);
-        meshCircleSelected = circleHit?.circle ?? null;
+        const circleHit = pullHit ? null : meshCirclePressAt(s, e.metaKey || e.ctrlKey);
+        meshCircleSelected = null;
         if (pullHit) pressMeshPull(pullHit, s);
-        if (circleHit?.part === 'unturn') {
-          circleHit.circle.turn = 0;
-          scaleMeshCircle(circleHit.circle);
-          meshCircleSelected = null;
-        }
+        if (circleHit) pressMeshCircle(circleHit, s);
         mapBoxSelected = !pullHit && !circleHit && !!mapBoxAt(s);
-        if (meshPullSelected || meshCircleSelected) {
+        if (pullHit || circleHit) {
           draw();
           updateCursor();
           return;

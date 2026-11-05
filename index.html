@@ -4697,6 +4697,10 @@
     function meshCircleAt(s) {
       if (!meshOn.checked) return null;
       for (const circle of [...meshCircles].reverse()) {
+        if (circle.turn) {
+          const x = toScreen(fromMesh(meshCircleUnturnAt(circle)));
+          if (Math.hypot(x.x - s.x, x.y - s.y) <= 12) return { circle, part: 'unturn' };
+        }
         if (circle.to) {
           const dot = toScreen(fromMesh(meshCircleShown(circle, circle.to)));
           if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
@@ -4715,6 +4719,24 @@
       }
       return null;
     }
+    // Where a turned circle's X sits, in the mesh's frame: a little back from
+    // its turn arc's tail.
+    function meshCircleUnturnAt(circle) {
+      const k = view.scale * mapPlace.scale;
+      const rr = circle.r * meshCircleScale(circle) + 12 / k;
+      const a = (circle.turnFrom ?? -Math.PI / 2) - Math.sign(circle.turn) * (20 / (rr * k));
+      const o = meshCircleShown(circle);
+      return { x: o.x + rr * Math.cos(a), y: o.y + rr * Math.sin(a) };
+    }
+    // The circle the pointer is in or near, which shows its turn's X.
+    function meshCircleNear() {
+      if (!inLocation() || !(locationTool === 'add' || locationTool === 'select') || drag || !pointer || spaceHeld) return null;
+      return [...meshCircles].reverse().find((circle) => {
+        const centre = toScreen(fromMesh(meshCircleShown(circle)));
+        return Math.hypot(centre.x - pointer.x, centre.y - pointer.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 24;
+      }) ?? null;
+    }
+    let meshCircleNearWas = null;
     // A circle is shown where its centre was moved to, with its dot moved
     // along with it, so its circles stay concentric.
     function meshCircleOffset({ c, shift }) {
@@ -4968,6 +4990,30 @@
         ctx.closePath();
         ctx.fill();
       };
+      // The X that clears a turn: white on a black disc, outlined while hovered.
+      const unturnButton = (x, hovered) => {
+        const k = 4 * px;
+        ctx.beginPath();
+        ctx.arc(x.x, x.y, 12 * px, 0, 2 * Math.PI);
+        ctx.fillStyle = '#000000';
+        ctx.fill();
+        if (hovered) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2 * px;
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.moveTo(x.x - k, x.y - k);
+        ctx.lineTo(x.x + k, x.y + k);
+        ctx.moveTo(x.x + k, x.y - k);
+        ctx.lineTo(x.x - k, x.y + k);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 * px;
+        ctx.stroke();
+        ctx.strokeStyle = toolColor.value;
+        ctx.fillStyle = toolColor.value;
+        ctx.lineWidth = 1.5 * px;
+      };
       for (const { start, end } of meshPulls) dashedArrow(start, end);
       const litAnchor = meshAnchorLit();
       const litStart = meshStartLit();
@@ -4987,31 +5033,7 @@
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;
         if (pull.turn) turnArc(end, (MESH_ANCHOR_RING + 6) * px, pull.turnFrom ?? -Math.PI / 2, pull.turn);
-        if (pull.turn && !drag) {
-          // The X that clears the turn: white on a black disc.
-          const x = meshUnturnAt(pull);
-          const k = 4 * px;
-          ctx.beginPath();
-          ctx.arc(x.x, x.y, 12 * px, 0, 2 * Math.PI);
-          ctx.fillStyle = '#000000';
-          ctx.fill();
-          if (pointer && meshPullAt(pointer)?.part === 'unturn') {
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2 * px;
-            ctx.stroke();
-          }
-          ctx.beginPath();
-          ctx.moveTo(x.x - k, x.y - k);
-          ctx.lineTo(x.x + k, x.y + k);
-          ctx.moveTo(x.x + k, x.y - k);
-          ctx.lineTo(x.x - k, x.y + k);
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2 * px;
-          ctx.stroke();
-          ctx.strokeStyle = toolColor.value;
-          ctx.fillStyle = toolColor.value;
-          ctx.lineWidth = 1.5 * px;
-        }
+        if (pull.turn && !drag) unturnButton(meshUnturnAt(pull), pointer && meshPullAt(pointer)?.part === 'unturn');
       }
       for (const pull of meshPulls) {
         ctx.beginPath();
@@ -5028,6 +5050,7 @@
       // line from the dot it was dropped at to the nearest point on it, and
       // a dashed arrow from its centre to where that was dragged.
       const lit = meshCircleLit();
+      const nearCircle = meshCircleNear();
       for (const circle of meshCircles) {
         const { c, r, shift } = circle;
         const o = meshCircleShown(circle);
@@ -5050,6 +5073,9 @@
         ctx.fill();
         if (shift) dashedArrow(c, shift);
         if (circle.turn) turnArc(o, rk + 12 * px, circle.turnFrom ?? -Math.PI / 2, circle.turn);
+        if (circle.turn && !drag && (circle === nearCircle || circle === meshCircleSelected)) {
+          unturnButton(meshCircleUnturnAt(circle), pointer && meshCircleAt(pointer)?.part === 'unturn' && meshCircleAt(pointer).circle === circle);
+        }
         if (!to && !shift) continue;
         ctx.globalAlpha = 0.35;
         ctx.beginPath();
@@ -5061,13 +5087,9 @@
         if (!to) continue;
         // The dashed line between the two circles shows only while resizing.
         if (drag?.meshCircle === circle && ['edge', 'dot', 'original'].includes(drag.part)) {
-          ctx.setLineDash([3 * px, 3 * px]);
-          ctx.beginPath();
+          // From the original circle to the dot, the way it's being resized.
           const away = Math.max(1e-6, Math.hypot(to.x - o.x, to.y - o.y));
-          ctx.moveTo(to.x, to.y);
-          ctx.lineTo(o.x + ((to.x - o.x) * r) / away, o.y + ((to.y - o.y) * r) / away);
-          ctx.stroke();
-          ctx.setLineDash([]);
+          dashedArrow({ x: o.x + ((to.x - o.x) * r) / away, y: o.y + ((to.y - o.y) * r) / away }, to);
         }
         ctx.beginPath();
         ctx.arc(to.x, to.y, 4 * px, 0, 2 * Math.PI);
@@ -9510,7 +9532,8 @@
       }
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshCircle ? drag.part === 'turn' : commandHeld && pointer && meshCircleTurnAt(pointer);
-        canvas.style.cursor = turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
+        const unturn = !drag && pointer && meshCircleAt(pointer)?.part === 'unturn';
+        canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
@@ -9705,7 +9728,10 @@
         const turning = (e.metaKey || e.ctrlKey) && meshCircleTurnAt(s);
         const hit = turning ? { circle: turning, part: 'turn' } : meshCircleAt(s);
         meshCircleSelected = hit?.circle ?? null;
-        if (turning) {
+        if (hit?.part === 'unturn') {
+          hit.circle.turn = 0;
+          scaleMeshCircle(hit.circle);
+        } else if (turning) {
           const o = meshCircleShown(turning);
           drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - o.y, at.x - o.x), turn: turning.turn ?? 0 };
           // A turn's arc starts where the first turn was taken.
@@ -9749,8 +9775,13 @@
       if (inLocation() && locationTool === 'select' && !spaceHeld && !s.right) {
         const pullHit = meshPullAt(s, e.metaKey || e.ctrlKey);
         meshPullSelected = pullHit?.pull ?? null;
-        meshCircleSelected = meshPullSelected ? null : meshCircleAt(s)?.circle ?? null;
+        const circleHit = meshPullSelected ? null : meshCircleAt(s);
+        meshCircleSelected = circleHit?.circle ?? null;
         if (pullHit) pressMeshPull(pullHit, s);
+        if (circleHit?.part === 'unturn') {
+          circleHit.circle.turn = 0;
+          scaleMeshCircle(circleHit.circle);
+        }
         if (meshPullSelected || meshCircleSelected) {
           draw();
           updateCursor();
@@ -9925,6 +9956,11 @@
         const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
         const anchor = meshAnchorLit();
         const start = meshStartLit();
+        const near = meshCircleNear();
+        if (near !== meshCircleNearWas) {
+          meshCircleNearWas = near;
+          draw();
+        }
         const unturn = pullMarkerTool() && meshPullAt(pointer)?.part === 'unturn';
         if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas || unturn !== meshUnturnLitWas) {
           meshUnturnLitWas = unturn;

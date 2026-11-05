@@ -4574,8 +4574,12 @@
       const t = meshTurn();
       return { x: board.w / 2 + q.x * Math.cos(t) - q.y * Math.sin(t), y: board.h / 2 + q.x * Math.sin(t) + q.y * Math.cos(t) };
     }
-    // Whether the mesh can be grabbed at screen point s: anywhere it's drawn.
-    const meshGrabbable = () => meshOn.checked;
+    // Adding something with a gravity tool turns the mesh back on, so it shows.
+    function startMeshEdit() {
+      if (meshOn.checked) return;
+      meshOn.checked = true;
+      showMeshFields();
+    }
     function meshReach(step) {
       return { step, spread: Math.max(0.35 * step, ((Number(meshRubber.value) || 0) / 100) * (board.w / 2)) };
     }
@@ -5016,6 +5020,7 @@
     let meshCircleLitWas = null;
     // The circle a press at screen point s turns, with Command held: one it's on or in.
     function meshCircleTurnAt(s) {
+      if (!meshOn.checked) return null;
       return [...meshCircles].reverse().find((circle) => {
         const centre = toScreen(fromMesh(meshCircleShown(circle)));
         return Math.hypot(centre.x - s.x, centre.y - s.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 6;
@@ -9720,7 +9725,7 @@
         const held = drag?.meshStart || (drag?.meshPull && !drag.fresh);
         const over = !drag && (meshAnchorLit() || meshStartLit());
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
-        canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
+        canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : pullCursor();
       }
       // The cursor tool moves things under the regular cursor, but shows the
       // hand over pulls' and circles' markers; Pan and Space show the hand.
@@ -9913,7 +9918,8 @@
         meshCircleSelected = null;
         meshWallSelected = null;
         if (hit) pressMeshCircle(hit, s);
-        else if (meshGrabbable(s)) {
+        else {
+          startMeshEdit();
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
           drag = { meshCircle, part: 'new' };
@@ -9928,7 +9934,8 @@
         const hit = meshWallAt(s);
         meshWallSelected = null;
         if (hit) pressMeshWall(hit, s);
-        else if (meshGrabbable(s)) {
+        else {
+          startMeshEdit();
           const at = toMesh(toBackground(s.x, s.y));
           const meshWall = { start: at, end: at, width: Math.max(1, Number(meshWallWidth.value) || 200), moves: new Map() };
           meshWalls.push(meshWall);
@@ -9944,14 +9951,13 @@
         if (hit) {
           meshPullSelected = hit.pull;
           pressMeshPull(hit, s);
-        } else if (meshGrabbable(s)) {
+        } else {
+          startMeshEdit();
           meshPullSelected = null;
           const at = toMesh(toBackground(s.x, s.y));
           const meshPull = { start: at, end: at, moves: new Map() };
           meshPulls.push(meshPull);
           drag = { meshPull, shares: meshPullShares(at, meshPull), last: at, fresh: true };
-        } else {
-          meshPullSelected = null;
         }
         draw();
         updateCursor();

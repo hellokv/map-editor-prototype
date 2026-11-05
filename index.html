@@ -948,6 +948,56 @@
       gap: 8px;
       padding: 16px;
     }
+    /* Pull Cursor's picker: the chosen cursor's preview and name, opening a
+       list of them laid out like the panel's other menus. */
+    #pull-cursor-field {
+      position: relative;
+    }
+    :is(#panel, #style-panel) :is(#pull-cursor, #pull-cursor-list button) {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 4px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+    }
+    #pull-cursor::after {
+      content: '';
+      border: 4px solid transparent;
+      border-top: 5px solid #000;
+      margin-top: 4px;
+    }
+    #pull-cursor-list {
+      position: absolute;
+      z-index: 1;
+      right: 0;
+      top: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 4px 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    #pull-cursor-list[hidden] {
+      display: none;
+    }
+    :is(#panel, #style-panel) #pull-cursor-list button {
+      padding: 4px 12px;
+      border-radius: 0;
+    }
+    :is(#panel, #style-panel) #pull-cursor-list button:is(:hover, [aria-selected="true"]) {
+      background: #eee;
+    }
+    :is(#pull-cursor, #pull-cursor-list) img {
+      width: 24px;
+      height: 24px;
+      padding: 2px;
+      border-radius: 4px;
+      background: #c9d9c0;
+    }
     /* Settings kept only while the prototype is being tuned. */
     .temporary-controls {
       display: flex;
@@ -2355,6 +2405,11 @@
             Gravity
             <span class="slider"><span class="percent-field"><input id="mesh-gravity" type="number" min="0" max="100" step="1" value="25"></span><input type="range" min="0" max="100" step="1" value="25" aria-label="Gravity pull"></span>
           </label>
+          <div class="field" id="pull-cursor-field">
+            Pull Cursor
+            <button type="button" id="pull-cursor" aria-haspopup="listbox" aria-expanded="false"></button>
+            <div id="pull-cursor-list" role="listbox" hidden></div>
+          </div>
         </div>
       </div>
     </div>
@@ -4682,6 +4737,60 @@
     const MESH_ANCHOR_RING = 20;
     // How far out from an anchor its ring can be taken hold of.
     const MESH_ANCHOR_REACH = MESH_ANCHOR_RING + 10;
+    // Cursors Pull mesh can show over the map, each drawn black with a white
+    // halo so it reads on any map. The picker previews the same images.
+    const pullCursorShapes = {
+      crosshair: { name: 'Crosshair', draw: 'M12 2v7M12 15v7M2 12h7M15 12h7' },
+      plus: { name: 'Plus', draw: 'M12 5v14M5 12h14' },
+      target: { name: 'Target', draw: 'M12 5a7 7 0 1 0 0.01 0Z', dot: true },
+      dot: { name: 'Dot', draw: '', dot: true },
+      arrow: { name: 'Arrow', draw: 'M5 3l14 9-6.5 1.5L9 20Z', fill: true, hot: [5, 3] },
+    };
+    function pullCursorImage({ draw: d, dot, fill }) {
+      const shape = (stroke, width) => (d ? `<path d="${d}" fill="${fill ? stroke === '#fff' ? '#fff' : '#000' : 'none'}" stroke="${stroke}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>` : '');
+      const centre = (fillColor, r) => (dot ? `<circle cx="12" cy="12" r="${r}" fill="${fillColor}"/>` : '');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">${shape('#fff', 4)}${centre('#fff', 3.5)}${shape('#000', 1.5)}${centre('#000', 2)}</svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    }
+    let pullCursorKey = 'crosshair';
+    const pullCursor = () => {
+      const shape = pullCursorShapes[pullCursorKey];
+      const [x, y] = shape.hot ?? [12, 12];
+      return `url("${pullCursorImage(shape)}") ${x} ${y}, crosshair`;
+    };
+    const pullCursorButton = document.getElementById('pull-cursor');
+    const pullCursorList = document.getElementById('pull-cursor-list');
+    function showPullCursor() {
+      const shape = pullCursorShapes[pullCursorKey];
+      pullCursorButton.innerHTML = `<img alt="" src="${pullCursorImage(shape)}">${shape.name}`;
+      for (const option of pullCursorList.children) option.setAttribute('aria-selected', option.dataset.cursor === pullCursorKey);
+    }
+    for (const [key, shape] of Object.entries(pullCursorShapes)) {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.role = 'option';
+      option.dataset.cursor = key;
+      option.innerHTML = `<img alt="" src="${pullCursorImage(shape)}">${shape.name}`;
+      option.addEventListener('click', () => {
+        pullCursorKey = key;
+        pullCursorList.hidden = true;
+        pullCursorButton.setAttribute('aria-expanded', 'false');
+        showPullCursor();
+        updateCursor();
+      });
+      pullCursorList.append(option);
+    }
+    pullCursorButton.addEventListener('click', () => {
+      pullCursorList.hidden = !pullCursorList.hidden;
+      pullCursorButton.setAttribute('aria-expanded', String(!pullCursorList.hidden));
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!pullCursorList.hidden && !e.target.closest('#pull-cursor-field')) {
+        pullCursorList.hidden = true;
+        pullCursorButton.setAttribute('aria-expanded', 'false');
+      }
+    });
+    showPullCursor();
     // The anchor whose ring Pull mesh is over, or turning.
     function meshAnchorLit() {
       if (!inLocation() || locationTool !== 'mesh') return null;
@@ -9333,7 +9442,7 @@
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
-        canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart ? 'grabbing' : pointer && meshGrabbable(pointer) ? 'grab' : '';
+        canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) canvas.style.cursor = '';

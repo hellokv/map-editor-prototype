@@ -4791,9 +4791,41 @@
       }
     });
     showPullCursor();
-    // The anchor whose ring Pull mesh is over, or turning.
+    // Takes hold of a pull's marker at screen point s: its ring, to turn,
+    // with Command; its start dot, to pull again from there; its anchor, to
+    // pull further.
+    function pressMeshPull(hit, s) {
+      const at = toMesh(toBackground(s.x, s.y));
+      if (hit.part === 'turn') {
+        const { end } = hit.pull;
+        // Shares are taken with the old twist out, so a turn replaces it.
+        hit.pull.turn ??= 0;
+        const turn = hit.pull.turn;
+        hit.pull.turn = 0;
+        turnMeshPull(hit.pull, []);
+        hit.pull.turn = turn;
+        const { shares } = meshPullShares(hit.pull.end, hit.pull);
+        turnMeshPull(hit.pull, shares);
+        drag = { meshTurn: hit.pull, shares, turn, angle: Math.atan2(at.y - end.y, at.x - end.x) };
+        if (!turn) hit.pull.turnFrom = drag.angle;
+      } else if (hit.part === 'start') {
+        drag = { meshStart: hit.pull, last: at };
+      } else {
+        drag = { meshPull: hit.pull, shares: meshPullShares(hit.pull.end, hit.pull), last: at };
+      }
+    }
+    const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select');
+    // The pull whose start dot is under the pointer, or being dragged.
+    function meshStartLit() {
+      if (!pullMarkerTool()) return null;
+      if (drag?.meshStart) return drag.meshStart;
+      if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
+      return meshPullAt(pointer)?.part === 'start' ? meshPullAt(pointer).pull : null;
+    }
+    let meshStartLitWas = null;
+    // The anchor whose ring is under the pointer, or being dragged or turned.
     function meshAnchorLit() {
-      if (!inLocation() || locationTool !== 'mesh') return null;
+      if (!pullMarkerTool()) return null;
       if (drag?.meshTurn || drag?.meshPull) return drag.meshTurn ?? drag.meshPull;
       if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
       return [...meshPulls].reverse().find((pull) => {
@@ -4922,6 +4954,7 @@
       };
       for (const { start, end } of meshPulls) dashedArrow(start, end);
       const litAnchor = meshAnchorLit();
+      const litStart = meshStartLit();
       for (const pull of meshPulls) {
         const { end } = pull;
         ctx.beginPath();
@@ -4932,7 +4965,7 @@
           ctx.stroke();
           ctx.strokeStyle = toolColor.value;
         }
-        if (pull === litAnchor) {
+        if (pull === litAnchor && meshStartLit() !== pull) {
           ctx.globalAlpha = 0.1;
           ctx.fill();
           ctx.globalAlpha = 1;
@@ -4944,7 +4977,7 @@
       }
       for (const pull of meshPulls) {
         ctx.beginPath();
-        ctx.arc(pull.start.x, pull.start.y, (pull === meshPullSelected ? 5 : 4) * px, 0, 2 * Math.PI);
+        ctx.arc(pull.start.x, pull.start.y, (pull === litStart ? 6 : pull === meshPullSelected ? 5 : 4) * px, 0, 2 * Math.PI);
         ctx.fill();
         if (pull === meshPullSelected) {
           ctx.strokeStyle = '#ffffff';
@@ -9445,7 +9478,9 @@
         canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
-      else if (inLocation() && locationTool === 'select' && !spaceHeld) canvas.style.cursor = '';
+      else if (inLocation() && locationTool === 'select' && !spaceHeld) {
+        canvas.style.cursor = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : '';
+      }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
       else if (labelTool === 'pin' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9649,27 +9684,9 @@
       }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
         const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
-        if (hit?.part === 'turn') {
-          meshPullSelected = null;
-          const end = hit.pull.end;
-          const at = toMesh(toBackground(s.x, s.y));
-          // Shares are taken with the old twist out, so a turn replaces it.
-          hit.pull.turn ??= 0;
-          const turn = hit.pull.turn;
-          hit.pull.turn = 0;
-          turnMeshPull(hit.pull, []);
-          hit.pull.turn = turn;
-          const { shares } = meshPullShares(hit.pull.end, hit.pull);
-          turnMeshPull(hit.pull, shares);
-          drag = { meshTurn: hit.pull, shares, turn, angle: Math.atan2(at.y - end.y, at.x - end.x) };
-          if (!turn) hit.pull.turnFrom = drag.angle;
-        } else if (hit?.part === 'start') {
-          meshPullSelected = hit.pull;
-          drag = { meshStart: hit.pull, last: toMesh(toBackground(s.x, s.y)) };
-        } else if (hit) {
-          // Dragging an arrow takes its pull up again from where it ended.
-          meshPullSelected = null;
-          drag = { meshPull: hit.pull, shares: meshPullShares(hit.pull.end, hit.pull), last: toMesh(toBackground(s.x, s.y)) };
+        if (hit) {
+          meshPullSelected = hit.part === 'start' ? hit.pull : null;
+          pressMeshPull(hit, s);
         } else if (meshGrabbable(s)) {
           meshPullSelected = null;
           const at = toMesh(toBackground(s.x, s.y));
@@ -9683,12 +9700,16 @@
         updateCursor();
         return;
       }
-      // The cursor tool selects anchors and circles by their markers, to delete.
+      // The cursor tool selects anchors and circles by their markers, to
+      // delete; a pull's markers can be dragged and turned as with Pull mesh.
       if (inLocation() && locationTool === 'select' && !spaceHeld && !s.right) {
-        meshPullSelected = meshPullAt(s)?.pull ?? null;
+        const pullHit = meshPullAt(s, e.metaKey || e.ctrlKey);
+        meshPullSelected = pullHit?.pull ?? null;
         meshCircleSelected = meshPullSelected ? null : meshCircleAt(s)?.circle ?? null;
+        if (pullHit) pressMeshPull(pullHit, s);
         if (meshPullSelected || meshCircleSelected) {
           draw();
+          updateCursor();
           return;
         }
       }
@@ -9859,10 +9880,12 @@
         const lit = meshCircleLit();
         const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
         const anchor = meshAnchorLit();
-        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas) {
+        const start = meshStartLit();
+        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas) {
           mapBoxHover = hover;
           meshCircleLitWas = litKey;
           meshAnchorLitWas = anchor;
+          meshStartLitWas = start;
           draw();
         }
       }

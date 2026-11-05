@@ -9761,7 +9761,7 @@
           // just selects the circle and keeps its scale.
           drag = { meshCircle: hit.circle, part: 'edge', from: s, moved: false };
         } else if (hit) {
-          drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift };
+          drag = { meshCircle: hit.circle, part: hit.part, last: at, tip: hit.circle.shift, from: s };
         } else if (meshGrabbable(s)) {
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
@@ -10206,6 +10206,9 @@
         const circle = drag.meshCircle;
         // Too small to see, so taken as a click rather than a circle.
         if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
+        // A resized circle is let go of, not left selected.
+        const resized = ['edge', 'original'].includes(drag.part) && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
+        if (resized && meshCircleSelected === circle) meshCircleSelected = null;
         drag = null;
         draw();
         updateCursor();

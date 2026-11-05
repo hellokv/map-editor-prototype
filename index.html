@@ -207,6 +207,10 @@
       white-space: nowrap;
       pointer-events: none;
     }
+    #tooltip .shortcut {
+      margin-left: 8px;
+      opacity: 0.6;
+    }
     .device-size {
       color: #666;
       font-variant-numeric: tabular-nums;
@@ -1674,16 +1678,16 @@
         <button type="button" data-location-tool="pan" aria-label="Pan" aria-pressed="false">
           <span class="material-symbols-rounded">pan_tool</span>
         </button>
-        <button type="button" data-location-tool="mesh" aria-label="Gravity vector" aria-pressed="false">
+        <button type="button" data-location-tool="mesh" data-shortcut="V" aria-label="Gravity vector" aria-pressed="false">
           <span class="material-symbols-rounded">linear_scale</span>
         </button>
-        <button type="button" data-location-tool="add" aria-label="Gravity field" aria-pressed="false">
+        <button type="button" data-location-tool="add" data-shortcut="F" aria-label="Gravity field" aria-pressed="false">
           <span class="material-symbols-rounded">circle_circle</span>
         </button>
-        <button type="button" data-location-tool="wall" aria-label="Gravity wall" aria-pressed="false">
+        <button type="button" data-location-tool="wall" data-shortcut="W" aria-label="Gravity wall" aria-pressed="false">
           <span class="material-symbols-rounded">resize_window</span>
         </button>
-        <button type="button" data-location-tool="pin" aria-label="Gravity anchor" aria-pressed="false">
+        <button type="button" data-location-tool="pin" data-shortcut="A" aria-label="Gravity anchor" aria-pressed="false">
           <span class="material-symbols-rounded">filter_tilt_shift</span>
         </button>
       </div>
@@ -2893,6 +2897,14 @@
         button.blur();
       });
     }
+    // The gravity tools' letters pick them in Location.
+    document.addEventListener('keydown', (e) => {
+      if (!inLocation() || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.target.closest('input, textarea, select, [contenteditable]')) return;
+      const button = [...locationToolButtons].find((b) => b.dataset.shortcut?.toLowerCase() === e.key.toLowerCase());
+      if (!button) return;
+      e.preventDefault();
+      setLocationTool(button.dataset.locationTool);
+    });
     const backgroundTools = document.getElementById('background-tools');
     const backgroundToolButtons = document.querySelectorAll('[data-background-tool]');
     const shapeMenu = document.getElementById('shape-menu');
@@ -3120,6 +3132,12 @@
         tooltipTimer = setTimeout(() => {
           const rect = button.getBoundingClientRect();
           tooltip.textContent = button.getAttribute('aria-label');
+          if (button.dataset.shortcut) {
+            const hint = document.createElement('span');
+            hint.className = 'shortcut';
+            hint.textContent = button.dataset.shortcut;
+            tooltip.append(hint);
+          }
           tooltip.hidden = false;
           tooltip.style.left = `${rect.right + 6}px`;
           tooltip.style.top = `${rect.top + rect.height / 2 - tooltip.offsetHeight / 2}px`;

@@ -4730,8 +4730,8 @@
     // Walls drawn with the Gravity wall tool, in the mesh's frame: the line
     // width long through start, square to start→end, is pushed to end. Nodes
     // on that line move all the way, those off it less as Rubber spreads it.
-    // A two-sided wall, with a backWidth, also pushes the other way by the
-    // same amount: the mesh ahead of start goes forward, that behind it back.
+    // A two-sided wall, with a backWidth and backLength, also pushes the other
+    // way: the mesh ahead of start goes forward, that behind it back.
     const meshWallWidth = document.getElementById('mesh-wall-width');
     function meshWallFrame({ start, end }) {
       const length = Math.hypot(end.x - start.x, end.y - start.y);
@@ -4744,7 +4744,8 @@
       const { start, end, width, backWidth } = wall;
       const { length, u, v } = meshWallFrame(wall);
       if (!length) return;
-      const { step, node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + length);
+      const backLength = backWidth != null ? wall.backLength : 0;
+      const { step, node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + Math.max(length, backLength));
       const { spread } = meshReach(step);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
@@ -4753,9 +4754,9 @@
           const across = (n.x - start.x) * u.x + (n.y - start.y) * u.y;
           const back = backWidth != null && across < 0;
           const d = Math.hypot(Math.max(0, Math.abs(along) - (back ? backWidth : width) / 2), across);
-          const share = Math.exp(-(d * d) / (2 * spread * spread)) * (back ? -1 : 1);
+          const share = Math.exp(-(d * d) / (2 * spread * spread)) * (back ? -backLength : length);
           if (Math.abs(share) < 0.001) continue;
-          wall.moves.set(`${i},${j}`, { x: (end.x - start.x) * share, y: (end.y - start.y) * share });
+          wall.moves.set(`${i},${j}`, { x: u.x * share, y: u.y * share });
         }
       }
       for (const [key, moved] of wall.moves) moveMeshNode(key, moved.x, moved.y);
@@ -4767,7 +4768,10 @@
       if (meshWallSelected === wall) meshWallSelected = null;
     }
     // Where a two-sided wall's other side is pushed to.
-    const meshWallBackEnd = ({ start, end }) => ({ x: 2 * start.x - end.x, y: 2 * start.y - end.y });
+    function meshWallBackEnd(wall) {
+      const { u } = meshWallFrame(wall);
+      return { x: wall.start.x - u.x * wall.backLength, y: wall.start.y - u.y * wall.backLength };
+    }
     // The wall's bar, where its line was pushed to, or its other side's: its two ends.
     function meshWallBar(wall, back = false) {
       const { v } = meshWallFrame(wall);
@@ -4804,20 +4808,17 @@
     // Which side's width Wall Width shows and sets for the selected wall.
     let meshWallBack = false;
     // Takes hold of a wall's part at screen point s, selecting the wall. With
-    // Command, its start dot makes it two-sided, or one-sided again.
+    // Command, its start dot draws out its other side, which a click alone
+    // takes away again.
     function pressMeshWall(hit, s, command = false) {
       const { wall } = hit;
       meshWallSelected = wall;
-      if (command && hit.part === 'start') {
-        wall.backWidth = wall.backWidth == null ? wall.width : null;
-        meshWallBack = wall.backWidth != null;
-        showMeshWallWidth(wall);
-        pushMeshWall(wall);
-        return;
-      }
-      meshWallBack = !!hit.back;
+      const backing = command && hit.part === 'start';
+      const fresh = backing && wall.backWidth == null;
+      if (fresh) Object.assign(wall, { backWidth: wall.width, backLength: 0 });
+      meshWallBack = backing || !!hit.back;
       showMeshWallWidth(wall);
-      drag = { meshWall: wall, part: hit.part, back: !!hit.back, last: toMesh(toBackground(s.x, s.y)), from: s };
+      drag = { meshWall: wall, part: backing ? 'end' : hit.part, back: meshWallBack, backing, fresh, last: toMesh(toBackground(s.x, s.y)), from: s };
     }
     function showMeshWallWidth(wall) {
       meshWallWidth.value = Math.round(meshWallBack ? wall.backWidth : wall.width);
@@ -9746,7 +9747,7 @@
       else if (inLocation() && locationTool === 'wall' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshWall && drag.part !== 'new';
         const over = pointer && !drag && meshWallAt(pointer);
-        canvas.style.cursor = held ? 'grabbing' : over ? (commandHeld && over.part === 'start' ? 'pointer' : 'grab') : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
+        canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
@@ -9765,7 +9766,7 @@
         const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle || drag?.meshWall;
         const wallAt = !drag && pointer && meshWallAt(pointer);
         const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt || wallAt);
-        canvas.style.cursor = unturn || circleAt?.part === 'unturn' || (commandHeld && wallAt?.part === 'start') ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
+        canvas.style.cursor = unturn || circleAt?.part === 'unturn' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9969,7 +9970,7 @@
           const at = toMesh(toBackground(s.x, s.y));
           const meshWall = { start: at, end: at, width: Math.max(1, Number(meshWallWidth.value) || 200), moves: new Map() };
           meshWalls.push(meshWall);
-          drag = { meshWall, part: 'new' };
+          drag = { meshWall, part: 'new', from: s };
         }
         draw();
         updateCursor();
@@ -10210,11 +10211,13 @@
           const bar = drag.back ? meshWallBackEnd(wall) : wall.end;
           wall[drag.back ? 'backWidth' : 'width'] = Math.max(1, 2 * Math.abs((at.x - bar.x) * v.x + (at.y - bar.y) * v.y));
           showMeshWallWidth(wall);
+        } else if (drag.back) {
+          // The other side keeps square behind the wall; only its distance changes.
+          const { u } = meshWallFrame(wall);
+          wall.backLength = Math.max(0, -((at.x - wall.start.x) * u.x + (at.y - wall.start.y) * u.y));
         } else {
-          // The other side's bar is the mirror of the end, so it moves the end the other way.
-          const sign = drag.back ? -1 : 1;
           const key = drag.part === 'start' ? 'start' : 'end';
-          wall[key] = { x: wall[key].x + sign * (at.x - drag.last.x), y: wall[key].y + sign * (at.y - drag.last.y) };
+          wall[key] = { x: wall[key].x + at.x - drag.last.x, y: wall[key].y + at.y - drag.last.y };
           drag.last = at;
         }
         drag.deferred = drag.part === 'start' && commandHeld;
@@ -10452,10 +10455,19 @@
         const wall = drag.meshWall;
         if (drag.deferred) pushMeshWall(wall);
         const { length } = meshWallFrame(wall);
+        const moved = Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         // Too short to see, so taken as a click rather than a wall.
         if (drag.part === 'new' && length * view.scale * mapPlace.scale < 4) deleteMeshWall(wall);
+        // A Command-click on the start dot, or a side drawn too short to see,
+        // leaves the wall one-sided.
+        else if (drag.backing && (!moved || wall.backLength * view.scale * mapPlace.scale < 4)) {
+          wall.backWidth = null;
+          meshWallBack = false;
+          pushMeshWall(wall);
+          showMeshWallWidth(wall);
+        }
         // A wall that's been dragged is let go of, not left selected.
-        else if (drag.from && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2) meshWallSelected = null;
+        else if (moved) meshWallSelected = null;
         drag = null;
         draw();
         updateCursor();

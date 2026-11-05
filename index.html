@@ -5062,7 +5062,7 @@
         const { c, r, shift } = circle;
         const o = meshCircleShown(circle);
         const to = circle.to && meshCircleShown(circle, circle.to);
-        // The transformed circle is drawn solid; the original is dashed.
+        // The transformed circle is drawn solid; the original is dashed until hovered.
         const rk = r * meshCircleScale(circle);
         ctx.beginPath();
         ctx.arc(o.x, o.y, rk, 0, 2 * Math.PI);
@@ -5084,12 +5084,10 @@
           unturnButton(meshCircleUnturnAt(circle), pointer && meshCircleAt(pointer)?.part === 'unturn' && meshCircleAt(pointer).circle === circle);
         }
         if (!to && !shift) continue;
-        ctx.setLineDash([3 * px, 3 * px]);
+        if (!(lit?.circle === circle && lit.part === 'original')) ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
         ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
-        ctx.lineWidth = (lit?.circle === circle && lit.part === 'original' ? 3.5 : 1.5) * px;
         ctx.stroke();
-        ctx.lineWidth = 1.5 * px;
         ctx.setLineDash([]);
         if (!to) continue;
         // The dashed line between the two circles shows only while resizing.

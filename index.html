@@ -4872,6 +4872,10 @@
       const scale = view.scale * mapPlace.scale;
       const q = toMesh(toBackground(s.x, s.y));
       for (const pin of [...meshPins].reverse()) {
+        if (meshPinUnshapeShown(pin)) {
+          const x = toScreen(fromMesh(meshPinUnshapeAt(pin)));
+          if (Math.hypot(x.x - s.x, x.y - s.y) <= 12) return { pin, part: 'unshape' };
+        }
         const c = toScreen(fromMesh(pin.c));
         if (Math.hypot(c.x - s.x, c.y - s.y) <= 8) return { pin, part: 'centre' };
         // On screen, how far s is from the edge at reach 'at', along the line from the centre.
@@ -4883,6 +4887,35 @@
       }
       return null;
     }
+    const meshPinIsEllipse = (pin) => Math.abs(pin.rx - pin.ry) > 1e-6 * Math.max(pin.rx, pin.ry);
+    // Where an ellipse's X, which makes it a circle again, sits: up and right of its dot on screen.
+    function meshPinUnshapeAt(pin) {
+      const c = toScreen(fromMesh(pin.c));
+      return toMesh(toBackground(c.x + 20, c.y - 20));
+    }
+    // An ellipse shows its X while selected, or while the pointer is near its dot.
+    function meshPinUnshapeShown(pin) {
+      if (!meshPinIsEllipse(pin) || drag) return false;
+      if (pin === meshPinSelected) return true;
+      if (!pointer) return false;
+      const c = toScreen(fromMesh(pin.c));
+      return Math.hypot(c.x - pointer.x, c.y - pointer.y) <= 40;
+    }
+    // The ellipse a Command press at screen point s turns: one it's on or in,
+    // short of its outer edge.
+    function meshPinTurnAt(s) {
+      if (!meshOn.checked || !meshPinTool()) return null;
+      const q = toMesh(toBackground(s.x, s.y));
+      return [...meshPins].reverse().find((pin) => meshPinIsEllipse(pin) && meshPinReach(pin, q) <= pin.k * 1.02) ?? null;
+    }
+    // The well part a press at screen point s takes hold of; with Command,
+    // anywhere on or in an ellipse but its dot and X turns it.
+    function meshPinPressAt(s, command) {
+      const hit = meshPinAt(s);
+      if (!command || hit?.part === 'centre' || hit?.part === 'unshape') return hit;
+      const turning = meshPinTurnAt(s);
+      return turning ? { pin: turning, part: 'turn' } : hit;
+    }
     function meshPinLit() {
       if (!meshPinTool() || spaceHeld) return null;
       if (drag?.meshPin) return { pin: drag.meshPin, part: drag.part };
@@ -4893,7 +4926,18 @@
     // Command, its dot draws it out afresh as an ellipse, square to the screen.
     function pressMeshPin(hit, s, command = false) {
       const { pin } = hit;
+      if (hit.part === 'unshape') {
+        pin.rx = pin.ry = (pin.rx + pin.ry) / 2;
+        pin.angle = 0;
+        meshPinSelected = null;
+        return;
+      }
       meshPinSelected = pin;
+      if (hit.part === 'turn') {
+        const at = toMesh(toBackground(s.x, s.y));
+        drag = { meshPin: pin, part: 'turn', from: s, turn: pin.angle, angle: Math.atan2(at.y - pin.c.y, at.x - pin.c.x) };
+        return;
+      }
       const part = command && hit.part === 'centre' ? 'shape' : hit.part;
       if (part === 'shape') {
         const a = toMesh(toBackground(s.x, s.y));
@@ -5399,6 +5443,7 @@
         ctx.beginPath();
         ctx.arc(c.x, c.y, (lit === 'centre' ? 6 : 4) * px, 0, 2 * Math.PI);
         ctx.fill();
+        if (meshPinUnshapeShown(pin)) unturnButton(meshPinUnshapeAt(pin), lit === 'unshape');
       }
       ctx.restore();
     }
@@ -9846,7 +9891,8 @@
       }
       else if (inLocation() && locationTool === 'pin' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshPin && drag.part !== 'new';
-        canvas.style.cursor = held ? 'grabbing' : pointer && !drag && meshPinAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
+        const at = pointer && !drag && meshPinPressAt(pointer, commandHeld);
+        canvas.style.cursor = at?.part === 'unshape' ? 'pointer' : drag?.part === 'turn' || at?.part === 'turn' ? rotateCursor : held ? 'grabbing' : at ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'wall' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshWall && drag.part !== 'new';
@@ -9866,11 +9912,12 @@
       else if (inLocation() && locationTool === 'select' && !spaceHeld) {
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
         const circleAt = !drag && pointer && meshCircleAt(pointer);
-        const turning = drag?.meshTurn || (drag?.meshCircle && drag.part === 'turn') || (commandHeld && !drag && (meshAnchorLit() || (pointer && meshCircleTurnAt(pointer))));
+        const pinAt = !drag && pointer && meshPinPressAt(pointer, commandHeld);
+        const turning = drag?.meshTurn || ((drag?.meshCircle || drag?.meshPin) && drag.part === 'turn') || pinAt?.part === 'turn' || (commandHeld && !drag && (meshAnchorLit() || (pointer && meshCircleTurnAt(pointer))));
         const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle || drag?.meshWall || drag?.meshPin;
         const wallAt = !drag && pointer && (meshWallAt(pointer) || meshPinAt(pointer));
         const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt || wallAt);
-        canvas.style.cursor = unturn || circleAt?.part === 'unturn' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
+        canvas.style.cursor = unturn || circleAt?.part === 'unturn' || pinAt?.part === 'unshape' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -10066,7 +10113,7 @@
       // The Gravity well tool: a press on a well takes hold of it;
       // anywhere else, a drag draws a new one out from its centre.
       if (inLocation() && locationTool === 'pin' && !spaceHeld) {
-        const hit = meshPinAt(s);
+        const hit = meshPinPressAt(s, e.metaKey || e.ctrlKey);
         meshPinSelected = null;
         if (hit) pressMeshPin(hit, s, e.metaKey || e.ctrlKey);
         else {
@@ -10121,7 +10168,7 @@
         meshPullSelected = pullHit?.pull ?? null;
         const circleHit = pullHit ? null : meshCirclePressAt(s, e.metaKey || e.ctrlKey);
         const wallHit = pullHit || circleHit ? null : meshWallAt(s);
-        const pinHit = pullHit || circleHit || wallHit ? null : meshPinAt(s);
+        const pinHit = pullHit || circleHit || wallHit ? null : meshPinPressAt(s, e.metaKey || e.ctrlKey);
         meshCircleSelected = null;
         meshWallSelected = null;
         meshPinSelected = null;
@@ -10313,7 +10360,7 @@
         const wallLit = meshWallLit();
         const wallKey = wallLit && meshWalls.indexOf(wallLit.wall) + wallLit.part + !!wallLit.back;
         const pinLit = meshPinLit();
-        const pinKey = pinLit && meshPins.indexOf(pinLit.pin) + pinLit.part;
+        const pinKey = (pinLit ? meshPins.indexOf(pinLit.pin) + pinLit.part : '') + meshPins.map(meshPinUnshapeShown).join();
         if (wallKey !== meshWallLitWas || pinKey !== meshPinLitWas) {
           meshWallLitWas = wallKey;
           meshPinLitWas = pinKey;
@@ -10334,6 +10381,8 @@
         if (drag.part === 'centre') {
           pin.c = { x: pin.c.x + at.x - drag.last.x, y: pin.c.y + at.y - drag.last.y };
           drag.last = at;
+        } else if (drag.part === 'turn') {
+          pin.angle = drag.turn + Math.atan2(at.y - pin.c.y, at.x - pin.c.x) - drag.angle;
         } else if (drag.part === 'new') {
           pin.rx = pin.ry = Math.hypot(at.x - pin.c.x, at.y - pin.c.y);
         } else if (drag.part === 'shape') {

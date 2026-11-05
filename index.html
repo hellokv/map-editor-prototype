@@ -4816,6 +4816,7 @@
       } else {
         drag = { meshPull: hit.pull, shares: meshPullShares(hit.pull.end, hit.pull), last: at };
       }
+      if (drag) drag.pressedAt = { x: s.x, y: s.y };
     }
     // Where a turned anchor's arc starts, in the mesh's frame: its X, to clear the turn.
     // It sits a little back from the arc's tail, clear of the dashes.
@@ -9122,6 +9123,10 @@
 
     document.addEventListener('keydown', (e) => {
       if (!(meshPullSelected || meshCircleSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Escape') {
+        meshPullSelected = meshCircleSelected = null;
+        draw();
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -10143,7 +10148,11 @@
         return;
       }
       if (drag.meshPull || drag.meshStart || drag.meshTurn) {
+        // A pull that's been dragged somewhere is let go of, not left selected.
+        const at = canvasPoint(e);
+        if (drag.pressedAt && Math.hypot(at.x - drag.pressedAt.x, at.y - drag.pressedAt.y) > 2) meshPullSelected = null;
         drag = null;
+        draw();
         updateCursor();
         return;
       }

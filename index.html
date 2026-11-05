@@ -9304,7 +9304,7 @@
 
     function updateCursor() {
       let boxPart = inLocation() && !spaceHeld && (drag?.mapBox ?? (pointer && !drag && mapBoxAt(pointer)?.part));
-      if (boxPart === 'scale' && !drag && shiftHeld) boxPart = 'turn';
+      if (boxPart === 'scale' && !drag && commandHeld) boxPart = 'turn';
       if (boxPart === 'turn' || boxPart === 'scale') {
         canvas.style.cursor = boxPart === 'turn' ? rotateCursor : 'nwse-resize';
         return;
@@ -9567,8 +9567,8 @@
       if (boxHit && boxHit.part !== 'inside') {
         const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
         drag = {
-          // Shift turns the box from a corner too.
-          mapBox: e.shiftKey ? 'turn' : boxHit.part,
+          // Command turns the box from a corner too.
+          mapBox: e.metaKey || e.ctrlKey ? 'turn' : boxHit.part,
           angle: Math.atan2(s.y - centre.y, s.x - centre.x),
           distance: Math.hypot(s.x - centre.x, s.y - centre.y),
           from: { ...mapPlace },

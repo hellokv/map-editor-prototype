@@ -9724,6 +9724,7 @@
         if (hit?.part === 'unturn') {
           hit.circle.turn = 0;
           scaleMeshCircle(hit.circle);
+          meshCircleSelected = null;
         } else if (turning) {
           const o = meshCircleShown(turning);
           drag = { meshCircle: turning, part: 'turn', angle: Math.atan2(at.y - o.y, at.x - o.x), turn: turning.turn ?? 0 };
@@ -9774,6 +9775,7 @@
         if (circleHit?.part === 'unturn') {
           circleHit.circle.turn = 0;
           scaleMeshCircle(circleHit.circle);
+          meshCircleSelected = null;
         }
         if (meshPullSelected || meshCircleSelected) {
           draw();

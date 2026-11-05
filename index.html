@@ -1672,10 +1672,10 @@
       </div>
       <div id="tool-menu" class="menu-card">
       <div id="location-tools" hidden>
-        <button type="button" data-location-tool="select" aria-label="Select" aria-pressed="true">
+        <button type="button" data-location-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
-        <button type="button" data-location-tool="pan" aria-label="Pan" aria-pressed="false">
+        <button type="button" data-location-tool="pan" data-shortcut="P" aria-label="Pan" aria-pressed="false">
           <span class="material-symbols-rounded">pan_tool</span>
         </button>
         <button type="button" data-location-tool="mesh" data-shortcut="V" aria-label="Gravity vector" aria-pressed="false">
@@ -1692,10 +1692,10 @@
         </button>
       </div>
       <div id="label-tools" hidden>
-        <button type="button" data-label-tool="select" aria-label="Select" aria-pressed="true">
+        <button type="button" data-label-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
-        <button type="button" data-label-tool="pan" aria-label="Pan" aria-pressed="false">
+        <button type="button" data-label-tool="pan" data-shortcut="P" aria-label="Pan" aria-pressed="false">
           <span class="material-symbols-rounded">pan_tool</span>
         </button>
         <button type="button" data-label-tool="add" aria-label="New label" aria-pressed="false">
@@ -1710,7 +1710,7 @@
         <input id="place-image" type="file" accept="image/*" hidden>
       </div>
       <div id="background-tools" hidden>
-        <button type="button" data-background-tool="select" aria-label="Select" aria-pressed="true">
+        <button type="button" data-background-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="true">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
         <button type="button" data-background-tool="shapes" aria-label="Shapes" aria-pressed="false">
@@ -1725,7 +1725,7 @@
 
       </div>
       <div id="path-tools">
-        <button type="button" data-tool="select" aria-label="Select" aria-pressed="false">
+        <button type="button" data-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="false">
           <span class="material-symbols-rounded">arrow_selector_tool</span>
         </button>
         <button type="button" data-tool="add" aria-label="Add path" aria-pressed="true">
@@ -2905,13 +2905,14 @@
       e.currentTarget.blur();
       draw();
     });
-    // The gravity tools' letters pick them in Location.
+    // A tool button's letter picks it, among the tools the mode shows.
     document.addEventListener('keydown', (e) => {
-      if (!inLocation() || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.target.closest('input, textarea, select, [contenteditable]')) return;
-      const button = [...locationToolButtons].find((b) => b.dataset.shortcut?.toLowerCase() === e.key.toLowerCase());
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.target.closest('input, textarea, select, [contenteditable]')) return;
+      const button = [...document.querySelectorAll('#tool-menu [data-shortcut]')]
+        .find((b) => !b.closest('[hidden]') && b.dataset.shortcut.toLowerCase() === e.key.toLowerCase());
       if (!button) return;
       e.preventDefault();
-      setLocationTool(button.dataset.locationTool);
+      button.click();
     });
     const backgroundTools = document.getElementById('background-tools');
     const backgroundToolButtons = document.querySelectorAll('[data-background-tool]');

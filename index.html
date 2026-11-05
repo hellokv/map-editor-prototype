@@ -4690,7 +4690,9 @@
     function meshCircleLit() {
       if (!inLocation() || locationTool !== 'add') return null;
       if (drag?.meshCircle) return { circle: drag.meshCircle, part: drag.part };
-      return !drag && pointer ? meshCircleAt(pointer) : null;
+      if (drag || !pointer) return null;
+      const inside = meshCircleTurnAt(pointer);
+      return meshCircleAt(pointer) ?? (inside ? { circle: inside, part: 'inside' } : null);
     }
     let meshCircleLitWas = null;
     // The circle a press at screen point s turns, with Command held: one it's on or in.
@@ -4847,8 +4849,9 @@
         const rk = r * meshCircleScale(circle);
         ctx.beginPath();
         ctx.arc(o.x, o.y, rk, 0, 2 * Math.PI);
-        if (lit?.circle === circle && lit.part === 'centre') {
-          ctx.globalAlpha = 0.3;
+        // Lit anywhere inside or while turning; not on its centre dot or edge.
+        if (lit?.circle === circle && (lit.part === 'inside' || lit.part === 'turn')) {
+          ctx.globalAlpha = 0.1;
           ctx.fill();
           ctx.globalAlpha = 1;
         }

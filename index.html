@@ -2865,6 +2865,7 @@
       locationTool = name;
       meshPullSelected = null;
       meshCircleSelected = null;
+      mapBoxSelected = false;
       showLocationTool();
       updateCursor();
     }
@@ -4382,10 +4383,11 @@
       return { x: cx + (p.x - cx) * cos - (p.y - cy) * sin, y: cy + (p.x - cx) * sin + (p.y - cy) * cos };
     }
     // The map's box, shown in Location's Select tool while the pointer is over
-    // the map or the box is being dragged: corners scale it, keeping its
-    // shape, and the handle above it turns it, both about its centre.
+    // the map, the box is selected or it is being dragged: corners scale it,
+    // keeping its shape, and the handle above it turns it, both about its centre.
     let mapBoxHover = false;
-    const mapBoxShown = () => inLocation() && locationTool === 'select' && (mapBoxHover || !!drag?.mapBox || drag?.locationGrab === 'map');
+    let mapBoxSelected = false;
+    const mapBoxShown = () => inLocation() && locationTool === 'select' && (mapBoxHover || mapBoxSelected || !!drag?.mapBox || drag?.locationGrab === 'map');
     function mapBoxCorners() {
       return [{ x: 0, y: 0 }, { x: board.w, y: 0 }, { x: board.w, y: board.h }, { x: 0, y: board.h }].map((q) => toScreen(q));
     }
@@ -4409,6 +4411,14 @@
     function drawMapBox() {
       const corners = mapBoxCorners();
       const handle = mapBoxHandle();
+      if (mapBoxSelected) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        corners.forEach((q, k) => (k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+        ctx.closePath();
+        ctx.stroke();
+      }
       ctx.strokeStyle = colorOf(locationPathColor);
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -9132,12 +9142,13 @@
     sketchStripeFields.bindEach(bindFigureInput, (fill, stripes) => { fill.stripes = stripes; });
 
     document.addEventListener('keydown', (e) => {
-      if (!(meshPullSelected || meshCircleSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
+      if (!(meshPullSelected || meshCircleSelected || mapBoxSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') {
         meshPullSelected = meshCircleSelected = null;
+        mapBoxSelected = false;
         draw();
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (meshPullSelected || meshCircleSelected)) {
         e.preventDefault();
         e.stopImmediatePropagation();
         if (meshPullSelected) deleteMeshPull(meshPullSelected);
@@ -9777,6 +9788,7 @@
           scaleMeshCircle(circleHit.circle);
           meshCircleSelected = null;
         }
+        mapBoxSelected = !pullHit && !circleHit && !!mapBoxAt(s);
         if (meshPullSelected || meshCircleSelected) {
           draw();
           updateCursor();
@@ -10593,6 +10605,7 @@
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
       Object.assign(mapPlace, saved.mesh.place);
       meshPullSelected = meshCircleSelected = null;
+      mapBoxSelected = false;
       satelliteReach = mapSatellites[next].reach;
       satellite.src = mapSatellites[next].src;
       // Maps differ in size and shape, so each opens fitted to the view.

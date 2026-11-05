@@ -1683,7 +1683,7 @@
         <button type="button" data-location-tool="wall" aria-label="Gravity wall" aria-pressed="false">
           <span class="material-symbols-rounded">resize_window</span>
         </button>
-        <button type="button" data-location-tool="pin" aria-label="Gravity anchor" aria-pressed="false">
+        <button type="button" data-location-tool="pin" aria-label="Gravity well" aria-pressed="false">
           <span class="material-symbols-rounded">filter_tilt_shift</span>
         </button>
       </div>
@@ -2868,7 +2868,7 @@
     }
     // Location's tools: the cursor, which drags the map and satellite; Pan,
     // which only moves the view; Gravity vector; Gravity field; Gravity wall;
-    // and Gravity anchor.
+    // and Gravity well.
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
@@ -4526,7 +4526,7 @@
     const meshPulls = [];
     const meshCircles = [];
     const meshWalls = [];
-    // Ellipses drawn with the Gravity anchor tool, in the mesh's frame: radii
+    // Ellipses drawn with the Gravity well tool, in the mesh's frame: radii
     // rx and ry, turned by angle, and an outer ellipse k times as big. The
     // mesh inside the inner one keeps still whatever else moves it, and is
     // held less and less, easing off, out to the outer one.
@@ -4543,7 +4543,7 @@
     let meshCircleSelected = null;
     let meshWallSelected = null;
     let meshPinSelected = null;
-    // How much of its offset the mesh at point q keeps, for the anchors.
+    // How much of its offset the mesh at point q keeps, for the wells.
     function meshFree(q) {
       let free = 1;
       for (const pin of meshPins) {
@@ -4865,7 +4865,7 @@
       draw();
     });
     const meshPinTool = () => inLocation() && (locationTool === 'pin' || locationTool === 'select');
-    // The anchor part at screen point s: its dot, to move it, or its inner
+    // The well part at screen point s: its dot, to move it, or its inner
     // or outer edge, to resize it.
     function meshPinAt(s) {
       if (!meshOn.checked || !meshPinTool()) return null;
@@ -4889,7 +4889,7 @@
       return !drag && pointer ? meshPinAt(pointer) : null;
     }
     let meshPinLitWas = null;
-    // Takes hold of an anchor's part at screen point s, selecting it. With
+    // Takes hold of a well's part at screen point s, selecting it. With
     // Command, its dot draws it out afresh as an ellipse, square to the screen.
     function pressMeshPin(hit, s, command = false) {
       const { pin } = hit;
@@ -5376,7 +5376,7 @@
           ctx.fillStyle = toolColor.value;
         }
       }
-      // Each anchor: its circle and dot, dashed out to where its hold eases off.
+      // Each well: its circle and dot, dashed out to where its hold eases off.
       const litPin = meshPinLit();
       for (const pin of meshPins) {
         const { c, rx, ry, angle, k } = pin;
@@ -9846,7 +9846,7 @@
       }
       else if (inLocation() && locationTool === 'pin' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshPin && drag.part !== 'new';
-        canvas.style.cursor = held ? 'grabbing' : pointer && !drag && meshPinAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.plus)}") 12 12, crosshair`;
+        canvas.style.cursor = held ? 'grabbing' : pointer && !drag && meshPinAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'wall' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshWall && drag.part !== 'new';
@@ -10063,7 +10063,7 @@
         updateCursor();
         return;
       }
-      // The Gravity anchor tool: a press on an anchor takes hold of it;
+      // The Gravity well tool: a press on a well takes hold of it;
       // anywhere else, a drag draws a new one out from its centre.
       if (inLocation() && locationTool === 'pin' && !spaceHeld) {
         const hit = meshPinAt(s);
@@ -10605,9 +10605,9 @@
       if (drag.meshPin) {
         const pin = drag.meshPin;
         const moved = Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
-        // Too small to see, so taken as a click rather than an anchor.
+        // Too small to see, so taken as a click rather than a well.
         if (drag.part === 'new' && pin.rx * view.scale * mapPlace.scale < 4) deleteMeshPin(pin);
-        // An anchor that's been dragged is let go of, not left selected.
+        // A well that's been dragged is let go of, not left selected.
         else if (moved) meshPinSelected = null;
         drag = null;
         draw();

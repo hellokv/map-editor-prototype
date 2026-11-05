@@ -4978,11 +4978,6 @@
         const { end } = pull;
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
-        if (meshStartLit() !== pull) {
-          ctx.globalAlpha = 0.1;
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
         ctx.lineWidth = 3.5 * px;
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;

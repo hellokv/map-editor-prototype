@@ -4808,6 +4808,12 @@
         const { end } = pull;
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
+        if (pull === meshPullSelected) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 4.5 * px;
+          ctx.stroke();
+          ctx.strokeStyle = toolColor.value;
+        }
         if (pull === litAnchor) {
           ctx.globalAlpha = 0.1;
           ctx.fill();
@@ -9539,6 +9545,15 @@
         draw();
         updateCursor();
         return;
+      }
+      // The cursor tool selects anchors and circles by their markers, to delete.
+      if (inLocation() && locationTool === 'select' && !spaceHeld && !s.right) {
+        meshPullSelected = meshPullAt(s)?.pull ?? null;
+        meshCircleSelected = meshPullSelected ? null : meshCircleAt(s)?.circle ?? null;
+        if (meshPullSelected || meshCircleSelected) {
+          draw();
+          return;
+        }
       }
       const boxHit = !spaceHeld && mapBoxAt(s);
       if (boxHit && boxHit.part !== 'inside') {

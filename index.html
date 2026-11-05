@@ -1674,10 +1674,10 @@
         <button type="button" data-location-tool="pan" aria-label="Pan" aria-pressed="false">
           <span class="material-symbols-rounded">pan_tool</span>
         </button>
-        <button type="button" data-location-tool="mesh" aria-label="Pull mesh" aria-pressed="false">
+        <button type="button" data-location-tool="mesh" aria-label="Gravity vector" aria-pressed="false">
           <span class="material-symbols-rounded">antigravity</span>
         </button>
-        <button type="button" data-location-tool="add" aria-label="Circle" aria-pressed="false">
+        <button type="button" data-location-tool="add" aria-label="Gravity field" aria-pressed="false">
           <span class="material-symbols-rounded">circle_circle</span>
         </button>
       </div>
@@ -2857,7 +2857,7 @@
       });
     }
     // Location's tools: the cursor, which drags the map and satellite; Pan,
-    // which only moves the view; Pull mesh; and Circle.
+    // which only moves the view; Gravity vector; and Gravity field.
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
@@ -4500,7 +4500,7 @@
     // run the other way as fit at the same spacing, centred. Its lines are
     // those through nodes 1 to count across and 1 to rows down, and the lattice
     // runs on past the map's edges so a turned mesh still covers it. Nodes
-    // moved with the Pull mesh tool keep their offsets here, and each pull its
+    // moved with the Gravity vector tool keep their offsets here, and each pull its
     // start, end and what it moved each node by, until the count changes.
     const meshOffsets = new Map();
     const meshPulls = [];
@@ -4638,7 +4638,7 @@
       meshPulls.splice(meshPulls.indexOf(pull), 1);
       if (meshPullSelected === pull) meshPullSelected = null;
     }
-    // Circles drawn with the Circle tool, in the mesh's frame. Dragging from a
+    // Circles drawn with the Gravity field tool, in the mesh's frame. Dragging from a
     // circle's edge to a dot scales the mesh about its centre by how far the
     // dot is from it against where the edge was taken: all of it inside the circle, less
     // and less outside it as Rubber spreads it.
@@ -4710,7 +4710,7 @@
         const shown = toScreen(fromMesh(meshCircleShown(circle)));
         const away = Math.hypot(shown.x - s.x, shown.y - s.y);
         if (Math.abs(away - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
-        // The ghosted original, shown once the circle has been scaled or moved.
+        // The dashed original, shown once the circle has been scaled or moved.
         if ((circle.to || circle.shift) && Math.abs(away - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'original' };
       }
       return null;
@@ -4755,7 +4755,7 @@
     const MESH_ANCHOR_RING = 20;
     // How far out from an anchor its ring can be taken hold of.
     const MESH_ANCHOR_REACH = MESH_ANCHOR_RING + 24;
-    // Cursors Pull mesh can show over the map, each drawn black with a white
+    // Cursors Gravity vector can show over the map, each drawn black with a white
     // halo so it reads on any map. The picker previews the same images.
     const pullCursorShapes = {
       crosshair: { name: 'Crosshair', draw: 'M12 2v7M12 15v7M2 12h7M15 12h7' },
@@ -4864,7 +4864,7 @@
       }) ?? null;
     }
     let meshAnchorLitWas = null;
-    // The circle part the Circle tool is over, or dragging.
+    // The circle part the Gravity field tool is over, or dragging.
     function meshCircleLit() {
       if (!inLocation() || locationTool !== 'add') return null;
       if (drag?.meshCircle) return { circle: drag.meshCircle, part: drag.part };
@@ -5042,7 +5042,7 @@
           ctx.strokeStyle = toolColor.value;
         }
       }
-      // Each circle, with the circle it's scaled and moved to ghosted, a dashed
+      // Each circle, with the circle it was scaled and moved from dashed, a dashed
       // line from the dot it was dropped at to the nearest point on it, and
       // a dashed arrow from its centre to where that was dragged.
       const lit = meshCircleLit();
@@ -5051,7 +5051,7 @@
         const { c, r, shift } = circle;
         const o = meshCircleShown(circle);
         const to = circle.to && meshCircleShown(circle, circle.to);
-        // The transformed circle is the one drawn solid; the original is ghosted.
+        // The transformed circle is drawn solid; the original is dashed.
         const rk = r * meshCircleScale(circle);
         ctx.beginPath();
         ctx.arc(o.x, o.y, rk, 0, 2 * Math.PI);
@@ -5073,13 +5073,13 @@
           unturnButton(meshCircleUnturnAt(circle), pointer && meshCircleAt(pointer)?.part === 'unturn' && meshCircleAt(pointer).circle === circle);
         }
         if (!to && !shift) continue;
-        ctx.globalAlpha = 0.35;
+        ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
         ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
         ctx.lineWidth = (lit?.circle === circle && lit.part === 'original' ? 3.5 : 1.5) * px;
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;
-        ctx.globalAlpha = 1;
+        ctx.setLineDash([]);
         if (!to) continue;
         // The dashed line between the two circles shows only while resizing.
         if (drag?.meshCircle === circle && ['edge', 'original'].includes(drag.part)) {
@@ -9714,7 +9714,7 @@
         return;
       }
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
-      // The Circle tool: a press on a circle's edge or dot scales the mesh by
+      // The Gravity field tool: a press on a circle's edge or dot scales the mesh by
       // it; anywhere else on the map, a drag draws a new circle.
       if (inLocation() && locationTool === 'add' && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
@@ -9765,7 +9765,7 @@
         return;
       }
       // The cursor tool selects anchors and circles by their markers, to
-      // delete; a pull's markers can be dragged and turned as with Pull mesh.
+      // delete; a pull's markers can be dragged and turned as with Gravity vector.
       if (inLocation() && locationTool === 'select' && !spaceHeld && !s.right) {
         const pullHit = meshPullAt(s, e.metaKey || e.ctrlKey);
         meshPullSelected = pullHit?.pull ?? null;

@@ -4701,10 +4701,6 @@
           const x = toScreen(fromMesh(meshCircleUnturnAt(circle)));
           if (Math.hypot(x.x - s.x, x.y - s.y) <= 12) return { circle, part: 'unturn' };
         }
-        if (circle.to) {
-          const dot = toScreen(fromMesh(meshCircleShown(circle, circle.to)));
-          if (Math.hypot(dot.x - s.x, dot.y - s.y) <= 8) return { circle, part: 'dot' };
-        }
         if (circle.shift) {
           const tip = toScreen(fromMesh(circle.shift));
           if (Math.hypot(tip.x - s.x, tip.y - s.y) <= 10) return { circle, part: 'shift' };
@@ -5086,14 +5082,11 @@
         ctx.globalAlpha = 1;
         if (!to) continue;
         // The dashed line between the two circles shows only while resizing.
-        if (drag?.meshCircle === circle && ['edge', 'dot', 'original'].includes(drag.part)) {
+        if (drag?.meshCircle === circle && ['edge', 'original'].includes(drag.part)) {
           // From the original circle to the dot, the way it's being resized.
           const away = Math.max(1e-6, Math.hypot(to.x - o.x, to.y - o.y));
           dashedArrow({ x: o.x + ((to.x - o.x) * r) / away, y: o.y + ((to.y - o.y) * r) / away }, to);
         }
-        ctx.beginPath();
-        ctx.arc(to.x, to.y, 4 * px, 0, 2 * Math.PI);
-        ctx.fill();
       }
       ctx.restore();
     }

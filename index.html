@@ -4875,6 +4875,17 @@
       }) ?? null;
     }
     let meshAnchorLitWas = null;
+    // The pull whose ring the pointer is right on, or that is being dragged or turned.
+    function meshAnchorEdgeLit() {
+      if (!pullMarkerTool()) return null;
+      if (drag?.meshTurn || drag?.meshPull) return drag.meshTurn ?? drag.meshPull;
+      if (drag || !pointer || spaceHeld || !meshOn.checked) return null;
+      return [...meshPulls].reverse().find((pull) => {
+        const at = toScreen(fromMesh(pull.end));
+        return Math.abs(Math.hypot(at.x - pointer.x, at.y - pointer.y) - MESH_ANCHOR_RING) <= 6;
+      }) ?? null;
+    }
+    let meshAnchorEdgeLitWas = null;
     // The circle part the Gravity field tool is over, or dragging.
     function meshCircleLit() {
       if (!inLocation() || locationTool !== 'add') return null;
@@ -5023,20 +5034,22 @@
       };
       for (const { start, end } of meshPulls) dashedArrow(start, end);
       const litAnchor = meshAnchorLit();
+      const litEdge = meshAnchorEdgeLit();
       const litStart = meshStartLit();
       // An anchor's ring and turn arc show only while it's hovered, held or selected.
       for (const pull of meshPulls) {
         if (pull !== litAnchor && pull !== meshPullSelected) continue;
         const { end } = pull;
+        const width = pull === litEdge ? 3.5 : 1.5;
         ctx.beginPath();
         ctx.arc(end.x, end.y, MESH_ANCHOR_RING * px, 0, 2 * Math.PI);
         if (pull === meshPullSelected) {
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 6.5 * px;
+          ctx.lineWidth = (width + 3) * px;
           ctx.stroke();
           ctx.strokeStyle = toolColor.value;
         }
-        ctx.lineWidth = 3.5 * px;
+        ctx.lineWidth = width * px;
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;
         if (pull.turn) turnArc(end, (MESH_ANCHOR_RING + 6) * px, pull.turnFrom ?? -Math.PI / 2, pull.turn);
@@ -9961,6 +9974,7 @@
         const lit = meshCircleLit();
         const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
         const anchor = meshAnchorLit();
+        const edge = meshAnchorEdgeLit();
         const start = meshStartLit();
         const near = meshCircleNear();
         if (near !== meshCircleNearWas) {
@@ -9968,11 +9982,12 @@
           draw();
         }
         const unturn = pullMarkerTool() && meshPullAt(pointer)?.part === 'unturn';
-        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas || unturn !== meshUnturnLitWas) {
+        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || edge !== meshAnchorEdgeLitWas || start !== meshStartLitWas || unturn !== meshUnturnLitWas) {
           meshUnturnLitWas = unturn;
           mapBoxHover = hover;
           meshCircleLitWas = litKey;
           meshAnchorLitWas = anchor;
+          meshAnchorEdgeLitWas = edge;
           meshStartLitWas = start;
           draw();
         }

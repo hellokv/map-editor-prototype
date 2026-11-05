@@ -4827,6 +4827,7 @@
       if (hit.part === 'unturn') {
         hit.pull.turn = 0;
         turnMeshPull(hit.pull, []);
+        meshPullSelected = null;
       } else if (hit.part === 'turn') {
         const { end } = hit.pull;
         // Shares are taken with the old twist out, so a turn replaces it.

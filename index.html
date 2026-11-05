@@ -4903,6 +4903,11 @@
       ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
+      // Markers aren't cut off at the map's edge, as pulls and circles reach past it.
+      ctx.restore();
+      ctx.save();
+      ctx.translate(board.w / 2, board.h / 2);
+      ctx.rotate(meshTurn());
       // Each pull: a dot where it started, dotted to an arrow where it ended.
       const px = 1 / (view.scale * mapPlace.scale);
       const arrow = 10 * px;

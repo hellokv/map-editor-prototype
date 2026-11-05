@@ -4730,6 +4730,8 @@
     // Walls drawn with the Gravity wall tool, in the mesh's frame: the line
     // width long through start, square to start→end, is pushed to end. Nodes
     // on that line move all the way, those off it less as Rubber spreads it.
+    // A two-sided wall, with a backWidth, also pushes the other way by the
+    // same amount: the mesh ahead of start goes forward, that behind it back.
     const meshWallWidth = document.getElementById('mesh-wall-width');
     function meshWallFrame({ start, end }) {
       const length = Math.hypot(end.x - start.x, end.y - start.y);
@@ -4739,19 +4741,20 @@
     function pushMeshWall(wall) {
       for (const [key, moved] of wall.moves) moveMeshNode(key, -moved.x, -moved.y);
       wall.moves.clear();
-      const { start, end, width } = wall;
+      const { start, end, width, backWidth } = wall;
       const { length, u, v } = meshWallFrame(wall);
       if (!length) return;
-      const { step, node, from, to } = meshLatticeFor(width / 2 + length);
+      const { step, node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + length);
       const { spread } = meshReach(step);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           const along = (n.x - start.x) * v.x + (n.y - start.y) * v.y;
           const across = (n.x - start.x) * u.x + (n.y - start.y) * u.y;
-          const d = Math.hypot(Math.max(0, Math.abs(along) - width / 2), across);
-          const share = Math.exp(-(d * d) / (2 * spread * spread));
-          if (share < 0.001) continue;
+          const back = backWidth != null && across < 0;
+          const d = Math.hypot(Math.max(0, Math.abs(along) - (back ? backWidth : width) / 2), across);
+          const share = Math.exp(-(d * d) / (2 * spread * spread)) * (back ? -1 : 1);
+          if (Math.abs(share) < 0.001) continue;
           wall.moves.set(`${i},${j}`, { x: (end.x - start.x) * share, y: (end.y - start.y) * share });
         }
       }
@@ -4763,11 +4766,14 @@
       meshWalls.splice(meshWalls.indexOf(wall), 1);
       if (meshWallSelected === wall) meshWallSelected = null;
     }
-    // The wall's bar, where its line was pushed to: its two ends.
-    function meshWallBar(wall) {
+    // Where a two-sided wall's other side is pushed to.
+    const meshWallBackEnd = ({ start, end }) => ({ x: 2 * start.x - end.x, y: 2 * start.y - end.y });
+    // The wall's bar, where its line was pushed to, or its other side's: its two ends.
+    function meshWallBar(wall, back = false) {
       const { v } = meshWallFrame(wall);
-      const h = wall.width / 2;
-      return [{ x: wall.end.x - v.x * h, y: wall.end.y - v.y * h }, { x: wall.end.x + v.x * h, y: wall.end.y + v.y * h }];
+      const at = back ? meshWallBackEnd(wall) : wall.end;
+      const h = (back ? wall.backWidth : wall.width) / 2;
+      return [{ x: at.x - v.x * h, y: at.y - v.y * h }, { x: at.x + v.x * h, y: at.y + v.y * h }];
     }
     const meshWallTool = () => inLocation() && (locationTool === 'wall' || locationTool === 'select');
     // The wall part at screen point s: its start dot, a bar end to widen it,
@@ -4778,34 +4784,49 @@
       for (const wall of [...meshWalls].reverse()) {
         const start = screen(wall.start);
         if (Math.hypot(start.x - s.x, start.y - s.y) <= 8) return { wall, part: 'start' };
-        const [a, b] = meshWallBar(wall).map(screen);
-        if (Math.hypot(a.x - s.x, a.y - s.y) <= 8 || Math.hypot(b.x - s.x, b.y - s.y) <= 8) return { wall, part: 'edge' };
-        const ab = Math.max(1e-6, Math.hypot(b.x - a.x, b.y - a.y));
-        const t = Math.max(0, Math.min(1, ((s.x - a.x) * (b.x - a.x) + (s.y - a.y) * (b.y - a.y)) / (ab * ab)));
-        if (Math.hypot(a.x + (b.x - a.x) * t - s.x, a.y + (b.y - a.y) * t - s.y) <= 8) return { wall, part: 'end' };
+        for (const back of wall.backWidth != null ? [false, true] : [false]) {
+          const [a, b] = meshWallBar(wall, back).map(screen);
+          if (Math.hypot(a.x - s.x, a.y - s.y) <= 8 || Math.hypot(b.x - s.x, b.y - s.y) <= 8) return { wall, part: 'edge', back };
+          const ab = Math.max(1e-6, Math.hypot(b.x - a.x, b.y - a.y));
+          const t = Math.max(0, Math.min(1, ((s.x - a.x) * (b.x - a.x) + (s.y - a.y) * (b.y - a.y)) / (ab * ab)));
+          if (Math.hypot(a.x + (b.x - a.x) * t - s.x, a.y + (b.y - a.y) * t - s.y) <= 8) return { wall, part: 'end', back };
+        }
       }
       return null;
     }
     // The wall part the pointer is over, or that's being dragged.
     function meshWallLit() {
       if (!meshWallTool() || spaceHeld) return null;
-      if (drag?.meshWall) return { wall: drag.meshWall, part: drag.part };
+      if (drag?.meshWall) return { wall: drag.meshWall, part: drag.part, back: drag.back };
       return !drag && pointer ? meshWallAt(pointer) : null;
     }
     let meshWallLitWas = null;
-    // Takes hold of a wall's part at screen point s, selecting the wall.
-    function pressMeshWall(hit, s) {
-      meshWallSelected = hit.wall;
-      showMeshWallWidth(hit.wall);
-      drag = { meshWall: hit.wall, part: hit.part, last: toMesh(toBackground(s.x, s.y)), from: s };
+    // Which side's width Wall Width shows and sets for the selected wall.
+    let meshWallBack = false;
+    // Takes hold of a wall's part at screen point s, selecting the wall. With
+    // Command, its start dot makes it two-sided, or one-sided again.
+    function pressMeshWall(hit, s, command = false) {
+      const { wall } = hit;
+      meshWallSelected = wall;
+      if (command && hit.part === 'start') {
+        wall.backWidth = wall.backWidth == null ? wall.width : null;
+        meshWallBack = wall.backWidth != null;
+        showMeshWallWidth(wall);
+        pushMeshWall(wall);
+        return;
+      }
+      meshWallBack = !!hit.back;
+      showMeshWallWidth(wall);
+      drag = { meshWall: wall, part: hit.part, back: !!hit.back, last: toMesh(toBackground(s.x, s.y)), from: s };
     }
     function showMeshWallWidth(wall) {
-      meshWallWidth.value = Math.round(wall.width);
+      meshWallWidth.value = Math.round(meshWallBack ? wall.backWidth : wall.width);
       meshWallWidth.closest('.slider').querySelector('input[type="range"]').value = meshWallWidth.value;
     }
     meshWallWidth.closest('.slider').addEventListener('input', () => {
       if (!meshWallSelected) return;
-      meshWallSelected.width = Math.max(1, Number(meshWallWidth.value) || meshWallSelected.width);
+      const key = meshWallBack ? 'backWidth' : 'width';
+      meshWallSelected[key] = Math.max(1, Number(meshWallWidth.value) || meshWallSelected[key]);
       pushMeshWall(meshWallSelected);
       draw();
     });
@@ -5233,41 +5254,48 @@
       // with the bar's ends to widen it shown while it's hovered or selected.
       const litWall = meshWallLit();
       for (const wall of meshWalls) {
-        const { start, end } = wall;
-        const [a, b] = meshWallBar(wall);
+        const { start } = wall;
+        const sides = wall.backWidth != null ? [false, true] : [false];
         const selected = wall === meshWallSelected;
-        const lit = litWall?.wall === wall ? litWall.part : null;
-        dashedArrow(start, end);
-        const bar = () => {
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-        };
+        const lit = litWall?.wall === wall ? litWall : null;
         const dot = (q, radius) => {
           ctx.beginPath();
           ctx.arc(q.x, q.y, radius * px, 0, 2 * Math.PI);
         };
+        const bar = (back) => {
+          const [a, b] = meshWallBar(wall, back);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        };
+        for (const back of sides) dashedArrow(start, back ? meshWallBackEnd(wall) : wall.end);
         if (selected) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
-          bar();
-          ctx.stroke();
+          for (const back of sides) {
+            bar(back);
+            ctx.stroke();
+          }
           ctx.lineWidth = 2 * px;
           dot(start, 5);
           ctx.stroke();
           ctx.strokeStyle = toolColor.value;
           ctx.lineWidth = 1.5 * px;
         }
-        bar();
-        ctx.stroke();
-        dot(start, lit === 'start' ? 6 : selected ? 5 : 4);
+        for (const back of sides) {
+          bar(back);
+          ctx.stroke();
+        }
+        dot(start, lit?.part === 'start' ? 6 : selected ? 5 : 4);
         ctx.fill();
         if (lit || selected) {
-          for (const q of [a, b]) {
-            dot(q, lit === 'edge' ? 5 : 4);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          for (const back of sides) {
+            for (const q of meshWallBar(wall, back)) {
+              dot(q, lit?.part === 'edge' && !!lit.back === back ? 5 : 4);
+              ctx.fill();
+              ctx.stroke();
+            }
           }
           ctx.fillStyle = toolColor.value;
         }
@@ -9717,7 +9745,8 @@
       }
       else if (inLocation() && locationTool === 'wall' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshWall && drag.part !== 'new';
-        canvas.style.cursor = held ? 'grabbing' : pointer && !drag && meshWallAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
+        const over = pointer && !drag && meshWallAt(pointer);
+        canvas.style.cursor = held ? 'grabbing' : over ? (commandHeld && over.part === 'start' ? 'pointer' : 'grab') : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
@@ -9734,8 +9763,9 @@
         const circleAt = !drag && pointer && meshCircleAt(pointer);
         const turning = drag?.meshTurn || (drag?.meshCircle && drag.part === 'turn') || (commandHeld && !drag && (meshAnchorLit() || (pointer && meshCircleTurnAt(pointer))));
         const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle || drag?.meshWall;
-        const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt || (pointer && meshWallAt(pointer)));
-        canvas.style.cursor = unturn || circleAt?.part === 'unturn' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
+        const wallAt = !drag && pointer && meshWallAt(pointer);
+        const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt || wallAt);
+        canvas.style.cursor = unturn || circleAt?.part === 'unturn' || (commandHeld && wallAt?.part === 'start') ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';
@@ -9933,7 +9963,7 @@
       if (inLocation() && locationTool === 'wall' && !spaceHeld) {
         const hit = meshWallAt(s);
         meshWallSelected = null;
-        if (hit) pressMeshWall(hit, s);
+        if (hit) pressMeshWall(hit, s, e.metaKey || e.ctrlKey);
         else {
           startMeshEdit();
           const at = toMesh(toBackground(s.x, s.y));
@@ -9974,7 +10004,7 @@
         meshWallSelected = null;
         if (pullHit) pressMeshPull(pullHit, s);
         if (circleHit) pressMeshCircle(circleHit, s);
-        if (wallHit) pressMeshWall(wallHit, s);
+        if (wallHit) pressMeshWall(wallHit, s, e.metaKey || e.ctrlKey);
         mapBoxSelected = !pullHit && !circleHit && !wallHit && !!mapBoxAt(s);
         if (pullHit || circleHit || wallHit) {
           draw();
@@ -10157,7 +10187,7 @@
         }
         const unturn = pullMarkerTool() && meshPullAt(pointer)?.part === 'unturn';
         const wallLit = meshWallLit();
-        const wallKey = wallLit && meshWalls.indexOf(wallLit.wall) + wallLit.part;
+        const wallKey = wallLit && meshWalls.indexOf(wallLit.wall) + wallLit.part + !!wallLit.back;
         if (wallKey !== meshWallLitWas) {
           meshWallLitWas = wallKey;
           draw();
@@ -10177,11 +10207,14 @@
         if (drag.part === 'new') wall.end = at;
         else if (drag.part === 'edge') {
           const { v } = meshWallFrame(wall);
-          wall.width = Math.max(1, 2 * Math.abs((at.x - wall.end.x) * v.x + (at.y - wall.end.y) * v.y));
+          const bar = drag.back ? meshWallBackEnd(wall) : wall.end;
+          wall[drag.back ? 'backWidth' : 'width'] = Math.max(1, 2 * Math.abs((at.x - bar.x) * v.x + (at.y - bar.y) * v.y));
           showMeshWallWidth(wall);
         } else {
+          // The other side's bar is the mirror of the end, so it moves the end the other way.
+          const sign = drag.back ? -1 : 1;
           const key = drag.part === 'start' ? 'start' : 'end';
-          wall[key] = { x: wall[key].x + at.x - drag.last.x, y: wall[key].y + at.y - drag.last.y };
+          wall[key] = { x: wall[key].x + sign * (at.x - drag.last.x), y: wall[key].y + sign * (at.y - drag.last.y) };
           drag.last = at;
         }
         pushMeshWall(wall);

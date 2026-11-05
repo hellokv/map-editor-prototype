@@ -5212,6 +5212,24 @@
         ctx.bezierCurveTo(p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6, p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6, p2.x, p2.y);
       }
     }
+    // Whether the mesh has folded over itself anywhere in view: a cell turned
+    // inside out, its corners no longer going round the way they started.
+    function meshFolded() {
+      if (!meshOffsets.size) return false;
+      const { node, from, to } = meshLattice();
+      const turn = (a, b, c) => (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+      const row = (j) => Array.from({ length: to.i - from.i + 1 }, (_, k) => node(from.i + k, j));
+      let top = row(from.j);
+      for (let j = from.j; j < to.j; j++) {
+        const bottom = row(j + 1);
+        for (let k = 0; k < top.length - 1; k++) {
+          const [a, b, c, d] = [top[k], top[k + 1], bottom[k + 1], bottom[k]];
+          if (turn(a, b, c) <= 0 || turn(b, c, d) <= 0 || turn(c, d, a) <= 0 || turn(d, a, b) <= 0) return true;
+        }
+        top = bottom;
+      }
+      return false;
+    }
     function drawMesh() {
       const { node, from, to } = meshLattice();
       ctx.save();
@@ -5233,7 +5251,7 @@
       ctx.strokeStyle = colorOf(meshBorder);
       ctx.lineWidth = (thickness + 2) / (view.scale * mapPlace.scale);
       ctx.stroke();
-      ctx.strokeStyle = colorOf(meshColor);
+      ctx.strokeStyle = meshFolded() ? '#ff0000' : colorOf(meshColor);
       ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
       ctx.restore();

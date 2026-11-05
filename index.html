@@ -2915,7 +2915,6 @@
       meshCircleSelected = null;
       meshWallSelected = null;
       meshPinSelected = null;
-      meshArcSelected = null;
       mapBoxSelected = false;
       showLocationTool();
       updateCursor();
@@ -2936,9 +2935,8 @@
       if (!inLocation()) return null;
       if (meshPullSelected) return { item: meshPullSelected, name: 'Gravity vector', redo: redoMeshPullAll, remove: deleteMeshPull };
       if (meshCircleSelected) return { item: meshCircleSelected, name: 'Gravity field', redo: scaleMeshCircle, remove: deleteMeshCircle };
-      if (meshWallSelected) return { item: meshWallSelected, name: 'Gravity wall', redo: pushMeshWall, remove: deleteMeshWall };
+      if (meshWallSelected) return { item: meshWallSelected, name: meshWallSelected.curve != null ? 'Gravity arc' : 'Gravity wall', redo: pushMeshWall, remove: deleteMeshWall };
       if (meshPinSelected) return { item: meshPinSelected, name: 'Gravity anchor', remove: deleteMeshPin };
-      if (meshArcSelected) return { item: meshArcSelected, name: 'Gravity arc', redo: pushMeshArc, remove: deleteMeshArc };
       return null;
     }
     // A pull again from its start, then turned again as it was.
@@ -3013,8 +3011,8 @@
     });
     document.getElementById('mesh-clear').addEventListener('click', (e) => {
       meshOffsets.clear();
-      for (const list of [meshPulls, meshCircles, meshWalls, meshPins, meshArcs]) list.length = 0;
-      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = meshArcSelected = null;
+      for (const list of [meshPulls, meshCircles, meshWalls, meshPins]) list.length = 0;
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
       e.currentTarget.blur();
       draw();
     });
@@ -4677,12 +4675,6 @@
     // mesh inside the inner one keeps still whatever else moves it, and is
     // held less and less, easing off, out to the outer one.
     const meshPins = [];
-    // Arcs drawn with the Gravity arc tool, in the mesh's frame: a curve from a
-    // to b, bulging bulge (signed) from its chord's middle, that pushes the mesh
-    // out from its curve by push, all of it on the curve and less off it as
-    // Rubber spreads it.
-    const meshArcs = [];
-    let meshArcSelected = null;
     // How far out q is from a pin's centre, in its inner radii: 1 on its edge.
     function meshPinReach({ c, rx, ry, angle }, q) {
       const dx = q.x - c.x;
@@ -4718,8 +4710,6 @@
         meshCircles.length = 0;
         meshWalls.length = 0;
         meshPins.length = 0;
-        meshArcs.length = 0;
-        meshArcSelected = null;
         meshCircleSelected = null;
         meshPullSelected = null;
         meshWallSelected = null;
@@ -4938,12 +4928,13 @@
       if (!length) return;
       const backLength = backWidth != null ? wall.backLength : 0;
       const { spread } = meshReach(meshLattice().step, wall);
-      const { node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + Math.max(length, backLength), spread);
+      const { node, from, to } = meshLatticeFor(Math.max(width, backWidth ?? 0) / 2 + Math.max(length, backLength) + Math.abs(wall.curve ?? 0), spread);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           const along = (n.x - start.x) * v.x + (n.y - start.y) * v.y;
-          const across = (n.x - start.x) * u.x + (n.y - start.y) * u.y;
+          // Measured from the wall's line, curved for an arc.
+          const across = (n.x - start.x) * u.x + (n.y - start.y) * u.y - meshWallCurve(wall, along);
           const back = backWidth != null && across < 0;
           const d = Math.hypot(Math.max(0, Math.abs(along) - (back ? backWidth : width) / 2), across);
           const share = Math.exp(-(d * d) / (2 * spread * spread)) * (back ? -backLength : length);
@@ -4959,117 +4950,6 @@
       meshWalls.splice(meshWalls.indexOf(wall), 1);
       if (meshWallSelected === wall) meshWallSelected = null;
     }
-    // Points along an arc, out from it by off, each with the way out from it there.
-    const MESH_ARC_STEPS = 48;
-    function meshArcPoints({ a, b, bulge }, off = 0) {
-      const L = Math.hypot(b.x - a.x, b.y - a.y) || 1e-6;
-      const t = { x: (b.x - a.x) / L, y: (b.y - a.y) / L };
-      const n = { x: -t.y, y: t.x };
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const points = [];
-      if (Math.abs(bulge) < 1e-3 * L) {
-        const out = bulge < 0 ? { x: -n.x, y: -n.y } : n;
-        for (let k = 0; k <= MESH_ARC_STEPS; k++) {
-          const f = k / MESH_ARC_STEPS;
-          points.push({ x: a.x + (b.x - a.x) * f + out.x * off, y: a.y + (b.y - a.y) * f + out.y * off, out });
-        }
-        return points;
-      }
-      // The circle through a, b and the bulge's peak.
-      const R = (L * L / 4 + bulge * bulge) / (2 * Math.abs(bulge));
-      const side = Math.sign(bulge);
-      const c = { x: m.x + n.x * (bulge - side * R), y: m.y + n.y * (bulge - side * R) };
-      const a0 = Math.atan2(a.y - c.y, a.x - c.x);
-      let sweep = Math.atan2(b.y - c.y, b.x - c.x) - a0;
-      const peak = Math.atan2(m.y + n.y * bulge - c.y, m.x + n.x * bulge - c.x);
-      // The way round from a to b that passes the peak.
-      const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
-      sweep = wrap(sweep);
-      if (Math.abs(wrap(peak - a0 - sweep / 2)) > Math.PI / 2) sweep -= Math.sign(sweep) * 2 * Math.PI;
-      for (let k = 0; k <= MESH_ARC_STEPS; k++) {
-        const ang = a0 + (sweep * k) / MESH_ARC_STEPS;
-        const out = { x: Math.cos(ang) * side, y: Math.sin(ang) * side };
-        points.push({ x: c.x + Math.cos(ang) * R + out.x * off, y: c.y + Math.sin(ang) * R + out.y * off, out });
-      }
-      return points;
-    }
-    // The point of a polyline nearest q, with how far it is.
-    function meshArcNearest(points, q) {
-      let best = { d: Infinity };
-      for (let k = 0; k < points.length - 1; k++) {
-        const p = points[k];
-        const r = points[k + 1];
-        const dx = r.x - p.x;
-        const dy = r.y - p.y;
-        const t = Math.max(0, Math.min(1, ((q.x - p.x) * dx + (q.y - p.y) * dy) / (dx * dx + dy * dy || 1)));
-        const x = p.x + dx * t;
-        const y = p.y + dy * t;
-        const d = Math.hypot(q.x - x, q.y - y);
-        if (d < best.d) best = { d, x, y, out: t < 0.5 ? p.out : r.out };
-      }
-      return best;
-    }
-    // The peak of an arc's curve, its bulge's handle.
-    function meshArcPeak({ a, b, bulge }) {
-      const L = Math.hypot(b.x - a.x, b.y - a.y) || 1e-6;
-      return { x: (a.x + b.x) / 2 - ((b.y - a.y) / L) * bulge, y: (a.y + b.y) / 2 + ((b.x - a.x) / L) * bulge };
-    }
-    function pushMeshArc(arc) {
-      for (const [key, moved] of arc.moves) moveMeshNode(key, -moved.x, -moved.y);
-      arc.moves.clear();
-      if (!arc.push) return;
-      const points = meshArcPoints(arc);
-      const { spread } = meshReach(meshLattice().step, arc);
-      const L = Math.hypot(arc.b.x - arc.a.x, arc.b.y - arc.a.y);
-      const { node, from, to } = meshLatticeFor(L + Math.abs(arc.bulge) + Math.abs(arc.push), spread);
-      for (let i = from.i; i <= to.i; i++) {
-        for (let j = from.j; j <= to.j; j++) {
-          const n = node(i, j);
-          const near = meshArcNearest(points, n);
-          const share = Math.exp(-(near.d * near.d) / (2 * spread * spread));
-          if (share < 0.001) continue;
-          arc.moves.set(`${i},${j}`, { x: near.out.x * arc.push * share, y: near.out.y * arc.push * share });
-        }
-      }
-      for (const [key, moved] of arc.moves) moveMeshNode(key, moved.x, moved.y);
-    }
-    function deleteMeshArc(arc) {
-      arc.push = 0;
-      pushMeshArc(arc);
-      meshArcs.splice(meshArcs.indexOf(arc), 1);
-      if (meshArcSelected === arc) meshArcSelected = null;
-    }
-    const meshArcTool = () => inLocation() && (locationTool === 'arc' || locationTool === 'select');
-    // The arc part at screen point s: an end, to move it; the peak of its
-    // curve, to bulge it more or less; its pushed curve, to push it; or its
-    // own curve, as the peak.
-    function meshArcAt(s) {
-      if (!meshOn.checked || !meshArcTool()) return null;
-      const scale = view.scale * mapPlace.scale;
-      const q = toMesh(toBackground(s.x, s.y));
-      const near = (p, reach) => {
-        const x = toScreen(fromMesh(p));
-        return Math.hypot(x.x - s.x, x.y - s.y) <= reach;
-      };
-      for (const arc of [...meshArcs].reverse()) {
-        if (near(arc.a, 8)) return { arc, part: 'a' };
-        if (near(arc.b, 8)) return { arc, part: 'b' };
-        if (near(meshArcPeak(arc), 8)) return { arc, part: 'bulge' };
-        if (meshArcNearest(meshArcPoints(arc, arc.push), q).d * scale <= 6) return { arc, part: 'push' };
-        if (arc.push && meshArcNearest(meshArcPoints(arc), q).d * scale <= 6) return { arc, part: 'bulge' };
-      }
-      return null;
-    }
-    function meshArcLit() {
-      if (!meshArcTool() || spaceHeld) return null;
-      if (drag?.meshArc) return { arc: drag.meshArc, part: drag.part };
-      return !drag && pointer ? meshArcAt(pointer) : null;
-    }
-    let meshArcLitWas = null;
-    function pressMeshArc(hit, s) {
-      meshArcSelected = hit.arc;
-      drag = { meshArc: hit.arc, part: hit.part, last: toMesh(toBackground(s.x, s.y)), from: s };
-    }
     // Where a two-sided wall's other side is pushed to.
     function meshWallBackEnd(wall) {
       const { u } = meshWallFrame(wall);
@@ -5082,21 +4962,51 @@
       const h = (back ? wall.backWidth : wall.width) / 2;
       return [{ x: at.x - v.x * h, y: at.y - v.y * h }, { x: at.x + v.x * h, y: at.y + v.y * h }];
     }
-    const meshWallTool = () => inLocation() && (locationTool === 'wall' || locationTool === 'select');
+    // How far an arc's line bows out along its push, at a distance along it
+    // from its middle: curve at the middle, none at its ends. A wall's is straight.
+    function meshWallCurve(wall, along) {
+      if (!wall.curve) return 0;
+      return wall.curve * Math.max(0, 1 - ((2 * along) / wall.width) ** 2);
+    }
+    // The bar as points along it: curved for an arc's front bar.
+    function meshWallBarPoints(wall, back = false) {
+      const [a, b] = meshWallBar(wall, back);
+      if (back || !wall.curve) return [a, b];
+      const { u, v } = meshWallFrame(wall);
+      return Array.from({ length: 25 }, (_, k) => {
+        const along = (k / 24 - 0.5) * wall.width;
+        const out = meshWallCurve(wall, along);
+        return { x: wall.end.x + v.x * along + u.x * out, y: wall.end.y + v.y * along + u.y * out };
+      });
+    }
+    // The middle of an arc's bar, its handle to curve it more or less.
+    function meshWallPeak(wall) {
+      const { u } = meshWallFrame(wall);
+      return { x: wall.end.x + u.x * wall.curve, y: wall.end.y + u.y * wall.curve };
+    }
+    const meshWallTool = () => inLocation() && (locationTool === 'wall' || locationTool === 'arc' || locationTool === 'select');
     // The wall part at screen point s: its start dot, a bar end to widen it,
-    // or the bar, to push it further.
+    // an arc's bar's middle to curve it, or the bar, to push it further.
     function meshWallAt(s) {
       if (!meshOn.checked || !meshWallTool()) return null;
       const screen = (q) => toScreen(fromMesh(q));
       for (const wall of [...meshWalls].reverse()) {
         const start = screen(wall.start);
         if (Math.hypot(start.x - s.x, start.y - s.y) <= 8) return { wall, part: 'start' };
+        if (wall.curve != null) {
+          const peak = screen(meshWallPeak(wall));
+          if (Math.hypot(peak.x - s.x, peak.y - s.y) <= 8) return { wall, part: 'curve' };
+        }
         for (const back of wall.backWidth != null ? [false, true] : [false]) {
           const [a, b] = meshWallBar(wall, back).map(screen);
           if (Math.hypot(a.x - s.x, a.y - s.y) <= 8 || Math.hypot(b.x - s.x, b.y - s.y) <= 8) return { wall, part: 'edge', back };
-          const ab = Math.max(1e-6, Math.hypot(b.x - a.x, b.y - a.y));
-          const t = Math.max(0, Math.min(1, ((s.x - a.x) * (b.x - a.x) + (s.y - a.y) * (b.y - a.y)) / (ab * ab)));
-          if (Math.hypot(a.x + (b.x - a.x) * t - s.x, a.y + (b.y - a.y) * t - s.y) <= 8) return { wall, part: 'end', back };
+          const points = meshWallBarPoints(wall, back).map(screen);
+          for (let k = 0; k < points.length - 1; k++) {
+            const [p, q] = [points[k], points[k + 1]];
+            const pq = Math.max(1e-6, Math.hypot(q.x - p.x, q.y - p.y));
+            const t = Math.max(0, Math.min(1, ((s.x - p.x) * (q.x - p.x) + (s.y - p.y) * (q.y - p.y)) / (pq * pq)));
+            if (Math.hypot(p.x + (q.x - p.x) * t - s.x, p.y + (q.y - p.y) * t - s.y) <= 8) return { wall, part: 'end', back };
+          }
         }
       }
       return null;
@@ -5662,12 +5572,10 @@
           ctx.arc(q.x, q.y, radius * px, 0, 2 * Math.PI);
         };
         const bar = (back) => {
-          const [a, b] = meshWallBar(wall, back);
           ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
+          meshWallBarPoints(wall, back).forEach((q, k) => (k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
         };
-        for (const back of sides) dashedArrow(start, back ? meshWallBackEnd(wall) : wall.end);
+        for (const back of sides) dashedArrow(start, back ? meshWallBackEnd(wall) : wall.curve ? meshWallPeak(wall) : wall.end);
         if (selected) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
@@ -5696,6 +5604,11 @@
               ctx.stroke();
             }
           }
+          if (wall.curve != null) {
+            dot(meshWallPeak(wall), lit?.part === 'curve' ? 5 : 4);
+            ctx.fill();
+            ctx.stroke();
+          }
           ctx.fillStyle = toolColor.value;
         }
       }
@@ -5723,46 +5636,6 @@
         ctx.arc(c.x, c.y, (lit === 'centre' ? 6 : 4) * px, 0, 2 * Math.PI);
         ctx.fill();
         if (meshPinUnshapeShown(pin)) unturnButton(meshPinUnshapeAt(pin), lit === 'unshape');
-      }
-      // Each arc: its curve dashed, pushed out to a solid one, with its ends
-      // and peak to take hold of while it's hovered or selected.
-      const litArc = meshArcLit();
-      for (const arc of meshArcs) {
-        const lit = litArc?.arc === arc ? litArc.part : null;
-        const selected = arc === meshArcSelected;
-        const curve = (points) => {
-          ctx.beginPath();
-          points.forEach((q, k) => (k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
-        };
-        const pushed = meshArcPoints(arc, arc.push);
-        if (arc.push) {
-          if (lit !== 'bulge') ctx.setLineDash([3 * px, 3 * px]);
-          curve(meshArcPoints(arc));
-          ctx.stroke();
-          ctx.setLineDash([]);
-          const mid = meshArcPoints(arc)[MESH_ARC_STEPS / 2];
-          dashedArrow(mid, pushed[MESH_ARC_STEPS / 2]);
-        }
-        if (selected) {
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 4.5 * px;
-          curve(pushed);
-          ctx.stroke();
-          ctx.strokeStyle = toolColor.value;
-          ctx.lineWidth = 1.5 * px;
-        }
-        curve(pushed);
-        ctx.stroke();
-        if (lit || selected) {
-          ctx.fillStyle = '#ffffff';
-          for (const [part, q] of [['a', arc.a], ['b', arc.b], ['bulge', meshArcPeak(arc)]]) {
-            ctx.beginPath();
-            ctx.arc(q.x, q.y, (lit === part ? 5 : 4) * px, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-          }
-          ctx.fillStyle = toolColor.value;
-        }
       }
       ctx.restore();
     }
@@ -7335,7 +7208,7 @@
       selectedShapes = [];
       sketchSelected = null;
       selected = null;
-      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = meshArcSelected = null;
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
       draw();
       updateCursor();
     });
@@ -9812,20 +9685,19 @@
     sketchStripeFields.bindEach(bindFigureInput, (fill, stripes) => { fill.stripes = stripes; });
 
     document.addEventListener('keydown', (e) => {
-      if (!(meshPullSelected || meshCircleSelected || meshWallSelected || meshPinSelected || meshArcSelected || mapBoxSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
+      if (!(meshPullSelected || meshCircleSelected || meshWallSelected || meshPinSelected || mapBoxSelected) || !inLocation() || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') {
-        meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = meshArcSelected = null;
+        meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
         mapBoxSelected = false;
         draw();
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && (meshPullSelected || meshCircleSelected || meshWallSelected || meshPinSelected || meshArcSelected)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (meshPullSelected || meshCircleSelected || meshWallSelected || meshPinSelected)) {
         e.preventDefault();
         e.stopImmediatePropagation();
         if (meshPullSelected) deleteMeshPull(meshPullSelected);
         if (meshCircleSelected) deleteMeshCircle(meshCircleSelected);
         if (meshWallSelected) deleteMeshWall(meshWallSelected);
         if (meshPinSelected) deleteMeshPin(meshPinSelected);
-        if (meshArcSelected) deleteMeshArc(meshArcSelected);
         draw();
       }
     }, true);
@@ -10212,16 +10084,12 @@
         const unturn = !drag && pointer && meshCircleAt(pointer)?.part === 'unturn';
         canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
-      else if (inLocation() && locationTool === 'arc' && !spaceHeld && !drag?.spacePan) {
-        const held = drag?.meshArc && drag.part !== 'new';
-        canvas.style.cursor = held ? 'grabbing' : pointer && !drag && meshArcAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
-      }
       else if (inLocation() && locationTool === 'pin' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshPin && drag.part !== 'new';
         const at = pointer && !drag && meshPinPressAt(pointer, commandHeld);
         canvas.style.cursor = at?.part === 'unshape' ? 'pointer' : drag?.part === 'turn' || at?.part === 'turn' ? rotateCursor : held ? 'grabbing' : at ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
-      else if (inLocation() && locationTool === 'wall' && !spaceHeld && !drag?.spacePan) {
+      else if (inLocation() && (locationTool === 'wall' || locationTool === 'arc') && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshWall && drag.part !== 'new';
         const over = pointer && !drag && meshWallAt(pointer);
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
@@ -10241,8 +10109,8 @@
         const circleAt = !drag && pointer && meshCircleAt(pointer);
         const pinAt = !drag && pointer && meshPinPressAt(pointer, commandHeld);
         const turning = drag?.meshTurn || ((drag?.meshCircle || drag?.meshPin) && drag.part === 'turn') || pinAt?.part === 'turn' || (commandHeld && !drag && (meshAnchorLit() || (pointer && meshCircleTurnAt(pointer))));
-        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle || drag?.meshWall || drag?.meshPin || drag?.meshArc;
-        const wallAt = !drag && pointer && (meshWallAt(pointer) || meshPinAt(pointer) || meshArcAt(pointer));
+        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh) || drag?.meshCircle || drag?.meshWall || drag?.meshPin;
+        const wallAt = !drag && pointer && (meshWallAt(pointer) || meshPinAt(pointer));
         const over = !drag && (meshAnchorLit() || meshStartLit() || circleAt || wallAt);
         canvas.style.cursor = unturn || circleAt?.part === 'unturn' || pinAt?.part === 'unshape' ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
@@ -10425,30 +10293,13 @@
         const at = toMesh(toBackground(s.x, s.y));
         const hit = meshCirclePressAt(s, e.metaKey || e.ctrlKey);
         meshCircleSelected = null;
-        meshWallSelected = meshPinSelected = meshArcSelected = null;
+        meshWallSelected = meshPinSelected = null;
         if (hit) pressMeshCircle(hit, s);
         else {
           startMeshEdit();
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
           meshCircles.push(meshCircle);
           drag = { meshCircle, part: 'new' };
-        }
-        draw();
-        updateCursor();
-        return;
-      }
-      // The Gravity arc tool: a press on an arc takes hold of it; anywhere
-      // else, a drag draws a new one from end to end.
-      if (inLocation() && locationTool === 'arc' && !spaceHeld) {
-        const hit = meshArcAt(s);
-        meshArcSelected = null;
-        if (hit) pressMeshArc(hit, s);
-        else {
-          startMeshEdit();
-          const at = toMesh(toBackground(s.x, s.y));
-          const meshArc = { a: at, b: at, bulge: 0, push: 0, moves: new Map() };
-          meshArcs.push(meshArc);
-          drag = { meshArc, part: 'new', from: s };
         }
         draw();
         updateCursor();
@@ -10471,15 +10322,17 @@
         return;
       }
       // The Gravity wall tool: a press on a wall takes hold of it; anywhere
-      // else, a drag draws a new one.
-      if (inLocation() && locationTool === 'wall' && !spaceHeld) {
+      // else, a drag draws a new one. The Gravity arc tool draws them with a curved bar.
+      if (inLocation() && (locationTool === 'wall' || locationTool === 'arc') && !spaceHeld) {
         const hit = meshWallAt(s);
-        meshWallSelected = meshPinSelected = meshArcSelected = null;
+        meshWallSelected = meshPinSelected = null;
         if (hit) pressMeshWall(hit, s, e.metaKey || e.ctrlKey);
         else {
           startMeshEdit();
           const at = toMesh(toBackground(s.x, s.y));
           const meshWall = { start: at, end: at, width: Math.max(1, Number(meshWallWidth.value) || 200), moves: new Map() };
+          // An arc starts bowed a quarter of its width the way it pushes.
+          if (locationTool === 'arc') meshWall.curve = meshWall.width / 4;
           meshWalls.push(meshWall);
           drag = { meshWall, part: 'new', from: s };
         }
@@ -10488,7 +10341,7 @@
         return;
       }
       if (inLocation() && locationTool === 'mesh' && !spaceHeld) {
-        meshWallSelected = meshPinSelected = meshArcSelected = null;
+        meshWallSelected = meshPinSelected = null;
         const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
         if (hit) {
           meshPullSelected = hit.pull;
@@ -10513,18 +10366,15 @@
         const circleHit = pullHit ? null : meshCirclePressAt(s, e.metaKey || e.ctrlKey);
         const wallHit = pullHit || circleHit ? null : meshWallAt(s);
         const pinHit = pullHit || circleHit || wallHit ? null : meshPinPressAt(s, e.metaKey || e.ctrlKey);
-        const arcHit = pullHit || circleHit || wallHit || pinHit ? null : meshArcAt(s);
         meshCircleSelected = null;
         meshWallSelected = null;
         meshPinSelected = null;
-        meshArcSelected = null;
-        if (arcHit) pressMeshArc(arcHit, s);
         if (pullHit) pressMeshPull(pullHit, s);
         if (circleHit) pressMeshCircle(circleHit, s);
         if (wallHit) pressMeshWall(wallHit, s, e.metaKey || e.ctrlKey);
         if (pinHit) pressMeshPin(pinHit, s, e.metaKey || e.ctrlKey);
-        mapBoxSelected = !pullHit && !circleHit && !wallHit && !pinHit && !arcHit && !!mapBoxAt(s);
-        if (pullHit || circleHit || wallHit || pinHit || arcHit) {
+        mapBoxSelected = !pullHit && !circleHit && !wallHit && !pinHit && !!mapBoxAt(s);
+        if (pullHit || circleHit || wallHit || pinHit) {
           draw();
           updateCursor();
           return;
@@ -10708,12 +10558,9 @@
         const wallKey = wallLit && meshWalls.indexOf(wallLit.wall) + wallLit.part + !!wallLit.back;
         const pinLit = meshPinLit();
         const pinKey = (pinLit ? meshPins.indexOf(pinLit.pin) + pinLit.part : '') + meshPins.map(meshPinUnshapeShown).join();
-        const arcLit = meshArcLit();
-        const arcKey = arcLit && meshArcs.indexOf(arcLit.arc) + arcLit.part;
-        if (wallKey !== meshWallLitWas || pinKey !== meshPinLitWas || arcKey !== meshArcLitWas) {
+        if (wallKey !== meshWallLitWas || pinKey !== meshPinLitWas) {
           meshWallLitWas = wallKey;
           meshPinLitWas = pinKey;
-          meshArcLitWas = arcKey;
           draw();
         }
         if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas || unturn !== meshUnturnLitWas) {
@@ -10724,30 +10571,6 @@
           meshStartLitWas = start;
           draw();
         }
-      }
-      if (drag?.meshArc) {
-        const at = toMesh(toBackground(pointer.x, pointer.y));
-        const arc = drag.meshArc;
-        const L = Math.hypot(arc.b.x - arc.a.x, arc.b.y - arc.a.y) || 1e-6;
-        const n = { x: -(arc.b.y - arc.a.y) / L, y: (arc.b.x - arc.a.x) / L };
-        if (drag.part === 'new') {
-          arc.b = at;
-          // A new arc bulges a quarter of its length, to the left of the way it's drawn.
-          arc.bulge = Math.hypot(arc.b.x - arc.a.x, arc.b.y - arc.a.y) / 4;
-        } else if (drag.part === 'a' || drag.part === 'b') {
-          arc[drag.part] = { x: arc[drag.part].x + at.x - drag.last.x, y: arc[drag.part].y + at.y - drag.last.y };
-          drag.last = at;
-        } else if (drag.part === 'bulge') {
-          // As far as a half circle either way.
-          const m = { x: (arc.a.x + arc.b.x) / 2, y: (arc.a.y + arc.b.y) / 2 };
-          arc.bulge = Math.max(-L / 2, Math.min(L / 2, (at.x - m.x) * n.x + (at.y - m.y) * n.y));
-        } else {
-          const near = meshArcNearest(meshArcPoints(arc), at);
-          arc.push = (at.x - near.x) * near.out.x + (at.y - near.y) * near.out.y;
-        }
-        pushMeshArc(arc);
-        draw();
-        return;
       }
       if (drag?.meshPin) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
@@ -10782,7 +10605,11 @@
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const wall = drag.meshWall;
         if (drag.part === 'new') wall.end = at;
-        else if (drag.part === 'edge') {
+        else if (drag.part === 'curve') {
+          // As far as a half circle either way.
+          const { u } = meshWallFrame(wall);
+          wall.curve = Math.max(-wall.width / 2, Math.min(wall.width / 2, (at.x - wall.end.x) * u.x + (at.y - wall.end.y) * u.y));
+        } else if (drag.part === 'edge') {
           const { v } = meshWallFrame(wall);
           const bar = drag.back ? meshWallBackEnd(wall) : wall.end;
           wall[drag.back ? 'backWidth' : 'width'] = Math.max(1, 2 * Math.abs((at.x - bar.x) * v.x + (at.y - bar.y) * v.y));
@@ -11022,18 +10849,6 @@
         // A resized circle is let go of, not left selected.
         const resized = ['edge', 'original'].includes(drag.part) && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         if (resized && meshCircleSelected === circle) meshCircleSelected = null;
-        drag = null;
-        draw();
-        updateCursor();
-        return;
-      }
-      if (drag.meshArc) {
-        const arc = drag.meshArc;
-        const moved = Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
-        // Too short to see, so taken as a click rather than an arc.
-        if (drag.part === 'new' && Math.hypot(arc.b.x - arc.a.x, arc.b.y - arc.a.y) * view.scale * mapPlace.scale < 4) deleteMeshArc(arc);
-        // An arc that's been dragged is let go of, not left selected.
-        else if (moved) meshArcSelected = null;
         drag = null;
         draw();
         updateCursor();
@@ -11462,7 +11277,7 @@
       const file = JSON.parse(JSON.stringify(await mapFile()));
       openedMaps[openMap] = {
         file,
-        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], walls: [...meshWalls], pins: [...meshPins], arcs: [...meshArcs], place: { ...mapPlace } },
+        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], walls: [...meshWalls], pins: [...meshPins], place: { ...mapPlace } },
         location: locationState(),
         satelliteOffset: { ...satelliteOffset },
       };
@@ -11476,7 +11291,7 @@
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           ...mapStarts[next]?.paths,
         },
-        mesh: { offsets: new Map(), pulls: [], circles: [], walls: [], pins: [], arcs: [], place: { turn: 0, scale: 1, ...start?.place } },
+        mesh: { offsets: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },
         location: startLocationState(start?.location),
         satelliteOffset: { x: 0, y: 0, ...start?.satelliteOffset },
         fitSatellite: start?.fitSatellite,
@@ -11492,9 +11307,8 @@
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
       meshWalls.splice(0, meshWalls.length, ...saved.mesh.walls);
       meshPins.splice(0, meshPins.length, ...saved.mesh.pins);
-      meshArcs.splice(0, meshArcs.length, ...saved.mesh.arcs);
       Object.assign(mapPlace, saved.mesh.place);
-      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = meshArcSelected = null;
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
       mapBoxSelected = false;
       satelliteReach = mapSatellites[next].reach;
       satellite.src = mapSatellites[next].src;

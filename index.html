@@ -9476,7 +9476,7 @@
       }
       if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshCircle ? drag.part === 'turn' : commandHeld && pointer && meshCircleTurnAt(pointer);
-        canvas.style.cursor = turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : 'crosshair';
+        canvas.style.cursor = turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());

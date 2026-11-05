@@ -2378,8 +2378,8 @@
         </div>
         <div id="mesh-fields" class="temporary-controls">
           <label class="field">
-            Mesh Count
-            <span class="slider"><input id="mesh-count" type="number" min="1" max="100" step="1" value="12"><input type="range" min="1" max="40" step="1" value="12" aria-label="Mesh count"></span>
+            Mesh Spacing
+            <span class="slider"><input id="mesh-spacing" type="number" min="5" max="500" step="1" value="115"><input type="range" min="10" max="200" step="1" value="115" aria-label="Mesh spacing"></span>
           </label>
           <label class="field">
             Line Color
@@ -4482,11 +4482,10 @@
       return { w: (w * k) / 2, h: (h * k) / 2 };
     }
     satellite.addEventListener('load', () => { if (inLocation()) draw(); });
-    // A mesh over the map: lines evenly spaced inside the map's box, turned
-    // about the map's centre.
+    // A mesh over the whole canvas: lines evenly spaced, turned about the map's centre.
     // Each line has a border either side, drawn as a wider line under it.
     const meshOn = document.getElementById('mesh-on');
-    const meshCount = document.getElementById('mesh-count');
+    const meshSpacing = document.getElementById('mesh-spacing');
     const meshColor = document.getElementById('mesh-color');
     const meshBorder = document.getElementById('mesh-border');
     const meshThickness = document.getElementById('mesh-thickness');
@@ -4506,42 +4505,50 @@
     meshColor.addEventListener('input', () => draw());
     meshBorder.addEventListener('input', () => draw());
     // The mesh is a lattice of nodes in its own frame: centred on the map,
-    // unturned. Mesh Count sets how many lines cross the map's width; as many
-    // run the other way as fit at the same spacing, centred. Its lines are
-    // those through nodes 1 to count across and 1 to rows down, and the lattice
-    // runs on past the map's edges so a turned mesh still covers it. Nodes
+    // unturned, Mesh Spacing apart in map units. It covers the map and the
+    // whole canvas, however the view moves. Nodes
     // moved with the Gravity vector tool keep their offsets here, and each pull its
-    // start, end and what it moved each node by, until the count changes.
+    // start, end and what it moved each node by, until the spacing changes.
     const meshOffsets = new Map();
     const meshPulls = [];
     const meshCircles = [];
     let meshPullSelected = null;
     let meshCircleSelected = null;
-    let meshOffsetsCount = null;
-    function meshLattice() {
-      const count = Math.max(1, Math.round(Number(meshCount.value) || 1));
-      if (count !== meshOffsetsCount) {
+    let meshOffsetsSpacing = null;
+    // Beyond this many cells from the map's centre, a far zoomed-out view is left uncovered.
+    const MESH_MAX_CELLS = 200;
+    // extra widens it by that many cells past the view, so the warp stays
+    // smooth at its edges; with mapOnly, past the map alone.
+    function meshLattice(extra = 2, mapOnly = false) {
+      const step = Math.max(5, Number(meshSpacing.value) || 5);
+      if (step !== meshOffsetsSpacing) {
         meshOffsets.clear();
         meshPulls.length = 0;
         meshCircles.length = 0;
         meshCircleSelected = null;
         meshPullSelected = null;
-        meshOffsetsCount = count;
+        meshOffsetsSpacing = step;
       }
-      const reach = Math.hypot(board.w, board.h) / 2;
-      const step = board.w / (count + 1);
-      const rows = Math.max(1, Math.round(board.h / step) - 1);
-      const top = -board.h / 2 + (board.h - (rows + 1) * step) / 2;
-      const extraX = Math.ceil((reach - board.w / 2) / step) + 1;
-      const extraY = Math.ceil((reach - board.h / 2) / step) + 1;
-      const base = (i, j) => ({ x: -board.w / 2 + i * step, y: top + j * step });
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const corners = [
+        { x: 0, y: 0 }, { x: board.w, y: 0 }, { x: board.w, y: board.h }, { x: 0, y: board.h },
+        ...(mapOnly ? [] : [toBackground(0, 0), toBackground(w, 0), toBackground(w, h), toBackground(0, h)]),
+      ].map(toMesh);
+      const bound = (f, v) => Math.max(-MESH_MAX_CELLS, Math.min(MESH_MAX_CELLS, f(...corners.map((q) => q[v] / step))));
+      const base = (i, j) => ({ x: i * step, y: j * step });
       const node = (i, j) => {
         const off = meshOffsets.get(`${i},${j}`);
         const at = base(i, j);
         return { x: at.x + (off?.x ?? 0), y: at.y + (off?.y ?? 0) };
       };
       node.base = base;
-      return { count, rows, node, from: { i: -extraX, j: -extraY }, to: { i: count + 1 + extraX, j: rows + 1 + extraY } };
+      return {
+        step,
+        node,
+        from: { i: Math.floor(bound(Math.min, 'x')) - extra, j: Math.floor(bound(Math.min, 'y')) - extra },
+        to: { i: Math.ceil(bound(Math.max, 'x')) + extra, j: Math.ceil(bound(Math.max, 'y')) + extra },
+      };
     }
     const meshTurn = () => ((Number(meshRotation.value) || 0) * Math.PI) / 180;
     // Between a map point and the mesh's own frame.
@@ -4555,24 +4562,25 @@
       const t = meshTurn();
       return { x: board.w / 2 + q.x * Math.cos(t) - q.y * Math.sin(t), y: board.h / 2 + q.x * Math.sin(t) + q.y * Math.cos(t) };
     }
-    // Whether the mesh can be grabbed at screen point s: anywhere on the map.
-    function meshGrabbable(s) {
-      if (!meshOn.checked) return false;
-      const p = toBackground(s.x, s.y);
-      return p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h;
+    // Whether the mesh can be grabbed at screen point s: anywhere it's drawn.
+    const meshGrabbable = () => meshOn.checked;
+    function meshReach(step) {
+      return { step, spread: Math.max(0.35 * step, ((Number(meshRubber.value) || 0) / 100) * (board.w / 2)) };
     }
-    function meshReach(count) {
-      const step = board.w / (count + 1);
-      return { step, spread: Math.max(0.35, ((Number(meshRubber.value) || 0) / 100) * (count / 2)) * step };
-    }
+    // Pulls and circles move nodes as far past the view as they reach, so
+    // panning to them later shows no seam.
+    const meshLatticeFor = (reach) => {
+      const { step } = meshLattice();
+      return meshLattice(Math.ceil((reach + 4 * meshReach(step).spread) / step) + 2);
+    };
     // How much of a pull from mesh point g each node takes, less the further
     // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
-    // to about half the mesh at 100. Where other pulls ended, the sheet is
+    // to about half the map's width at 100. Where other pulls ended, the sheet is
     // pinned and takes only the Gravity share of it, so pins are tugged
     // along a little, more the closer they are.
     function meshPullShares(g, pull) {
-      const { count, node, from, to } = meshLattice();
-      const { step, spread } = meshReach(count);
+      const { step, node, from, to } = meshLatticeFor(0);
+      const { spread } = meshReach(step);
       // A pin holds the nodes round its cell still, and eases off past them.
       const pin = step * 1.5;
       const others = meshPulls.filter((other) => other !== pull);
@@ -4661,8 +4669,8 @@
       const turn = circle.turn ?? 0;
       const sx = circle.shift ? circle.shift.x - c.x : 0;
       const sy = circle.shift ? circle.shift.y - c.y : 0;
-      const { count, node, from, to } = meshLattice();
-      const { spread } = meshReach(count);
+      const { step, node, from, to } = meshLatticeFor(r * Math.max(1, k) + Math.hypot(sx, sy));
+      const { spread } = meshReach(step);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
@@ -4947,20 +4955,17 @@
       }
     }
     function drawMesh() {
-      const { count, rows, node, from, to } = meshLattice();
+      const { node, from, to } = meshLattice();
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, board.w, board.h);
-      ctx.clip();
       ctx.translate(board.w / 2, board.h / 2);
       ctx.rotate(meshTurn());
       ctx.beginPath();
-      for (let i = 1; i <= count; i++) {
+      for (let i = from.i; i <= to.i; i++) {
         const down = [];
         for (let j = from.j; j <= to.j; j++) down.push(node(i, j));
         traceThrough(down);
       }
-      for (let j = 1; j <= rows; j++) {
+      for (let j = from.j; j <= to.j; j++) {
         const across = [];
         for (let i = from.i; i <= to.i; i++) across.push(node(i, j));
         traceThrough(across);
@@ -4973,7 +4978,6 @@
       ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
-      // Markers aren't cut off at the map's edge, as pulls and circles reach past it.
       ctx.restore();
       ctx.save();
       ctx.translate(board.w / 2, board.h / 2);
@@ -5193,8 +5197,9 @@
     }
     // Where the mesh takes each layer pixel, as triangles: source and
     // destination corners in device pixels.
+    // Only the map's layers are warped, so only the cells over the map are needed.
     function meshWarpTriangles() {
-      const { node, from, to } = meshLattice();
+      const { node, from, to } = meshLattice(2, true);
       const cols = to.i - from.i + 1;
       const rows = to.j - from.j + 1;
       const offsets = new Float32Array(cols * rows * 2);
@@ -10557,7 +10562,7 @@
         background: 'national-zoo-background.svg',
         settings: { 'board-width': '675', 'board-height': '1500' },
         paths: JSON.parse(document.getElementById('national-zoo-paths').textContent),
-        location: { 'location-background': '0', 'mesh-count': '16', 'mesh-color-opacity': '25' },
+        location: { 'location-background': '0', 'mesh-spacing': '40', 'mesh-color-opacity': '25' },
         place: { turn: (-63.55 * Math.PI) / 180, scale: 1.5874 },
         satelliteOffset: { x: 102.5, y: 63.6 },
         fitSatellite: true,
@@ -10622,7 +10627,7 @@
       await loadMapFile(saved.file);
       setLocationState(saved.location);
       Object.assign(satelliteOffset, saved.satelliteOffset);
-      // A changed Mesh Count clears the mesh, so it's taken in before the mesh is put back.
+      // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.
       meshLattice();
       meshOffsets.clear();
       for (const [key, offset] of saved.mesh.offsets) meshOffsets.set(key, offset);

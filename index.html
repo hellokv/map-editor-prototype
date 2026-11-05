@@ -9128,8 +9128,22 @@
         field.dispatchEvent(new Event('input'));
         return;
       }
-      // Keep the point under the cursor fixed while zooming.
-      for (const zoomed of viewsAt(pointer, e)) {
+      // A two-finger drag or wheel pans; with Command (Ctrl elsewhere), or a
+      // pinch, which browsers send as a Ctrl-scroll, it zooms.
+      if (!e.metaKey && !e.ctrlKey) {
+        const line = e.deltaMode === 1 ? 16 : 1;
+        for (const panned of viewsAt(pointer, e)) {
+          panned.x -= e.deltaX * line;
+          panned.y -= e.deltaY * line;
+        }
+        draw();
+        updateCursor();
+        return;
+      }
+      // Keep the point under the cursor fixed while zooming. Side by Side
+      // zooms the half under the pointer, as a pinch reads as Ctrl too.
+      const zooming = sideBySide() ? [pointer.right ? satelliteView() : view] : viewsAt(pointer, e);
+      for (const zoomed of zooming) {
         const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoomed.scale * Math.exp(-e.deltaY * 0.001)));
         zoomed.x = mx - (mx - zoomed.x) * (next / zoomed.scale);
         zoomed.y = my - (my - zoomed.y) * (next / zoomed.scale);

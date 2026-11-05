@@ -9559,10 +9559,13 @@
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
         canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
-      // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
+      // The cursor tool moves things under the regular cursor, but a pull's
+      // anchor or start dot shows the hand; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) {
         const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
-        canvas.style.cursor = unturn ? 'pointer' : drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : '';
+        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh);
+        const over = !drag && (meshAnchorLit() || meshStartLit());
+        canvas.style.cursor = unturn ? 'pointer' : drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';

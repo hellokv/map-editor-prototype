@@ -10217,7 +10217,8 @@
           wall[key] = { x: wall[key].x + sign * (at.x - drag.last.x), y: wall[key].y + sign * (at.y - drag.last.y) };
           drag.last = at;
         }
-        pushMeshWall(wall);
+        drag.deferred = drag.part === 'start' && commandHeld;
+        if (!drag.deferred) pushMeshWall(wall);
         draw();
         return;
       }
@@ -10230,14 +10231,18 @@
           circle.turn = dragTurn(drag, Math.atan2(at.y - o.y, at.x - o.x));
           scaleMeshCircle(circle);
         }
-        else if (drag.part === 'centre' && drag.tip) {
-          // A moved circle's dot moves where it was moved from; the arrow's tip stays.
+        else if (drag.part === 'centre' && (drag.tip || commandHeld)) {
+          // A moved circle's dot moves where it was moved from; the arrow's tip
+          // stays. With Command, an unmoved circle's dot moves the whole circle,
+          // dropping the move this drag began.
+          if (!drag.tip) circle.shift = null;
           const dx = at.x - drag.last.x;
           const dy = at.y - drag.last.y;
           const by = (q) => q && { x: q.x + dx, y: q.y + dy };
           Object.assign(circle, { c: by(circle.c), from: by(circle.from), to: by(circle.to) });
           drag.last = at;
-          scaleMeshCircle(circle);
+          drag.deferred = commandHeld;
+          if (!commandHeld) scaleMeshCircle(circle);
         }
         else if (drag.part === 'centre' || drag.part === 'shift') {
           // From the centre, a fresh move of everything in the circle; from
@@ -10285,7 +10290,9 @@
         const pull = drag.meshStart;
         pull.start = { x: pull.start.x + at.x - drag.last.x, y: pull.start.y + at.y - drag.last.y };
         drag.last = at;
-        redoMeshPull(pull);
+        // With Command held, an anchor moves on its own; the mesh catches up on drop.
+        drag.deferred = commandHeld;
+        if (!commandHeld) redoMeshPull(pull);
         draw();
         return;
       }
@@ -10430,6 +10437,7 @@
       }
       if (drag.meshCircle) {
         const circle = drag.meshCircle;
+        if (drag.deferred) scaleMeshCircle(circle);
         // Too small to see, so taken as a click rather than a circle.
         if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
         // A resized circle is let go of, not left selected.
@@ -10442,6 +10450,7 @@
       }
       if (drag.meshWall) {
         const wall = drag.meshWall;
+        if (drag.deferred) pushMeshWall(wall);
         const { length } = meshWallFrame(wall);
         // Too short to see, so taken as a click rather than a wall.
         if (drag.part === 'new' && length * view.scale * mapPlace.scale < 4) deleteMeshWall(wall);
@@ -10453,6 +10462,7 @@
         return;
       }
       if (drag.meshPull || drag.meshStart || drag.meshTurn) {
+        if (drag.deferred) redoMeshPull(drag.meshStart);
         // A pull that's been dragged somewhere is let go of, not left selected.
         const at = canvasPoint(e);
         if (drag.pressedAt && Math.hypot(at.x - drag.pressedAt.x, at.y - drag.pressedAt.y) > 2) meshPullSelected = null;

@@ -5059,13 +5059,16 @@
         ctx.lineWidth = 1.5 * px;
         ctx.globalAlpha = 1;
         if (!to) continue;
-        ctx.setLineDash([3 * px, 3 * px]);
-        ctx.beginPath();
-        const away = Math.max(1e-6, Math.hypot(to.x - o.x, to.y - o.y));
-        ctx.moveTo(to.x, to.y);
-        ctx.lineTo(o.x + ((to.x - o.x) * r) / away, o.y + ((to.y - o.y) * r) / away);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        // The dashed line between the two circles shows only while resizing.
+        if (drag?.meshCircle === circle && ['edge', 'dot', 'original'].includes(drag.part)) {
+          ctx.setLineDash([3 * px, 3 * px]);
+          ctx.beginPath();
+          const away = Math.max(1e-6, Math.hypot(to.x - o.x, to.y - o.y));
+          ctx.moveTo(to.x, to.y);
+          ctx.lineTo(o.x + ((to.x - o.x) * r) / away, o.y + ((to.y - o.y) * r) / away);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         ctx.beginPath();
         ctx.arc(to.x, to.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();

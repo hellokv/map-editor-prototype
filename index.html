@@ -2810,8 +2810,13 @@
       locationTool = name;
       meshPullSelected = null;
       meshCircleSelected = null;
-      for (const button of locationToolButtons) button.setAttribute('aria-pressed', button.dataset.locationTool === name);
+      showLocationTool();
       updateCursor();
+    }
+    // Holding Space shows Pan as the tool until it's let go.
+    function showLocationTool() {
+      const shown = spaceHeld ? 'pan' : locationTool;
+      for (const button of locationToolButtons) button.setAttribute('aria-pressed', button.dataset.locationTool === shown);
     }
     for (const button of locationToolButtons) {
       button.addEventListener('click', () => {
@@ -9351,6 +9356,7 @@
       if (spaceHeld === down) return;
       spaceHeld = down;
       showLabelTool();
+      showLocationTool();
       draw();
       updateCursor();
     };
@@ -9359,6 +9365,7 @@
     window.addEventListener('blur', () => {
       spaceHeld = false;
       showLabelTool();
+      showLocationTool();
     });
 
     // Movement below this many pixels counts as a click rather than a pan.

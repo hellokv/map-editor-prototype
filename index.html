@@ -1701,6 +1701,9 @@
         <button type="button" data-location-tool="pin" data-shortcut="A" aria-label="Gravity anchor" aria-pressed="false">
           <span class="material-symbols-rounded">filter_tilt_shift</span>
         </button>
+        <button type="button" data-location-tool="eraser" data-shortcut="E" aria-label="Magic eraser" aria-pressed="false">
+          <span class="material-symbols-rounded">ink_eraser</span>
+        </button>
       </div>
       <div id="label-tools" hidden>
         <button type="button" data-label-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="true">
@@ -2905,7 +2908,7 @@
     }
     // Location's tools: the cursor, which drags the map and satellite; Pan,
     // which only moves the view; Gravity vector; Gravity field; Gravity arc;
-    // Gravity wall; and Gravity anchor.
+    // Gravity wall; Gravity anchor; and Magic eraser.
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
@@ -5111,6 +5114,31 @@
       }
       drag = { meshPin: pin, part, last: toMesh(toBackground(s.x, s.y)), from: s };
     }
+    // The Magic eraser smooths the mesh under it, easing each node's offset
+    // toward its neighbours', most at the brush's middle, so folds pull out.
+    const MESH_ERASER_RADIUS = 30;
+    function eraseMesh(s) {
+      const { step } = meshLattice();
+      const R = MESH_ERASER_RADIUS / (view.scale * mapPlace.scale);
+      const q = toMesh(toBackground(s.x, s.y));
+      const offset = (i, j) => meshOffsets.get(`${i},${j}`) ?? { x: 0, y: 0 };
+      const nodes = [];
+      for (let i = Math.floor((q.x - R) / step); i <= Math.ceil((q.x + R) / step); i++) {
+        for (let j = Math.floor((q.y - R) / step); j <= Math.ceil((q.y + R) / step); j++) {
+          const t = Math.min(1, Math.hypot(i * step - q.x, j * step - q.y) / R);
+          if (t < 1) nodes.push([i, j, 1 - t * t * (3 - 2 * t)]);
+        }
+      }
+      for (let pass = 0; pass < 2; pass++) {
+        const moves = nodes.map(([i, j, w]) => {
+          const near = [offset(i - 1, j), offset(i + 1, j), offset(i, j - 1), offset(i, j + 1)];
+          const off = offset(i, j);
+          const k = 0.5 * w;
+          return [`${i},${j}`, (near.reduce((a, o) => a + o.x, 0) / 4 - off.x) * k, (near.reduce((a, o) => a + o.y, 0) / 4 - off.y) * k];
+        });
+        for (const [key, dx, dy] of moves) moveMeshNode(key, dx, dy);
+      }
+    }
     function deleteMeshPin(pin) {
       meshPins.splice(meshPins.indexOf(pin), 1);
       if (meshPinSelected === pin) meshPinSelected = null;
@@ -5367,8 +5395,10 @@
     }
     // Whether the mesh has folded over itself anywhere in view: a cell turned
     // inside out, its corners no longer going round the way they started.
-    function meshFolded() {
-      if (!meshOffsets.size) return false;
+    // The folded cells, each by its top left node.
+    function meshFolds() {
+      const folds = [];
+      if (!meshOffsets.size) return folds;
       const { node, from, to } = meshLattice();
       const turn = (a, b, c) => (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
       const row = (j) => Array.from({ length: to.i - from.i + 1 }, (_, k) => node(from.i + k, j));
@@ -5377,34 +5407,64 @@
         const bottom = row(j + 1);
         for (let k = 0; k < top.length - 1; k++) {
           const [a, b, c, d] = [top[k], top[k + 1], bottom[k + 1], bottom[k]];
-          if (turn(a, b, c) <= 0 || turn(b, c, d) <= 0 || turn(c, d, a) <= 0 || turn(d, a, b) <= 0) return true;
+          if (turn(a, b, c) <= 0 || turn(b, c, d) <= 0 || turn(c, d, a) <= 0 || turn(d, a, b) <= 0) folds.push([from.i + k, j]);
         }
         top = bottom;
       }
-      return false;
+      return folds;
     }
+    // While the mesh is folded, only the lines this many cells round a fold show.
+    const MESH_FOLD_REACH = 2;
     function drawMesh() {
       const { node, from, to } = meshLattice();
+      const folds = meshFolds();
+      const near = new Set();
+      for (const [fi, fj] of folds) {
+        for (let i = fi - MESH_FOLD_REACH; i <= fi + 1 + MESH_FOLD_REACH; i++) {
+          for (let j = fj - MESH_FOLD_REACH; j <= fj + 1 + MESH_FOLD_REACH; j++) near.add(`${i},${j}`);
+        }
+      }
+      const shown = (i, j) => !folds.length || near.has(`${i},${j}`);
+      // Each line, in runs of the nodes that show.
+      const trace = (points, keep) => {
+        let run = [];
+        points.forEach((q, k) => {
+          if (keep[k]) run.push(q);
+          else {
+            if (run.length > 1) traceThrough(run);
+            run = [];
+          }
+        });
+        if (run.length > 1) traceThrough(run);
+      };
       ctx.save();
       ctx.translate(board.w / 2, board.h / 2);
       ctx.rotate(meshTurn());
       ctx.beginPath();
       for (let i = from.i; i <= to.i; i++) {
         const down = [];
-        for (let j = from.j; j <= to.j; j++) down.push(node(i, j));
-        traceThrough(down);
+        const keep = [];
+        for (let j = from.j; j <= to.j; j++) {
+          down.push(node(i, j));
+          keep.push(shown(i, j));
+        }
+        trace(down, keep);
       }
       for (let j = from.j; j <= to.j; j++) {
         const across = [];
-        for (let i = from.i; i <= to.i; i++) across.push(node(i, j));
-        traceThrough(across);
+        const keep = [];
+        for (let i = from.i; i <= to.i; i++) {
+          across.push(node(i, j));
+          keep.push(shown(i, j));
+        }
+        trace(across, keep);
       }
       // Line thickness in screen pixels; the border is a pixel either side of it.
       const thickness = Math.max(0.1, Number(meshThickness.value) || 1);
       ctx.strokeStyle = colorOf(meshBorder);
       ctx.lineWidth = (thickness + 2) / (view.scale * mapPlace.scale);
       ctx.stroke();
-      ctx.strokeStyle = meshFolded() ? '#ff0000' : colorOf(meshColor);
+      ctx.strokeStyle = folds.length ? '#ff0000' : colorOf(meshColor);
       ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
       ctx.restore();
@@ -5636,6 +5696,12 @@
         ctx.arc(c.x, c.y, (lit === 'centre' ? 6 : 4) * px, 0, 2 * Math.PI);
         ctx.fill();
         if (meshPinUnshapeShown(pin)) unturnButton(meshPinUnshapeAt(pin), lit === 'unshape');
+      }
+      if (inLocation() && locationTool === 'eraser' && pointer && !spaceHeld) {
+        const at = toMesh(toBackground(pointer.x, pointer.y));
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, MESH_ERASER_RADIUS * px, 0, 2 * Math.PI);
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -10084,6 +10150,7 @@
         const unturn = !drag && pointer && meshCircleAt(pointer)?.part === 'unturn';
         canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
       }
+      else if (inLocation() && locationTool === 'eraser' && !spaceHeld && !drag?.spacePan) canvas.style.cursor = 'crosshair';
       else if (inLocation() && locationTool === 'pin' && !spaceHeld && !drag?.spacePan) {
         const held = drag?.meshPin && drag.part !== 'new';
         const at = pointer && !drag && meshPinPressAt(pointer, commandHeld);
@@ -10303,6 +10370,13 @@
         }
         draw();
         updateCursor();
+        return;
+      }
+      if (inLocation() && locationTool === 'eraser' && !spaceHeld) {
+        startMeshEdit();
+        drag = { erase: true, last: s };
+        eraseMesh(s);
+        draw();
         return;
       }
       // The Gravity anchor tool: a press on an anchor takes hold of it;
@@ -10539,6 +10613,17 @@
           satelliteOffset.x -= dx / view.scale;
           satelliteOffset.y -= dy / view.scale;
         }
+        draw();
+        return;
+      }
+      // The eraser's brush follows the pointer.
+      if (!drag && inLocation() && locationTool === 'eraser') draw();
+      if (drag?.erase) {
+        // Dabs along the way the pointer went, so a quick stroke leaves no gaps.
+        const gap = Math.hypot(pointer.x - drag.last.x, pointer.y - drag.last.y);
+        const dabs = Math.max(1, Math.ceil(gap / (MESH_ERASER_RADIUS / 3)));
+        for (let k = 1; k <= dabs; k++) eraseMesh({ x: drag.last.x + ((pointer.x - drag.last.x) * k) / dabs, y: drag.last.y + ((pointer.y - drag.last.y) * k) / dabs });
+        drag.last = { ...pointer };
         draw();
         return;
       }
@@ -10852,6 +10937,11 @@
         drag = null;
         draw();
         updateCursor();
+        return;
+      }
+      if (drag.erase) {
+        drag = null;
+        draw();
         return;
       }
       if (drag.meshPin) {

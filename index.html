@@ -1688,6 +1688,9 @@
         <button type="button" data-location-tool="add" data-shortcut="F" aria-label="Gravity field" aria-pressed="false">
           <span class="material-symbols-rounded">circle_circle</span>
         </button>
+        <button type="button" data-location-tool="arc" aria-label="Gravity arc" aria-pressed="false">
+          <span class="material-symbols-rounded">line_curve</span>
+        </button>
         <button type="button" data-location-tool="wall" data-shortcut="W" aria-label="Gravity wall" aria-pressed="false">
           <span class="material-symbols-rounded">resize_window</span>
         </button>
@@ -2897,8 +2900,8 @@
       });
     }
     // Location's tools: the cursor, which drags the map and satellite; Pan,
-    // which only moves the view; Gravity vector; Gravity field; Gravity wall;
-    // and Gravity anchor.
+    // which only moves the view; Gravity vector; Gravity field; Gravity arc;
+    // Gravity wall; and Gravity anchor.
     const locationTools = document.getElementById('location-tools');
     const locationToolButtons = document.querySelectorAll('[data-location-tool]');
     let locationTool = 'select';
@@ -2927,7 +2930,7 @@
     function gravitySelected() {
       if (!inLocation()) return null;
       if (meshPullSelected) return { item: meshPullSelected, name: 'Gravity vector', redo: redoMeshPullAll, remove: deleteMeshPull };
-      if (meshCircleSelected) return { item: meshCircleSelected, name: 'Gravity field', redo: scaleMeshCircle, remove: deleteMeshCircle };
+      if (meshCircleSelected) return { item: meshCircleSelected, name: meshCircleSelected.arc ? 'Gravity arc' : 'Gravity field', redo: scaleMeshCircle, remove: deleteMeshCircle };
       if (meshWallSelected) return { item: meshWallSelected, name: 'Gravity wall', redo: pushMeshWall, remove: deleteMeshWall };
       if (meshPinSelected) return { item: meshPinSelected, name: 'Gravity anchor', remove: deleteMeshPin };
       return null;
@@ -4862,7 +4865,7 @@
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           const d = Math.hypot(n.x - c.x, n.y - c.y);
-          const share = d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread));
+          const share = (d <= r ? 1 : Math.exp(-((d - r) ** 2) / (2 * spread * spread))) * meshArcShare(circle, n);
           if (share < 0.001) continue;
           // Turned by the share of the turn, so the mesh twists rather than
           // tearing at the circle's edge.
@@ -4879,6 +4882,27 @@
         }
       }
       for (const [key, moved] of circle.moves) moveMeshNode(key, moved.x, moved.y);
+    }
+    // The Gravity field and Gravity arc tools both work on circles; an arc is
+    // a circle that pushes only between its arc's ends.
+    const meshFieldTool = () => locationTool === 'add' || locationTool === 'arc';
+    // An arc's ends ease off over this angle either side.
+    const MESH_ARC_EASE = Math.PI / 12;
+    // How much of a circle's push reaches the direction of q from its centre:
+    // all of it along its arc, easing off past the arc's ends.
+    function meshArcShare({ c, arc }, q) {
+      if (!arc) return 1;
+      const turn = 2 * Math.PI;
+      const into = (((Math.atan2(q.y - c.y, q.x - c.x) - arc.start) % turn) + turn) % turn;
+      if (into <= arc.span) return 1;
+      const t = Math.min(1, Math.min(into - arc.span, turn - into) / MESH_ARC_EASE);
+      return 1 - t * t * (3 - 2 * t);
+    }
+    // Where an arc's ends are, on its scaled circle.
+    function meshArcEnds(circle) {
+      const o = meshCircleShown(circle);
+      const rk = circle.r * meshCircleScale(circle);
+      return [circle.arc.start, circle.arc.start + circle.arc.span].map((a) => ({ x: o.x + rk * Math.cos(a), y: o.y + rk * Math.sin(a) }));
     }
     const meshCircleScale = ({ c, from, to }) => (to ? Math.hypot(to.x - c.x, to.y - c.y) / Math.max(1e-6, Math.hypot(from.x - c.x, from.y - c.y)) : 1);
     const MESH_MAX_TURN = Math.PI;
@@ -5085,13 +5109,20 @@
           const tip = toScreen(fromMesh(circle.shift));
           if (Math.hypot(tip.x - s.x, tip.y - s.y) <= 10) return { circle, part: 'shift' };
         }
+        if (circle.arc) {
+          const ends = meshArcEnds(circle).map((q) => toScreen(fromMesh(q)));
+          const end = ends.findIndex((q) => Math.hypot(q.x - s.x, q.y - s.y) <= 8);
+          if (end >= 0) return { circle, part: end ? 'arcEnd' : 'arcStart' };
+        }
         const centre = toScreen(fromMesh(circle.c));
         if (Math.hypot(centre.x - s.x, centre.y - s.y) <= 8) return { circle, part: 'centre' };
         const shown = toScreen(fromMesh(meshCircleShown(circle)));
         const away = Math.hypot(shown.x - s.x, shown.y - s.y);
-        if (Math.abs(away - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
+        // An arc's circles are only there along the arc.
+        const along = !circle.arc || meshArcShare({ c: meshCircleShown(circle), arc: circle.arc }, toMesh(toBackground(s.x, s.y))) === 1;
+        if (along && Math.abs(away - circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale) <= 6) return { circle, part: 'edge' };
         // The dashed original, shown once the circle has been scaled or moved.
-        if ((circle.to || circle.shift) && Math.abs(away - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'original' };
+        if (along && (circle.to || circle.shift) && Math.abs(away - circle.r * view.scale * mapPlace.scale) <= 6) return { circle, part: 'original' };
       }
       return null;
     }
@@ -5106,7 +5137,7 @@
     }
     // The circle the pointer is in or near, which shows its turn's X.
     function meshCircleNear() {
-      if (!inLocation() || !(locationTool === 'add' || locationTool === 'select') || drag || !pointer || spaceHeld) return null;
+      if (!inLocation() || !(meshFieldTool() || locationTool === 'select') || drag || !pointer || spaceHeld) return null;
       return [...meshCircles].reverse().find((circle) => {
         const centre = toScreen(fromMesh(meshCircleShown(circle)));
         return Math.hypot(centre.x - pointer.x, centre.y - pointer.y) <= circle.r * meshCircleScale(circle) * view.scale * mapPlace.scale + 24;
@@ -5283,7 +5314,7 @@
     let meshAnchorLitWas = null;
     // The circle part the Gravity field tool is over, or dragging.
     function meshCircleLit() {
-      if (!inLocation() || !(locationTool === 'add' || locationTool === 'select') || spaceHeld) return null;
+      if (!inLocation() || !(meshFieldTool() || locationTool === 'select') || spaceHeld) return null;
       if (drag?.meshCircle) return { circle: drag.meshCircle, part: drag.part };
       return !drag && pointer ? meshCircleAt(pointer) : null;
     }
@@ -5484,8 +5515,9 @@
         const to = circle.to && meshCircleShown(circle, circle.to);
         // The transformed circle is drawn solid; the original is dashed until hovered.
         const rk = r * meshCircleScale(circle);
+        const [from, to2] = circle.arc ? [circle.arc.start, circle.arc.start + circle.arc.span] : [0, 2 * Math.PI];
         ctx.beginPath();
-        ctx.arc(o.x, o.y, rk, 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, rk, from, to2);
         if (circle === meshCircleSelected) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
@@ -5498,6 +5530,17 @@
         ctx.beginPath();
         ctx.arc(c.x, c.y, 4 * px, 0, 2 * Math.PI);
         ctx.fill();
+        // An arc's ends, to lengthen or shorten it, while it's hovered or selected.
+        if (circle.arc && (circle === meshCircleSelected || lit?.circle === circle || circle === nearCircle)) {
+          ctx.fillStyle = '#ffffff';
+          for (const [k, q] of meshArcEnds(circle).entries()) {
+            ctx.beginPath();
+            ctx.arc(q.x, q.y, (lit?.circle === circle && lit.part === (k ? 'arcEnd' : 'arcStart') ? 5 : 4) * px, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+          }
+          ctx.fillStyle = toolColor.value;
+        }
         if (shift) dashedArrow(c, shift);
         if (circle.turn) turnArc(o, rk + 12 * px, circle.turnFrom ?? -Math.PI / 2, circle.turn);
         if (circle.turn && !drag && (circle === nearCircle || circle === meshCircleSelected)) {
@@ -5506,7 +5549,7 @@
         if (!to && !shift) continue;
         if (!(lit?.circle === circle && lit.part === 'original')) ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
-        ctx.arc(o.x, o.y, r, 0, 2 * Math.PI);
+        ctx.arc(o.x, o.y, r, from, to2);
         ctx.stroke();
         ctx.setLineDash([]);
         if (!to) continue;
@@ -10034,7 +10077,7 @@
         canvas.style.cursor = boxPart === 'turn' ? rotateCursor : 'nwse-resize';
         return;
       }
-      if (inLocation() && locationTool === 'add' && !spaceHeld && !drag?.spacePan) {
+      if (inLocation() && meshFieldTool() && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshCircle ? drag.part === 'turn' : commandHeld && pointer && meshCircleTurnAt(pointer);
         const unturn = !drag && pointer && meshCircleAt(pointer)?.part === 'unturn';
         canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : drag?.meshCircle && drag.part !== 'new' ? 'grabbing' : pointer && !drag && meshCircleAt(pointer) ? 'grab' : `url("${pullCursorImage(pullCursorShapes.target)}") 12 12, crosshair`;
@@ -10244,7 +10287,7 @@
       // Preview has nothing to edit, so any drag there pans, as with the pan tool.
       // The Gravity field tool: a press on a circle's edge or dot scales the mesh by
       // it; anywhere else on the map, a drag draws a new circle.
-      if (inLocation() && locationTool === 'add' && !spaceHeld) {
+      if (inLocation() && meshFieldTool() && !spaceHeld) {
         const at = toMesh(toBackground(s.x, s.y));
         const hit = meshCirclePressAt(s, e.metaKey || e.ctrlKey);
         meshCircleSelected = null;
@@ -10253,6 +10296,7 @@
         else {
           startMeshEdit();
           const meshCircle = { c: at, r: 0, from: null, to: null, moves: new Map() };
+          if (locationTool === 'arc') meshCircle.arc = { start: 0, span: Math.PI / 2 };
           meshCircles.push(meshCircle);
           drag = { meshCircle, part: 'new' };
         }
@@ -10579,8 +10623,22 @@
       if (drag?.meshCircle) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const circle = drag.meshCircle;
-        if (drag.part === 'new') circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
-        else if (drag.part === 'turn') {
+        if (drag.part === 'new') {
+          circle.r = Math.hypot(at.x - circle.c.x, at.y - circle.c.y);
+          // A new arc is a quarter of its circle, centred on the way it was drawn out.
+          if (circle.arc) circle.arc.start = Math.atan2(at.y - circle.c.y, at.x - circle.c.x) - circle.arc.span / 2;
+        } else if (drag.part === 'arcStart' || drag.part === 'arcEnd') {
+          const o = meshCircleShown(circle);
+          const a = Math.atan2(at.y - o.y, at.x - o.x);
+          const turn = 2 * Math.PI;
+          const wrap = (x) => Math.min(turn - 0.05, Math.max(0.05, ((x % turn) + turn) % turn));
+          if (drag.part === 'arcStart') {
+            const end = circle.arc.start + circle.arc.span;
+            circle.arc.span = wrap(end - a);
+            circle.arc.start = end - circle.arc.span;
+          } else circle.arc.span = wrap(a - circle.arc.start);
+          scaleMeshCircle(circle);
+        } else if (drag.part === 'turn') {
           const o = meshCircleShown(circle);
           circle.turn = dragTurn(drag, Math.atan2(at.y - o.y, at.x - o.x));
           scaleMeshCircle(circle);
@@ -10795,8 +10853,8 @@
         if (drag.deferred) scaleMeshCircle(circle);
         // Too small to see, so taken as a click rather than a circle.
         if (drag.part === 'new' && circle.r * view.scale * mapPlace.scale < 4) deleteMeshCircle(circle);
-        // A resized circle is let go of, not left selected.
-        const resized = ['edge', 'original'].includes(drag.part) && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
+        // A resized circle, or arc, is let go of, not left selected.
+        const resized = ['edge', 'original', 'arcStart', 'arcEnd'].includes(drag.part) && Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         if (resized && meshCircleSelected === circle) meshCircleSelected = null;
         drag = null;
         draw();

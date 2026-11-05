@@ -4655,9 +4655,9 @@
     }
     // Pulls and circles move nodes as far past the view as they reach, so
     // panning to them later shows no seam.
-    const meshLatticeFor = (reach) => {
+    const meshLatticeFor = (reach, spread) => {
       const { step } = meshLattice();
-      return meshLattice(Math.ceil((reach + 4 * meshReach(step).spread) / step) + 2);
+      return meshLattice(Math.ceil((reach + 4 * (spread ?? meshReach(step).spread)) / step) + 2);
     };
     // How much of a pull from mesh point g each node takes, less the further
     // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
@@ -4745,7 +4745,7 @@
     // Circles drawn with the Gravity field tool, in the mesh's frame. Dragging from a
     // circle's edge to a dot scales the mesh about its centre by how far the
     // dot is from it against where the edge was taken: all of it inside the circle, less
-    // and less outside it as Rubber spreads it.
+    // and less outside it as its size and Rubber spread it.
     function scaleMeshCircle(circle) {
       for (const [key, moved] of circle.moves) moveMeshNode(key, -moved.x, -moved.y);
       circle.moves.clear();
@@ -4755,8 +4755,10 @@
       const turn = circle.turn ?? 0;
       const sx = circle.shift ? circle.shift.x - c.x : 0;
       const sy = circle.shift ? circle.shift.y - c.y : 0;
-      const { step, node, from, to } = meshLatticeFor(r * Math.max(1, k) + Math.hypot(sx, sy));
-      const { spread } = meshReach(step);
+      // A circle's pull spreads with its size: at Rubber 50, about its radius past its edge.
+      const step = meshLattice().step;
+      const spread = Math.max(0.35 * step, ((Number(meshRubber.value) || 0) / 100) * 2 * r);
+      const { node, from, to } = meshLatticeFor(r * Math.max(1, k) + Math.hypot(sx, sy), spread);
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);

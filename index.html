@@ -4526,10 +4526,19 @@
     const meshPulls = [];
     const meshCircles = [];
     const meshWalls = [];
-    // Circles drawn with the Gravity anchor tool, in the mesh's frame. The
-    // mesh inside one keeps still whatever else moves it, and is held less
-    // and less, easing off, out to its radius again past its edge.
+    // Ellipses drawn with the Gravity anchor tool, in the mesh's frame: radii
+    // rx and ry, turned by angle, and an outer ellipse k times as big. The
+    // mesh inside the inner one keeps still whatever else moves it, and is
+    // held less and less, easing off, out to the outer one.
     const meshPins = [];
+    // How far out q is from a pin's centre, in its inner radii: 1 on its edge.
+    function meshPinReach({ c, rx, ry, angle }, q) {
+      const dx = q.x - c.x;
+      const dy = q.y - c.y;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      return Math.hypot((dx * cos + dy * sin) / rx, (dy * cos - dx * sin) / ry);
+    }
     let meshPullSelected = null;
     let meshCircleSelected = null;
     let meshWallSelected = null;
@@ -4537,8 +4546,9 @@
     // How much of its offset the mesh at point q keeps, for the anchors.
     function meshFree(q) {
       let free = 1;
-      for (const { c, r } of meshPins) {
-        const t = Math.min(1, Math.max(0, (Math.hypot(q.x - c.x, q.y - c.y) - r) / r));
+      for (const pin of meshPins) {
+        if (!(pin.rx > 0 && pin.ry > 0)) continue;
+        const t = Math.min(1, Math.max(0, (meshPinReach(pin, q) - 1) / (pin.k - 1)));
         free *= t * t * (3 - 2 * t);
       }
       return free;
@@ -4855,15 +4865,21 @@
       draw();
     });
     const meshPinTool = () => inLocation() && (locationTool === 'pin' || locationTool === 'select');
-    // The anchor part at screen point s: its dot, to move it, or its edge, to resize it.
+    // The anchor part at screen point s: its dot, to move it, or its inner
+    // or outer edge, to resize it.
     function meshPinAt(s) {
       if (!meshOn.checked || !meshPinTool()) return null;
-      const k = view.scale * mapPlace.scale;
+      const scale = view.scale * mapPlace.scale;
+      const q = toMesh(toBackground(s.x, s.y));
       for (const pin of [...meshPins].reverse()) {
         const c = toScreen(fromMesh(pin.c));
-        const away = Math.hypot(c.x - s.x, c.y - s.y);
-        if (away <= 8) return { pin, part: 'centre' };
-        if (Math.abs(away - pin.r * k) <= 6) return { pin, part: 'edge' };
+        if (Math.hypot(c.x - s.x, c.y - s.y) <= 8) return { pin, part: 'centre' };
+        // On screen, how far s is from the edge at reach 'at', along the line from the centre.
+        const reach = meshPinReach(pin, q);
+        const radius = Math.hypot(q.x - pin.c.x, q.y - pin.c.y) / Math.max(1e-6, reach);
+        const off = (at) => Math.abs(reach - at) * radius * scale;
+        const near = off(1) <= off(pin.k) ? 'edge' : 'outer';
+        if (Math.min(off(1), off(pin.k)) <= 6) return { pin, part: near };
       }
       return null;
     }
@@ -4873,9 +4889,18 @@
       return !drag && pointer ? meshPinAt(pointer) : null;
     }
     let meshPinLitWas = null;
-    function pressMeshPin(hit, s) {
-      meshPinSelected = hit.pin;
-      drag = { meshPin: hit.pin, part: hit.part, last: toMesh(toBackground(s.x, s.y)), from: s };
+    // Takes hold of an anchor's part at screen point s, selecting it. With
+    // Command, its dot draws it out afresh as an ellipse, square to the screen.
+    function pressMeshPin(hit, s, command = false) {
+      const { pin } = hit;
+      meshPinSelected = pin;
+      const part = command && hit.part === 'centre' ? 'shape' : hit.part;
+      if (part === 'shape') {
+        const a = toMesh(toBackground(s.x, s.y));
+        const b = toMesh(toBackground(s.x + 1, s.y));
+        pin.angle = Math.atan2(b.y - a.y, b.x - a.x);
+      }
+      drag = { meshPin: pin, part, last: toMesh(toBackground(s.x, s.y)), from: s };
     }
     function deleteMeshPin(pin) {
       meshPins.splice(meshPins.indexOf(pin), 1);
@@ -5354,15 +5379,15 @@
       // Each anchor: its circle and dot, dashed out to where its hold eases off.
       const litPin = meshPinLit();
       for (const pin of meshPins) {
-        const { c, r } = pin;
+        const { c, rx, ry, angle, k } = pin;
         const lit = litPin?.pin === pin ? litPin.part : null;
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 2 * r, 0, 2 * Math.PI);
+        ctx.ellipse(c.x, c.y, rx * k, ry * k, angle, 0, 2 * Math.PI);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+        ctx.ellipse(c.x, c.y, rx, ry, angle, 0, 2 * Math.PI);
         if (pin === meshPinSelected) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 4.5 * px;
@@ -10043,10 +10068,10 @@
       if (inLocation() && locationTool === 'pin' && !spaceHeld) {
         const hit = meshPinAt(s);
         meshPinSelected = null;
-        if (hit) pressMeshPin(hit, s);
+        if (hit) pressMeshPin(hit, s, e.metaKey || e.ctrlKey);
         else {
           startMeshEdit();
-          const meshPin = { c: toMesh(toBackground(s.x, s.y)), r: 0 };
+          const meshPin = { c: toMesh(toBackground(s.x, s.y)), rx: 0, ry: 0, angle: 0, k: 2 };
           meshPins.push(meshPin);
           drag = { meshPin, part: 'new', from: s };
         }
@@ -10103,7 +10128,7 @@
         if (pullHit) pressMeshPull(pullHit, s);
         if (circleHit) pressMeshCircle(circleHit, s);
         if (wallHit) pressMeshWall(wallHit, s, e.metaKey || e.ctrlKey);
-        if (pinHit) pressMeshPin(pinHit, s);
+        if (pinHit) pressMeshPin(pinHit, s, e.metaKey || e.ctrlKey);
         mapBoxSelected = !pullHit && !circleHit && !wallHit && !pinHit && !!mapBoxAt(s);
         if (pullHit || circleHit || wallHit || pinHit) {
           draw();
@@ -10309,7 +10334,22 @@
         if (drag.part === 'centre') {
           pin.c = { x: pin.c.x + at.x - drag.last.x, y: pin.c.y + at.y - drag.last.y };
           drag.last = at;
-        } else pin.r = Math.hypot(at.x - pin.c.x, at.y - pin.c.y);
+        } else if (drag.part === 'new') {
+          pin.rx = pin.ry = Math.hypot(at.x - pin.c.x, at.y - pin.c.y);
+        } else if (drag.part === 'shape') {
+          const dx = at.x - pin.c.x;
+          const dy = at.y - pin.c.y;
+          const cos = Math.cos(pin.angle);
+          const sin = Math.sin(pin.angle);
+          pin.rx = Math.max(1, Math.abs(dx * cos + dy * sin));
+          pin.ry = Math.max(1, Math.abs(dy * cos - dx * sin));
+        } else if (drag.part === 'edge') {
+          // The inner edge follows the pointer, keeping its shape; the outer one stays put.
+          const grow = Math.max(0.01, meshPinReach(pin, at));
+          pin.rx *= grow;
+          pin.ry *= grow;
+          pin.k = Math.max(1.05, pin.k / grow);
+        } else pin.k = Math.max(1.05, meshPinReach(pin, at));
         draw();
         return;
       }
@@ -10566,7 +10606,7 @@
         const pin = drag.meshPin;
         const moved = Math.hypot(pointer.x - drag.from.x, pointer.y - drag.from.y) > 2;
         // Too small to see, so taken as a click rather than an anchor.
-        if (drag.part === 'new' && pin.r * view.scale * mapPlace.scale < 4) deleteMeshPin(pin);
+        if (drag.part === 'new' && pin.rx * view.scale * mapPlace.scale < 4) deleteMeshPin(pin);
         // An anchor that's been dragged is let go of, not left selected.
         else if (moved) meshPinSelected = null;
         drag = null;

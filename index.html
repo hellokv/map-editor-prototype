@@ -4833,6 +4833,7 @@
       return meshPullAt(pointer)?.part === 'start' ? meshPullAt(pointer).pull : null;
     }
     let meshStartLitWas = null;
+    let meshUnturnLitWas = false;
     // The anchor whose ring is under the pointer, or being dragged or turned.
     function meshAnchorLit() {
       if (!pullMarkerTool()) return null;
@@ -4994,6 +4995,11 @@
           ctx.arc(x.x, x.y, 12 * px, 0, 2 * Math.PI);
           ctx.fillStyle = '#000000';
           ctx.fill();
+          if (pointer && meshPullAt(pointer)?.part === 'unturn') {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2 * px;
+            ctx.stroke();
+          }
           ctx.beginPath();
           ctx.moveTo(x.x - k, x.y - k);
           ctx.lineTo(x.x + k, x.y + k);
@@ -9918,7 +9924,9 @@
         const litKey = lit && meshCircles.indexOf(lit.circle) + lit.part;
         const anchor = meshAnchorLit();
         const start = meshStartLit();
-        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas) {
+        const unturn = pullMarkerTool() && meshPullAt(pointer)?.part === 'unturn';
+        if (hover !== mapBoxHover || litKey !== meshCircleLitWas || anchor !== meshAnchorLitWas || start !== meshStartLitWas || unturn !== meshUnturnLitWas) {
+          meshUnturnLitWas = unturn;
           mapBoxHover = hover;
           meshCircleLitWas = litKey;
           meshAnchorLitWas = anchor;

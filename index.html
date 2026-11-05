@@ -9570,9 +9570,15 @@
           // Command turns the box from a corner too.
           mapBox: e.metaKey || e.ctrlKey ? 'turn' : boxHit.part,
           angle: Math.atan2(s.y - centre.y, s.x - centre.x),
-          distance: Math.hypot(s.x - centre.x, s.y - centre.y),
           from: { ...mapPlace },
         };
+        if (drag.mapBox === 'scale') {
+          // The opposite corner stays where it is on screen.
+          const corners = [{ x: 0, y: 0 }, { x: board.w, y: 0 }, { x: board.w, y: board.h }, { x: 0, y: board.h }];
+          drag.pin = corners[(boxHit.corner + 2) % 4];
+          drag.pinAt = toScreen(drag.pin);
+          drag.distance = Math.hypot(s.x - drag.pinAt.x, s.y - drag.pinAt.y);
+        }
         updateCursor();
         return;
       }
@@ -9700,12 +9706,21 @@
         return;
       }
       if (drag?.mapBox) {
-        // The centre doesn't move, so it's found with either place.
         const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
         if (drag.mapBox === 'turn') {
           mapPlace.turn = drag.from.turn + Math.atan2(pointer.y - centre.y, pointer.x - centre.x) - drag.angle;
         } else {
-          mapPlace.scale = Math.max(0.05, drag.from.scale * (Math.hypot(pointer.x - centre.x, pointer.y - centre.y) / Math.max(1, drag.distance)));
+          const { pin, pinAt } = drag;
+          mapPlace.scale = Math.max(0.05, drag.from.scale * (Math.hypot(pointer.x - pinAt.x, pointer.y - pinAt.y) / Math.max(1, drag.distance)));
+          // Scaling is about the centre, so the map is moved back under the
+          // pinned corner, leaving the satellite where it is.
+          const at = toScreen(pin);
+          const dx = pinAt.x - at.x;
+          const dy = pinAt.y - at.y;
+          view.x += dx;
+          view.y += dy;
+          satelliteOffset.x -= dx / view.scale;
+          satelliteOffset.y -= dy / view.scale;
         }
         draw();
         return;

@@ -4791,12 +4791,15 @@
       }
     });
     showPullCursor();
-    // Takes hold of a pull's marker at screen point s: its ring, to turn,
-    // with Command; its start dot, to pull again from there; its anchor, to
-    // pull further.
+    // Takes hold of a pull's marker at screen point s: its turn's X, to clear
+    // the turn; its ring, to turn, with Command; its start dot, to pull again
+    // from there; its anchor, to pull further.
     function pressMeshPull(hit, s) {
       const at = toMesh(toBackground(s.x, s.y));
-      if (hit.part === 'turn') {
+      if (hit.part === 'unturn') {
+        hit.pull.turn = 0;
+        turnMeshPull(hit.pull, []);
+      } else if (hit.part === 'turn') {
         const { end } = hit.pull;
         // Shares are taken with the old twist out, so a turn replaces it.
         hit.pull.turn ??= 0;
@@ -4813,6 +4816,12 @@
       } else {
         drag = { meshPull: hit.pull, shares: meshPullShares(hit.pull.end, hit.pull), last: at };
       }
+    }
+    // Where a turned anchor's arc starts, in the mesh's frame: its X, to clear the turn.
+    function meshUnturnAt(pull) {
+      const rr = (MESH_ANCHOR_RING + 6) / (view.scale * mapPlace.scale);
+      const a = pull.turnFrom ?? -Math.PI / 2;
+      return { x: pull.end.x + rr * Math.cos(a), y: pull.end.y + rr * Math.sin(a) };
     }
     const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select');
     // The pull whose start dot is under the pointer, or being dragged.
@@ -4859,6 +4868,7 @@
         return Math.hypot(p.x - s.x, p.y - s.y) <= reach;
       };
       for (const pull of [...meshPulls].reverse()) {
+        if (pull.turn && near(meshUnturnAt(pull), 7)) return { pull, part: 'unturn' };
         if (turn && near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'turn' };
         if (near(pull.start, 8)) return { pull, part: 'start' };
         if (near(pull.end, MESH_ANCHOR_REACH)) return { pull, part: 'end' };
@@ -4979,6 +4989,22 @@
         ctx.stroke();
         ctx.lineWidth = 1.5 * px;
         if (pull.turn) turnArc(end, (MESH_ANCHOR_RING + 6) * px, pull.turnFrom ?? -Math.PI / 2, pull.turn);
+        if (pull.turn && pull === litAnchor && !drag) {
+          const x = meshUnturnAt(pull);
+          const k = 4 * px;
+          ctx.beginPath();
+          ctx.moveTo(x.x - k, x.y - k);
+          ctx.lineTo(x.x + k, x.y + k);
+          ctx.moveTo(x.x + k, x.y - k);
+          ctx.lineTo(x.x - k, x.y + k);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 4 * px;
+          ctx.stroke();
+          ctx.strokeStyle = toolColor.value;
+          ctx.lineWidth = 2 * px;
+          ctx.stroke();
+          ctx.lineWidth = 1.5 * px;
+        }
       }
       for (const pull of meshPulls) {
         ctx.beginPath();
@@ -9483,11 +9509,13 @@
         // A pull's anchor or start dot shows the hand, to be taken up again.
         const held = drag?.meshStart || (drag?.meshPull && !drag.fresh);
         const over = !drag && (meshAnchorLit() || meshStartLit());
-        canvas.style.cursor = turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
+        const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
+        canvas.style.cursor = unturn ? 'pointer' : turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) {
-        canvas.style.cursor = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : '';
+        const unturn = !drag && pointer && meshPullAt(pointer)?.part === 'unturn';
+        canvas.style.cursor = unturn ? 'pointer' : drag?.meshTurn || (commandHeld && !drag && meshAnchorLit()) ? rotateCursor : '';
       }
       else if (spaceHeld || drag?.spacePan || inPreview() || inLocation() || stackOn() || (!labelTools.hidden && labelTool === 'pan')) canvas.style.cursor = drag ? 'grabbing' : 'grab';
       else if (labelTool === 'add' && !labelTools.hidden) canvas.style.cursor = 'crosshair';

@@ -9480,7 +9480,10 @@
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
-        canvas.style.cursor = turning ? rotateCursor : drag?.meshPull || drag?.meshStart || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
+        // A pull's anchor or start dot shows the hand, to be taken up again.
+        const held = drag?.meshStart || (drag?.meshPull && !drag.fresh);
+        const over = !drag && (meshAnchorLit() || meshStartLit());
+        canvas.style.cursor = turning ? rotateCursor : held ? 'grabbing' : over ? 'grab' : drag?.meshPull || (pointer && meshGrabbable(pointer)) ? pullCursor() : '';
       }
       // The cursor tool moves things under the regular cursor; Pan and Space show the hand.
       else if (inLocation() && locationTool === 'select' && !spaceHeld) {
@@ -9697,7 +9700,7 @@
           const at = toMesh(toBackground(s.x, s.y));
           const meshPull = { start: at, end: at, moves: new Map() };
           meshPulls.push(meshPull);
-          drag = { meshPull, shares: meshPullShares(at, meshPull), last: at };
+          drag = { meshPull, shares: meshPullShares(at, meshPull), last: at, fresh: true };
         } else {
           meshPullSelected = null;
         }

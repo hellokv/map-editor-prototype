@@ -2440,6 +2440,7 @@
             <div id="pull-cursor-list" role="listbox" hidden></div>
           </div>
           <button id="mesh-clear" class="new-style" type="button">Clear Gravity Tools<span class="material-symbols-rounded">delete</span></button>
+          <button id="mesh-eraser-clear" class="new-style" type="button">Clear Magic Eraser Edits<span class="material-symbols-rounded">ink_eraser_off</span></button>
         </div>
       </div>
     </div>
@@ -3009,8 +3010,15 @@
       e.currentTarget.blur();
       draw();
     });
+    document.getElementById('mesh-eraser-clear').addEventListener('click', (e) => {
+      for (const [key, erased] of meshErased) moveMeshNode(key, -erased.x, -erased.y);
+      meshErased.clear();
+      e.currentTarget.blur();
+      draw();
+    });
     document.getElementById('mesh-clear').addEventListener('click', (e) => {
       meshOffsets.clear();
+      meshErased.clear();
       for (const list of [meshPulls, meshCircles, meshWalls, meshPins]) list.length = 0;
       meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
       e.currentTarget.blur();
@@ -4667,6 +4675,8 @@
     // moved with the Gravity vector tool keep their offsets here, and each pull its
     // start, end and what it moved each node by, until the spacing changes.
     const meshOffsets = new Map();
+    // What the Magic eraser has moved each node by, so its edits can be taken back.
+    const meshErased = new Map();
     const meshPulls = [];
     const meshCircles = [];
     const meshWalls = [];
@@ -4706,6 +4716,7 @@
       const step = Math.max(5, Number(meshSpacing.value) || 5);
       if (step !== meshOffsetsSpacing) {
         meshOffsets.clear();
+        meshErased.clear();
         meshPulls.length = 0;
         meshCircles.length = 0;
         meshWalls.length = 0;
@@ -5101,7 +5112,11 @@
           const k = 0.5 * w;
           return [`${i},${j}`, (near.reduce((a, o) => a + o.x, 0) / 4 - off.x) * k, (near.reduce((a, o) => a + o.y, 0) / 4 - off.y) * k];
         });
-        for (const [key, dx, dy] of moves) moveMeshNode(key, dx, dy);
+        for (const [key, dx, dy] of moves) {
+          moveMeshNode(key, dx, dy);
+          const erased = meshErased.get(key) ?? { x: 0, y: 0 };
+          meshErased.set(key, { x: erased.x + dx, y: erased.y + dy });
+        }
       }
     }
     function deleteMeshPin(pin) {
@@ -11323,7 +11338,7 @@
       const file = JSON.parse(JSON.stringify(await mapFile()));
       openedMaps[openMap] = {
         file,
-        mesh: { offsets: new Map(meshOffsets), pulls: [...meshPulls], circles: [...meshCircles], walls: [...meshWalls], pins: [...meshPins], place: { ...mapPlace } },
+        mesh: { offsets: new Map(meshOffsets), erased: new Map(meshErased), pulls: [...meshPulls], circles: [...meshCircles], walls: [...meshWalls], pins: [...meshPins], place: { ...mapPlace } },
         location: locationState(),
         satelliteOffset: { ...satelliteOffset },
       };
@@ -11337,7 +11352,7 @@
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           ...mapStarts[next]?.paths,
         },
-        mesh: { offsets: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },
+        mesh: { offsets: new Map(), erased: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },
         location: startLocationState(start?.location),
         satelliteOffset: { x: 0, y: 0, ...start?.satelliteOffset },
         fitSatellite: start?.fitSatellite,
@@ -11349,6 +11364,8 @@
       meshLattice();
       meshOffsets.clear();
       for (const [key, offset] of saved.mesh.offsets) meshOffsets.set(key, offset);
+      meshErased.clear();
+      for (const [key, erased] of saved.mesh.erased) meshErased.set(key, erased);
       meshPulls.splice(0, meshPulls.length, ...saved.mesh.pulls);
       meshCircles.splice(0, meshCircles.length, ...saved.mesh.circles);
       meshWalls.splice(0, meshWalls.length, ...saved.mesh.walls);

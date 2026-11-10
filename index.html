@@ -1658,6 +1658,7 @@
       <select id="map-example" aria-label="Map">
         <option value="demo">Demo</option>
         <option value="national-zoo">National Zoo</option>
+        <option value="wildlife-safari">Wildlife Safari</option>
       </select>
     </div>
     <div id="mode-menu">
@@ -4630,6 +4631,7 @@
       // Made from the demo map's background, so it lines up with that one only.
       demo: { src: 'satellite.jpg', reach: 2 },
       'national-zoo': { src: 'national-zoo-satellite.jpg', reach: 1 },
+      'wildlife-safari': { src: 'wildlife-safari-satellite.jpg', reach: 1 },
     };
     let satelliteReach = mapSatellites.demo.reach;
     const satellite = Object.assign(new Image(), { src: mapSatellites.demo.src });
@@ -11298,6 +11300,12 @@
         location: { 'location-background': '0', 'mesh-spacing': '40', 'mesh-color-opacity': '25' },
         place: { turn: (-63.55 * Math.PI) / 180, scale: 1.5874 },
         satelliteOffset: { x: 102.5, y: 63.6 },
+        fitSatellite: true,
+      },
+      // No background or paths yet; its box takes the satellite's shape, so the two line up.
+      'wildlife-safari': {
+        settings: { 'board-width': '1248', 'board-height': '1358' },
+        location: { 'location-background': '0', 'mesh-spacing': '70', 'mesh-color-opacity': '25' },
         fitSatellite: true,
       },
     };

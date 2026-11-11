@@ -2747,14 +2747,16 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
-        <label class="field">
-          Background Outside
-          <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
-        </label>
-        <label class="field">
-          Background Inside
-          <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
-        </label>
+        <div class="field-pair">
+          <label class="field">
+            Inside
+            <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
+          </label>
+          <label class="field">
+            Outside
+            <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
+          </label>
+        </div>
         <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
         <div class="field">

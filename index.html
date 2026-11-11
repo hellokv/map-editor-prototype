@@ -2743,6 +2743,10 @@
           <input id="background-show-labels" class="switch" type="checkbox" checked>
         </label>
         <label class="field">
+          Show Paths
+          <input id="background-show-paths" class="switch" type="checkbox">
+        </label>
+        <label class="field">
           Show Frame
           <input id="background-show-frame" class="switch" type="checkbox">
         </label>
@@ -3453,6 +3457,11 @@
     const FRAME_DEVICE = DEVICES[0];
     const FRAME_BEZEL = 15;
     const showFrameToggle = document.getElementById('background-show-frame');
+    const showPathsToggle = document.getElementById('background-show-paths');
+    showPathsToggle.addEventListener('change', () => {
+      showPathsToggle.blur();
+      draw();
+    });
     showFrameToggle.addEventListener('change', () => {
       showFrameToggle.blur();
       if (showFrameToggle.checked && frameCentre) {
@@ -6337,7 +6346,15 @@
         return;
       }
       if (pathTools.hidden) {
-        drawPaths();
+        if (backgroundTools.hidden) drawPaths();
+        else if (showPathsToggle.checked) {
+          drawPaths();
+          ctx.strokeStyle = colorOf(pathColor);
+          ctx.lineWidth = 2 / view.scale;
+          ctx.beginPath();
+          for (const path of paths) path.segments.forEach(traceSegment);
+          ctx.stroke();
+        }
         if (!layerOverride) captureLabelBackdrop();
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
         if (!labelTools.hidden) {

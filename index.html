@@ -2777,12 +2777,14 @@
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
         <div class="field">
           Resolution
-          <output id="background-resolution"><span id="resolution-low" title="Below the Min Resolution" hidden></span><span></span></output>
+          <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
         </div>
         <div class="field">
-          Min Resolution
+          Recommended
           <output id="background-min-resolution"></output>
         </div>
+        <button id="download-template" class="new-style" type="button">Download Template<span class="material-symbols-rounded">download</span></button>
+        <p id="download-template-status" class="panel-note" hidden></p>
         <label class="field">
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">
@@ -3484,9 +3486,10 @@
     const minResolutionField = document.getElementById('background-min-resolution');
     // The frame draws a phone point as deviceScale() canvas pixels, so at
     // 100% a map unit is zoomBase / deviceScale() points on the phone.
+    const minResolutionPerUnit = () => (zoomBase / deviceScale()) * MIN_RESOLUTION_ZOOM * PHONE_PIXEL_DENSITY;
     function showMinResolution() {
-      const perUnit = (zoomBase / deviceScale()) * MIN_RESOLUTION_ZOOM * PHONE_PIXEL_DENSITY;
       if (!backgroundImage) return;
+      const perUnit = minResolutionPerUnit();
       const { w, h } = backgroundSize();
       const min = { w: Math.round(w * perUnit), h: Math.round(h * perUnit) };
       minResolutionField.value = `${min.w} × ${min.h}`;
@@ -4419,7 +4422,8 @@
     const zoomLevel = () => view.scale / zoomBase;
 
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    // Swapped for an offscreen one while Download Template draws.
+    let ctx = canvas.getContext('2d');
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -6277,6 +6281,14 @@
     });
 
     // The paths' filled areas and their widths, as the map shows them.
+    // Background's Show Paths: each path's line, one on-screen width at any zoom.
+    function drawPathLines() {
+      ctx.strokeStyle = colorOf(pathColor);
+      ctx.lineWidth = 2 / view.scale;
+      ctx.beginPath();
+      for (const path of paths) path.segments.forEach(traceSegment);
+      ctx.stroke();
+    }
     function drawPaths() {
       for (const area of computeAreas()) {
         const fill = fillOf(area.points);
@@ -6349,11 +6361,7 @@
         if (backgroundTools.hidden) drawPaths();
         else if (showPathsToggle.checked) {
           drawPaths();
-          ctx.strokeStyle = colorOf(pathColor);
-          ctx.lineWidth = 2 / view.scale;
-          ctx.beginPath();
-          for (const path of paths) path.segments.forEach(traceSegment);
-          ctx.stroke();
+          drawPathLines();
         }
         if (!layerOverride) captureLabelBackdrop();
         if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
@@ -11602,21 +11610,80 @@
     // Inside claude.ai the page is sandboxed and can only save through the
     // viewer's downloads capability; opened anywhere else, that's null.
     const downloadsReady = window.claude?.use('downloads') ?? Promise.resolve(null);
-    document.getElementById('map-save').addEventListener('click', async (e) => {
-      e.currentTarget.blur();
-      const data = new Blob([JSON.stringify(await mapFile())], { type: 'application/json' });
+    async function saveFile(filename, data, failure) {
       const downloads = await downloadsReady;
       if (downloads) {
         try {
-          await downloads.save({ filename: 'map.json', data });
+          await downloads.save({ filename, data });
         } catch (error) {
-          if (error?.code !== 'declined') alert('The map file could not be saved here.');
+          if (error?.code !== 'declined') alert(failure);
         }
         return;
       }
       const url = URL.createObjectURL(data);
-      Object.assign(document.createElement('a'), { href: url, download: 'map.json' }).click();
+      Object.assign(document.createElement('a'), { href: url, download: filename }).click();
       URL.revokeObjectURL(url);
+    }
+    document.getElementById('map-save').addEventListener('click', async (e) => {
+      e.currentTarget.blur();
+      const data = new Blob([JSON.stringify(await mapFile())], { type: 'application/json' });
+      await saveFile('map.json', data, 'The map file could not be saved here.');
+    });
+
+    // The background image's area, with what Background mode shows over it
+    // but the frame, as a PNG at the recommended resolution.
+    // Browsers refuse canvases past about this many pixels, or this wide.
+    const MAX_CANVAS_AREA = 268000000;
+    const MAX_CANVAS_SIDE = 32767;
+    const templateButton = document.getElementById('download-template');
+    const templateStatus = document.getElementById('download-template-status');
+    templateButton.addEventListener('click', async () => {
+      templateButton.blur();
+      const { w, h } = backgroundSize();
+      const perUnit = minResolutionPerUnit();
+      const fit = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (w * perUnit * h * perUnit)), MAX_CANVAS_SIDE / (w * perUnit), MAX_CANVAS_SIDE / (h * perUnit));
+      const out = Object.assign(document.createElement('canvas'), { width: Math.round(w * perUnit * fit), height: Math.round(h * perUnit * fit) });
+      templateStatus.hidden = false;
+      templateStatus.textContent = fit < 1 ? `Too large for the browser; making it ${out.width} × ${out.height}.` : 'Making the template…';
+      await new Promise(requestAnimationFrame);
+      const screenCtx = ctx;
+      const screenView = { ...view };
+      try {
+        ctx = out.getContext('2d');
+        // Drawn as the editor would at the recommended zoom, scaled up to the
+        // phone's pixels, so labels and lines keep their size at that zoom.
+        view.scale = MIN_RESOLUTION_ZOOM * zoomBase;
+        const density = (perUnit * fit) / view.scale;
+        view.x = -((board.w - w) / 2) * view.scale;
+        view.y = -((board.h - h) / 2) * view.scale;
+        ctx.setTransform(density, 0, 0, density, 0, 0);
+        ctx.translate(view.x, view.y);
+        ctx.scale(view.scale, view.scale);
+        ctx.fillStyle = colorOf(boardColor);
+        ctx.fill(boardShape());
+        ctx.save();
+        ctx.clip(boardShape());
+        ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
+        ctx.restore();
+        drawShapes();
+        drawSketchFills();
+        if (showPathsToggle.checked) {
+          drawPaths();
+          drawPathLines();
+        }
+        if (showLabelsToggle.checked) drawLabels();
+      } finally {
+        ctx = screenCtx;
+        Object.assign(view, screenView);
+      }
+      const data = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
+      templateStatus.hidden = fit === 1;
+      if (!data) {
+        templateStatus.hidden = false;
+        templateStatus.textContent = 'The browser could not make an image this large.';
+        return;
+      }
+      await saveFile('template.png', data, 'The template could not be saved here.');
     });
     const mapFileInput = document.getElementById('map-file');
     document.getElementById('map-load').addEventListener('click', (e) => {
@@ -12260,6 +12327,7 @@
           settings: { ...file.settings, ...mapStarts[next]?.settings },
           background: mapStarts[next]?.background ?? null,
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
+          zoomBase: 1, frameCentre: null,
           ...mapStarts[next]?.paths,
         },
         mesh: { offsets: new Map(), erased: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },

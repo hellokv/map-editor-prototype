@@ -2022,7 +2022,7 @@
       <button id="list-no" type="button">No</button>
     </div>
     <div id="frame-actions" hidden>
-      <button id="set-background" type="button"><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
+      <button id="set-background" type="button"><span class="material-symbols-rounded">save</span>Save</button>
     </div>
     <div id="frame-fits" hidden>
       <button id="frame-cover" type="button"><span class="material-symbols-rounded">fullscreen</span>Cover</button>
@@ -3741,7 +3741,7 @@
       const button = document.getElementById('set-background');
       button.dataset.state = state;
       button.classList.toggle('setting', state === 'setting');
-      button.firstElementChild.textContent = SET_ICONS[state] ?? 'wallpaper';
+      button.firstElementChild.textContent = SET_ICONS[state] ?? 'save';
     }
     function atSetView() {
       if (!frameCentre) return false;

@@ -544,7 +544,18 @@
     #canvas-area #map-menu select:hover {
       background-color: rgba(0, 0, 0, 0.06);
     }
-    #set-background {
+    #fit-frame {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #fit-frame[hidden] {
+      display: none;
+    }
+    #fit-frame .material-symbols-rounded {
+      font-size: 18px;
+    }
+    :is(#set-background, #fit-frame) {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -559,7 +570,7 @@
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    #set-background:hover {
+    :is(#set-background, #fit-frame):hover {
       background: #333;
     }
     #resolution-low {
@@ -1987,6 +1998,7 @@
       <button id="list-no" type="button">No</button>
     </div>
     <button id="set-background" type="button" hidden>Set Background</button>
+    <button id="fit-frame" type="button" hidden><span class="material-symbols-rounded">zoom_in_map</span>Resize to Fit</button>
     <div id="map-menu">
       <select id="map-example" aria-label="Map">
         <option value="demo">Demo</option>
@@ -4811,7 +4823,8 @@
     function draw() {
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
-      setBackgroundButton.hidden = backgroundTools.hidden || !showFrameToggle.checked;
+      setBackgroundButton.hidden = backgroundTools.hidden || !showFrameToggle.checked || frameEditing;
+      showFitFrameButton();
       if (!backgroundTools.hidden) showMinResolution();
       // Under Automatic, names the layers the current zoom shows.
       autoLayers.hidden = layerSelect.value !== 'Automatic' || inPreview();
@@ -12962,6 +12975,24 @@
       updateCursor();
       draw();
     }
+    // Resize to Fit: the frame, while selected, shrinks or grows to the
+    // background's edges, without anything moving on screen.
+    function showFitFrameButton() {
+      const fitFrameButton = document.getElementById('fit-frame');
+      fitFrameButton.hidden = !frameEditing || backgroundTools.hidden;
+      if (fitFrameButton.hidden) return;
+      fitFrameButton.style.left = `${canvas.offsetLeft + view.x + (board.w * view.scale) / 2}px`;
+      fitFrameButton.style.top = `${canvas.offsetTop + view.y + (board.h * view.scale) / 2}px`;
+    }
+    document.getElementById('fit-frame').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      const fit = backgroundImage ? backgroundRect() : satelliteRect();
+      translateContent(-fit.x, -fit.y);
+      view.x += fit.x * view.scale;
+      view.y += fit.y * view.scale;
+      setBoardSize(fit.w, fit.h);
+      draw();
+    });
     // The frame is there to select once there's an image to frame.
     const frameSelectable = () => !backgroundTools.hidden && backgroundTool === 'select' && !!(backgroundImage || satelliteReference);
     // Shapes and sketch figures lie over the frame and are picked first.

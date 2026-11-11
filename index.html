@@ -3663,12 +3663,14 @@
     const BACKGROUND_MODES = ['path', 'labels', 'preview'];
     const modeNote = document.getElementById('mode-note');
     const hideModeNote = () => { modeNote.hidden = true; };
+    // Paths can be traced over a satellite reference as well as a background.
+    const modeLocked = (mode) => BACKGROUND_MODES.includes(mode) && !backgroundImage && !(mode === 'path' && satelliteReference);
     function showModeLocks() {
       for (const button of modeButtons) {
-        if (BACKGROUND_MODES.includes(button.dataset.mode)) button.setAttribute('aria-disabled', !backgroundImage);
+        if (BACKGROUND_MODES.includes(button.dataset.mode)) button.setAttribute('aria-disabled', modeLocked(button.dataset.mode));
       }
-      if (backgroundImage) hideModeNote();
-      else if (BACKGROUND_MODES.some((mode) => document.querySelector(`#mode-menu [data-mode="${mode}"]`).getAttribute('aria-pressed') === 'true')) setMode('background');
+      if (BACKGROUND_MODES.every((mode) => !modeLocked(mode))) hideModeNote();
+      if (BACKGROUND_MODES.some((mode) => modeLocked(mode) && document.querySelector(`#mode-menu [data-mode="${mode}"]`).getAttribute('aria-pressed') === 'true')) setMode('background');
     }
     for (const button of modeButtons) {
       button.addEventListener('click', () => {
@@ -6377,7 +6379,7 @@
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
         ctx.restore();
       }
-      if (satelliteReference && satelliteReferenceOn.checked && !backgroundTools.hidden && !locationPart && !stackPart) {
+      if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
       }
       if (locationPart !== 'paths') {
@@ -11437,8 +11439,8 @@
     const preview = document.getElementById('image-preview');
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
-    // Captured from Location's satellite to draw the background over, shown
-    // in Background mode only, across the whole box.
+    // Captured from Location's satellite to draw the background and trace
+    // paths over, shown in Background and Path modes, across the whole box.
     let satelliteReference = null;
     const satelliteReferenceField = document.getElementById('satellite-reference-field');
     const satelliteReferenceOn = document.getElementById('satellite-reference-on');
@@ -11446,6 +11448,7 @@
       satelliteReference = src ? await loadImage(src) : null;
       satelliteReferenceField.hidden = !satelliteReference;
       satelliteReferenceOn.checked = true;
+      showModeLocks();
       draw();
     }
     satelliteReferenceOn.addEventListener('change', () => {

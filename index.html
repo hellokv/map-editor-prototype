@@ -11355,23 +11355,23 @@
     const mapStarts = {
       'national-zoo': {
         background: 'national-zoo-background.svg',
-        settings: { 'board-width': '675', 'board-height': '1500' },
+        settings: { 'board-width': '675', 'board-height': '1500', 'canvas-color': '#7b8365', 'board-color': '#7b8365' },
         paths: JSON.parse(document.getElementById('national-zoo-paths').textContent),
         location: { 'location-background': '0', 'mesh-spacing': '40', 'mesh-color-opacity': '25' },
         place: { turn: (-63.55 * Math.PI) / 180, scale: 1.5874 },
         satelliteOffset: { x: 102.5, y: 63.6 },
         fitSatellite: true,
       },
-      // These have no background yet; each box takes its satellite's shape,
-      // so the two line up.
+      // Each box takes its satellite's shape, so the two line up.
       'wildlife-safari': {
-        settings: { 'board-width': '1248', 'board-height': '1358' },
+        settings: { 'board-width': '1248', 'board-height': '1358', 'canvas-color': '#7b8365', 'board-color': '#7b8365' },
         location: { 'location-background': '0', 'mesh-spacing': '70', 'mesh-color-opacity': '25' },
         fitSatellite: true,
       },
       // Its box is the one its paths were drawn in, a shade off the satellite's shape.
       'bronx-zoo': {
-        settings: { 'board-width': '1987', 'board-height': '1164' },
+        background: 'bronx-zoo-background.svg',
+        settings: { 'board-width': '1987', 'board-height': '1164', 'canvas-color': '#babcbe', 'board-color': '#babcbe' },
         paths: JSON.parse(document.getElementById('bronx-zoo-paths').textContent),
         location: { 'location-background': '0', 'mesh-spacing': '110', 'mesh-color-opacity': '25' },
         fitSatellite: true,
@@ -11619,11 +11619,11 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode(START_IMAGE ? 'labels' : 'background');
-    // The editor opens on the National Zoo, lined up on its satellite. The
+    // The editor opens on the Bronx Zoo, lined up on its satellite. The
     // demo is kept as it's left, so its background must be in first.
     (async () => {
       await startImageLoaded;
-      mapExample.value = 'national-zoo';
+      mapExample.value = 'bronx-zoo';
       mapExample.dispatchEvent(new Event('change'));
       setMode('location');
     })();

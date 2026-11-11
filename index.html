@@ -11450,10 +11450,12 @@
       satelliteReferenceField.hidden = !satelliteReference;
       satelliteReferenceOn.checked = true;
       showModeLocks();
+      showPathsFromBackground();
       draw();
     }
     satelliteReferenceOn.addEventListener('change', () => {
       satelliteReferenceOn.blur();
+      showPathsFromBackground();
       draw();
     });
     document.getElementById('satellite-reference-delete').addEventListener('click', () => setSatelliteReference(null));
@@ -11827,8 +11829,17 @@
       showPathsFromBackground();
     });
     const backgroundIsSvg = () => !!backgroundImage && (svgUploads.has(backgroundImage.src) || /^data:image\/svg\+xml|\.svg(\?|$)/.test(backgroundImage.src));
+    // What Get Paths traces: the satellite reference while it shows, or
+    // when there's no background image, and where it lies on the map.
+    const traceSource = () => (satelliteReference && (satelliteReferenceOn.checked || !backgroundImage) ? satelliteReference : backgroundImage);
+    const traceSourceIsSvg = () => traceSource() === backgroundImage && backgroundIsSvg();
+    function traceArea(image) {
+      if (image === satelliteReference) return { x: 0, y: 0, w: board.w };
+      const { w, h } = backgroundSize();
+      return { x: (board.w - w) / 2, y: (board.h - h) / 2, w };
+    }
     function showPathsFromBackground() {
-      pathsFromBackground.hidden = !backgroundImage || (backgroundIsSvg() && !sample);
+      pathsFromBackground.hidden = !traceSource() || (traceSourceIsSvg() && !sample);
       if (pathsFromBackground.hidden) pathsFromBackgroundStatus.hidden = true;
     }
     const setPathsStatus = (text) => {
@@ -11918,7 +11929,7 @@
       try {
         setPathsStatus('Tracing the paths…');
         await new Promise((resolve) => setTimeout(resolve));
-        const lines = traceRasterPaths(pathColorPick.value);
+        const lines = traceRasterPaths(pathColorPick.value, traceSource());
         if (!lines.segments.length) throw new Error('nothing traced');
         recordUndo();
         paths.push(lines);
@@ -11933,8 +11944,8 @@
     });
     pathsFromBackground.addEventListener('click', async (e) => {
       e.currentTarget.blur();
-      if (!backgroundIsSvg()) {
-        setPathsStatus('Pick the colour of the paths in the background.');
+      if (!traceSourceIsSvg()) {
+        setPathsStatus(`Pick the colour of the paths in the ${traceSource() === satelliteReference ? 'satellite reference' : 'background'}.`);
         try {
           pathColorPick.showPicker();
         } catch {
@@ -12025,32 +12036,33 @@
       const rgba = c.getImageData(0, 0, W, H).data;
       const m = new Uint8Array(W * H);
       for (let i = 0; i < m.length; i++) m[i] = rgba[i * 4] > 128 ? 1 : 0;
-      return traceMask(m, W, H, S, natW, true);
+      return traceMask(m, W, H, S, natW, true, traceArea(backgroundImage));
     }
-    // The background's pixels within reach of the colour, traced as the SVG's chosen shapes are.
+    // An image's pixels within reach of the colour, traced as the SVG's chosen shapes are.
     const RASTER_COLOR_REACH = 48;
-    function traceRasterPaths(hex) {
-      const natW = backgroundImage.naturalWidth;
-      const natH = backgroundImage.naturalHeight;
+    function traceRasterPaths(hex, image) {
+      const natW = image.naturalWidth;
+      const natH = image.naturalHeight;
       const S = Math.min(2, 2400 / Math.max(natW, natH));
       const W = Math.round(natW * S);
       const H = Math.round(natH * S);
       const canvas2 = Object.assign(document.createElement('canvas'), { width: W, height: H });
       const c = canvas2.getContext('2d', { willReadFrequently: true });
-      c.drawImage(backgroundImage, 0, 0, W, H);
+      c.drawImage(image, 0, 0, W, H);
       const rgba = c.getImageData(0, 0, W, H).data;
       const [r, g, b] = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
       const m = new Uint8Array(W * H);
       for (let i = 0; i < m.length; i++) {
         m[i] = rgba[i * 4 + 3] > 128 && Math.hypot(rgba[i * 4] - r, rgba[i * 4 + 1] - g, rgba[i * 4 + 2] - b) <= RASTER_COLOR_REACH ? 1 : 0;
       }
-      return traceMask(m, W, H, S, natW, false);
+      return traceMask(m, W, H, S, natW, false, traceArea(image));
     }
-    // A mask of walkway pixels, W × H at S times the background's own size,
-    // thinned to lines a pixel wide and traced into a path in map units.
+    // A mask of walkway pixels, W × H at S times the image's own size,
+    // thinned to lines a pixel wide and traced into a path in map units,
+    // the image covering area, from its top-left and area.w wide.
     // An SVG's base layers reach its edges and walkways rarely do; in a
     // raster, walkways often run off the edge, so only vast areas go instead.
-    function traceMask(m, W, H, S, natW, dropEdges) {
+    function traceMask(m, W, H, S, natW, dropEdges, area) {
       // A square min or max filter of radius r, each way in turn.
       const filter = (src, r, pick) => {
         const tmp = new Uint8Array(src.length);
@@ -12277,13 +12289,9 @@
         }
         return fitCurves(pts, t1, t2);
       };
-      // Pixels to map units, the background drawn as large as fits in the padded box, centred.
-      const roomW = Math.max(0, board.w - 2 * board.padding);
-      const roomH = Math.max(0, board.h - 2 * board.padding);
-      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
-      const x0 = (board.w - backgroundImage.naturalWidth * s) / 2;
-      const y0 = (board.h - backgroundImage.naturalHeight * s) / 2;
-      const scale = (s * backgroundImage.naturalWidth) / (natW * S);
+      // Pixels to map units, by where the image lies on the map.
+      const { x: x0, y: y0 } = area;
+      const scale = area.w / (natW * S);
       const points = new Map();
       const pointAt = (p) => {
         const key = `${Math.round(p.x * 4)},${Math.round(p.y * 4)}`;

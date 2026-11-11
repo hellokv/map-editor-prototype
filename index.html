@@ -572,11 +572,27 @@
     :is(#frame-actions button, #frame-fits button, #fit-frame) .material-symbols-rounded {
       font-size: 18px;
     }
+    #frame-edges {
+      display: flex;
+      gap: 4px;
+    }
+    #frame-edges[hidden],
+    #frame-fits:has(#frame-edges:not([hidden])) > :is(#frame-cover, #frame-contain) {
+      display: none;
+    }
+    #frame-fits #frame-edges button {
+      width: 32px;
+      padding: 0;
+      justify-content: center;
+    }
     #set-background.setting .material-symbols-rounded {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+    #frame-snap[aria-expanded="true"] {
+      background: #333;
     }
     :is(#frame-actions button, #frame-fits button, #fit-frame) {
       display: flex;
@@ -2027,6 +2043,13 @@
     <div id="frame-fits" hidden>
       <button id="frame-cover" type="button"><span class="material-symbols-rounded">fullscreen</span>Cover</button>
       <button id="frame-contain" type="button"><span class="material-symbols-rounded">fit_screen</span>Contain</button>
+      <button id="frame-snap" type="button" aria-expanded="false"><span class="material-symbols-rounded">border_outer</span>Snap to Edge</button>
+      <span id="frame-edges" hidden>
+        <button type="button" data-edge="top" aria-label="Snap to top edge"><span class="material-symbols-rounded">border_top</span></button>
+        <button type="button" data-edge="right" aria-label="Snap to right edge"><span class="material-symbols-rounded">border_right</span></button>
+        <button type="button" data-edge="bottom" aria-label="Snap to bottom edge"><span class="material-symbols-rounded">border_bottom</span></button>
+        <button type="button" data-edge="left" aria-label="Snap to left edge"><span class="material-symbols-rounded">border_left</span></button>
+      </span>
     </div>
     <button id="fit-frame" type="button" hidden><span class="material-symbols-rounded">zoom_in_map</span>Resize to Fit</button>
     <div id="map-menu">
@@ -3705,6 +3728,32 @@
       view.scale = zoomBase;
       view.x = canvas.clientWidth / 2 - frameCentre.x * view.scale;
       view.y = canvas.clientHeight / 2 - frameCentre.y * view.scale;
+    }
+    // Snap to Edge opens out into the four edges; each pans the map, at the
+    // zoom it's at, to line that edge up with the frame's map area.
+    const frameSnap = document.getElementById('frame-snap');
+    const frameEdges = document.getElementById('frame-edges');
+    function openFrameEdges(open) {
+      frameEdges.hidden = !open;
+      frameSnap.setAttribute('aria-expanded', open);
+    }
+    frameSnap.addEventListener('click', () => {
+      frameSnap.blur();
+      openFrameEdges(frameEdges.hidden);
+    });
+    for (const button of frameEdges.querySelectorAll('button')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        const { view: area } = phoneScreen();
+        const box = boardBox();
+        const edge = button.dataset.edge;
+        if (edge === 'left') view.x = area.x - box.x * view.scale;
+        if (edge === 'right') view.x = area.x + area.w - (box.x + box.w) * view.scale;
+        if (edge === 'top') view.y = area.y - box.y * view.scale;
+        if (edge === 'bottom') view.y = area.y + area.h - (box.y + box.h) * view.scale;
+        openFrameEdges(false);
+        draw();
+      });
     }
     // Cover and Contain set Background's 100% and position to the map just
     // covering, or just fitting inside, the frame's map area, and go there.

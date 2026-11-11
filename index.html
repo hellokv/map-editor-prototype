@@ -550,22 +550,27 @@
     #canvas-area #map-menu select:hover {
       background-color: rgba(0, 0, 0, 0.06);
     }
-    :is(#set-background, #fit-frame) {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    :is(#set-background, #fit-frame)[hidden] {
-      display: none;
-    }
-    :is(#set-background, #fit-frame) .material-symbols-rounded {
-      font-size: 18px;
-    }
-    :is(#set-background, #fit-frame) {
+    /* Black buttons over the map's middle. */
+    :is(#frame-actions, #fit-frame) {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
+    }
+    #frame-actions {
+      display: flex;
+      gap: 8px;
+    }
+    :is(#frame-actions, #fit-frame)[hidden] {
+      display: none;
+    }
+    :is(#frame-actions button, #fit-frame) .material-symbols-rounded {
+      font-size: 18px;
+    }
+    :is(#frame-actions button, #fit-frame) {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       height: 32px;
       padding: 0 12px;
       color: #fff;
@@ -576,7 +581,7 @@
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    :is(#set-background, #fit-frame):hover {
+    :is(#frame-actions button, #fit-frame):hover {
       background: #333;
     }
     #resolution-low {
@@ -2005,7 +2010,11 @@
       <button id="list-yes" type="button">Yes</button>
       <button id="list-no" type="button">No</button>
     </div>
-    <button id="set-background" type="button" hidden><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
+    <div id="frame-actions" hidden>
+      <button id="frame-cover" type="button"><span class="material-symbols-rounded">fullscreen</span>Cover</button>
+      <button id="frame-contain" type="button"><span class="material-symbols-rounded">fit_screen</span>Contain</button>
+      <button id="set-background" type="button"><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
+    </div>
     <button id="fit-frame" type="button" hidden><span class="material-symbols-rounded">zoom_in_map</span>Resize to Fit</button>
     <div id="map-menu">
       <select id="map-example" aria-label="Map">
@@ -3671,13 +3680,25 @@
     });
     showFrameToggle.addEventListener('change', () => {
       showFrameToggle.blur();
-      if (showFrameToggle.checked && frameCentre) {
-        view.scale = zoomBase;
-        view.x = canvas.clientWidth / 2 - frameCentre.x * view.scale;
-        view.y = canvas.clientHeight / 2 - frameCentre.y * view.scale;
-      }
+      if (showFrameToggle.checked && frameCentre) showFrameView();
       draw();
     });
+    // The view Set Background saved: its zoom, its point at the phone's centre.
+    function showFrameView() {
+      view.scale = zoomBase;
+      view.x = canvas.clientWidth / 2 - frameCentre.x * view.scale;
+      view.y = canvas.clientHeight / 2 - frameCentre.y * view.scale;
+    }
+    // Cover and Contain set Background's 100% and position to the map just
+    // covering, or just fitting inside, the frame's map area, and go there.
+    for (const [id, cover] of [['frame-cover', true], ['frame-contain', false]]) {
+      document.getElementById(id).addEventListener('click', (e) => {
+        e.currentTarget.blur();
+        fitToFrame(cover);
+        showFrameView();
+        draw();
+      });
+    }
     const setBackgroundButton = document.getElementById('set-background');
     setBackgroundButton.addEventListener('click', () => {
       setBackgroundButton.blur();
@@ -3731,11 +3752,12 @@
       const y = (canvas.clientHeight - h) / 2;
       return { x, y, w, h, k, view: { x, y: y + FRAME_DEVICE.top * k, w, h: h - (FRAME_DEVICE.top + FRAME_DEVICE.bottom) * k } };
     }
-    // Background's 100% and frame position: the whole box just covering the
-    // frame's map area, centred in it.
-    function coverFrame() {
+    // Background's 100% and frame position: the whole box just covering, or
+    // just fitting in, the frame's map area, centred in it.
+    const coverFrame = () => fitToFrame(true);
+    function fitToFrame(cover) {
       const { view: area } = phoneScreen();
-      zoomBase = Math.max(area.w / board.w, area.h / board.h);
+      zoomBase = (cover ? Math.max : Math.min)(area.w / board.w, area.h / board.h);
       frameCentre = {
         x: board.w / 2 - (area.x + area.w / 2 - canvas.clientWidth / 2) / zoomBase,
         y: board.h / 2 - (area.y + area.h / 2 - canvas.clientHeight / 2) / zoomBase,
@@ -4844,7 +4866,7 @@
     function draw() {
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
-      setBackgroundButton.hidden = backgroundTools.hidden || !showFrameToggle.checked || frameEditing;
+      document.getElementById('frame-actions').hidden = backgroundTools.hidden || !showFrameToggle.checked || frameEditing;
       showFitFrameButton();
       if (!backgroundTools.hidden) showMinResolution();
       // Under Automatic, names the layers the current zoom shows.

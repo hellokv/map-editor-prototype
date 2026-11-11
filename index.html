@@ -11695,7 +11695,17 @@
       const url = URL.createObjectURL(file);
       if (file.type === 'image/svg+xml') svgUploads.add(url);
       setBackgroundImage(url).then(() => {
-        if (noMode && backgroundImage) setMode('background');
+        if (!backgroundImage || backgroundImage.src !== url) return;
+        // An uploaded image sets the map's box to its own pixel size.
+        for (const [id, value] of [['board-width', backgroundImage.naturalWidth], ['board-height', backgroundImage.naturalHeight]]) {
+          const input = document.getElementById(id);
+          input.value = value;
+          input.dispatchEvent(new Event('input'));
+        }
+        if (noMode) setMode('background');
+        // Leaving the blank state brings the panel back, narrowing the canvas;
+        // the fit waits until that resize has been taken in.
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('fit-button').click()));
       });
     });
     // Upload a map first says what makes a good background, then picks the file.

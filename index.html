@@ -1778,14 +1778,14 @@
     </div>
     <div id="mode-menu">
       <div class="menu-card">
+      <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
+        <span class="material-symbols-rounded">image</span>
+      </button>
       <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
         <span class="material-symbols-rounded">label</span>
       </button>
       <button type="button" data-mode="path" aria-label="Paths" aria-pressed="true">
         <span class="material-symbols-rounded">route</span>
-      </button>
-      <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
-        <span class="material-symbols-rounded">image</span>
       </button>
       <button type="button" data-mode="location" aria-label="Location" aria-pressed="false">
         <span class="material-symbols-rounded">my_location</span>
@@ -12103,11 +12103,11 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode(START_IMAGE ? 'labels' : 'background');
-    // The editor opens on the Bronx Zoo, lined up on its satellite. The
+    // The editor opens on the Wildlife Safari, lined up on its satellite. The
     // demo is kept as it's left, so its background must be in first.
     (async () => {
       await startImageLoaded;
-      mapExample.value = 'bronx-zoo';
+      mapExample.value = 'wildlife-safari';
       mapExample.dispatchEvent(new Event('change'));
       setMode('location');
     })();

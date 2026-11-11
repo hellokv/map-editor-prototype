@@ -544,22 +544,23 @@
     #canvas-area #map-menu select:hover {
       background-color: rgba(0, 0, 0, 0.06);
     }
-    #reset-zoom {
+    #set-background {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       height: 32px;
       padding: 0 12px;
-      background: #fff;
+      color: #fff;
+      background: #000;
       border: none;
       border-radius: 8px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    #reset-zoom:hover {
-      background: #f0f0f0;
+    #set-background:hover {
+      background: #333;
     }
     #mode-menu {
       position: absolute;
@@ -1832,7 +1833,7 @@
       <button id="list-yes" type="button">Yes</button>
       <button id="list-no" type="button">No</button>
     </div>
-    <button id="reset-zoom" type="button" hidden>Reset Zoom Level</button>
+    <button id="set-background" type="button" hidden>Set Background</button>
     <div id="map-menu">
       <select id="map-example" aria-label="Map">
         <option value="demo">Demo</option>
@@ -3438,12 +3439,18 @@
     const showFrameToggle = document.getElementById('background-show-frame');
     showFrameToggle.addEventListener('change', () => {
       showFrameToggle.blur();
+      if (showFrameToggle.checked && frameCentre) {
+        view.scale = zoomBase;
+        view.x = canvas.clientWidth / 2 - frameCentre.x * view.scale;
+        view.y = canvas.clientHeight / 2 - frameCentre.y * view.scale;
+      }
       draw();
     });
-    const resetZoomButton = document.getElementById('reset-zoom');
-    resetZoomButton.addEventListener('click', () => {
-      resetZoomButton.blur();
+    const setBackgroundButton = document.getElementById('set-background');
+    setBackgroundButton.addEventListener('click', () => {
+      setBackgroundButton.blur();
       zoomBase = view.scale;
+      frameCentre = { x: (canvas.clientWidth / 2 - view.x) / view.scale, y: (canvas.clientHeight / 2 - view.y) / view.scale };
       draw();
     });
     function drawPhoneFrame() {
@@ -4358,8 +4365,10 @@
     let captureDrag = null;
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
-    // The view scale the map counts as 100%, which Reset Zoom Level moves.
+    // The view scale the map counts as 100%, which Set Background moves.
     let zoomBase = 1;
+    // The map point Set Background put at the phone frame's centre.
+    let frameCentre = null;
     const zoomLevel = () => view.scale / zoomBase;
 
     const canvas = document.getElementById('canvas');
@@ -4500,7 +4509,7 @@
     function draw() {
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
-      resetZoomButton.hidden = backgroundTools.hidden || !showFrameToggle.checked;
+      setBackgroundButton.hidden = backgroundTools.hidden || !showFrameToggle.checked;
       // Under Automatic, names the layers the current zoom shows.
       autoLayers.hidden = layerSelect.value !== 'Automatic' || inPreview();
       if (!autoLayers.hidden) {
@@ -11449,6 +11458,7 @@
         },
         layerZoom,
         zoomBase,
+        frameCentre,
         settings,
       };
       file.images = await Promise.all(images.map(imageData));
@@ -11469,6 +11479,7 @@
       const images = await Promise.all((file.images ?? []).map(loadImage));
       loadPaths(file);
       zoomBase = file.zoomBase ?? 1;
+      frameCentre = file.frameCentre ?? null;
       // Files from before icon styles keep each label style's icon settings
       // as an icon style of the same id, which its labels then use.
       const separateIcons = !!file.iconStyles;

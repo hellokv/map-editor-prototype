@@ -2761,6 +2761,10 @@
           Resolution
           <output id="background-resolution"></output>
         </div>
+        <div class="field">
+          Min Resolution
+          <output id="background-min-resolution"></output>
+        </div>
         <label class="field">
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">
@@ -3451,6 +3455,26 @@
       frameCentre = { x: (canvas.clientWidth / 2 - view.x) / view.scale, y: (canvas.clientHeight / 2 - view.y) / view.scale };
       draw();
     });
+    // The pixels a background needs to stay sharp at its deepest zoom on a phone.
+    const MIN_RESOLUTION_ZOOM = 3;
+    const PHONE_PIXEL_DENSITY = 3;
+    const minResolutionField = document.getElementById('background-min-resolution');
+    // The frame draws a phone point as deviceScale() canvas pixels, so at
+    // 100% a map unit is zoomBase / deviceScale() points on the phone.
+    function showMinResolution() {
+      const perUnit = (zoomBase / deviceScale()) * MIN_RESOLUTION_ZOOM * PHONE_PIXEL_DENSITY;
+      if (!backgroundImage) return;
+      const { w, h } = backgroundSize();
+      minResolutionField.value = `${Math.round(w * perUnit)} × ${Math.round(h * perUnit)}`;
+    }
+    // The background image on the map: as large as fits inside the padded
+    // box, never stretched.
+    function backgroundSize() {
+      const roomW = Math.max(0, board.w - 2 * board.padding);
+      const roomH = Math.max(0, board.h - 2 * board.padding);
+      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
+      return { w: backgroundImage.naturalWidth * s, h: backgroundImage.naturalHeight * s };
+    }
     function drawPhoneFrame() {
       const k = deviceScale();
       const dpr = window.devicePixelRatio || 1;
@@ -4508,6 +4532,7 @@
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       setBackgroundButton.hidden = backgroundTools.hidden || !showFrameToggle.checked;
+      if (!backgroundTools.hidden) showMinResolution();
       // Under Automatic, names the layers the current zoom shows.
       autoLayers.hidden = layerSelect.value !== 'Automatic' || inPreview();
       if (!autoLayers.hidden) {
@@ -6265,13 +6290,8 @@
       if (!noBackground) ctx.fill(boardShape());
       ctx.restore();
       if (backgroundImage && !noBackground) {
-        // As large as fits inside the padded box, centred, never stretched,
-        // and cut to the box's rounded corners.
-        const roomW = Math.max(0, board.w - 2 * board.padding);
-        const roomH = Math.max(0, board.h - 2 * board.padding);
-        const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
-        const w = backgroundImage.naturalWidth * s;
-        const h = backgroundImage.naturalHeight * s;
+        // Centred, and cut to the box's rounded corners.
+        const { w, h } = backgroundSize();
         ctx.save();
         ctx.clip(boardShape());
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);

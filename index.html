@@ -557,17 +557,28 @@
       left: 50%;
       transform: translate(-50%, -50%);
     }
-    #frame-actions {
+    /* In the phone's bottom bezel, placed from the script. */
+    #frame-fits {
+      position: absolute;
+      transform: translate(-50%, -50%);
+    }
+    :is(#frame-actions, #frame-fits) {
       display: flex;
       gap: 8px;
     }
-    :is(#frame-actions, #fit-frame)[hidden] {
+    :is(#frame-actions, #frame-fits, #fit-frame)[hidden] {
       display: none;
     }
-    :is(#frame-actions button, #fit-frame) .material-symbols-rounded {
+    :is(#frame-actions button, #frame-fits button, #fit-frame) .material-symbols-rounded {
       font-size: 18px;
     }
-    :is(#frame-actions button, #fit-frame) {
+    #set-background.setting .material-symbols-rounded {
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    :is(#frame-actions button, #frame-fits button, #fit-frame) {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -581,7 +592,7 @@
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    :is(#frame-actions button, #fit-frame):hover {
+    :is(#frame-actions button, #frame-fits button, #fit-frame):hover {
       background: #333;
     }
     #resolution-low {
@@ -2011,9 +2022,11 @@
       <button id="list-no" type="button">No</button>
     </div>
     <div id="frame-actions" hidden>
+      <button id="set-background" type="button"><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
+    </div>
+    <div id="frame-fits" hidden>
       <button id="frame-cover" type="button"><span class="material-symbols-rounded">fullscreen</span>Cover</button>
       <button id="frame-contain" type="button"><span class="material-symbols-rounded">fit_screen</span>Contain</button>
-      <button id="set-background" type="button"><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
     </div>
     <button id="fit-frame" type="button" hidden><span class="material-symbols-rounded">zoom_in_map</span>Resize to Fit</button>
     <div id="map-menu">
@@ -3704,8 +3717,36 @@
       setBackgroundButton.blur();
       zoomBase = view.scale;
       frameCentre = { x: (canvas.clientWidth / 2 - view.x) / view.scale, y: (canvas.clientHeight / 2 - view.y) / view.scale };
+      // A moment's spinner, then a check that stays until the view moves off what was set.
+      showSetState('setting');
+      setTimeout(() => {
+        if (setBackgroundButton.dataset.state === 'setting') showSetState('set');
+      }, 500);
       draw();
     });
+    const SET_ICONS = { setting: 'progress_activity', set: 'check' };
+    function showSetState(state) {
+      const button = document.getElementById('set-background');
+      button.dataset.state = state;
+      button.classList.toggle('setting', state === 'setting');
+      button.firstElementChild.textContent = SET_ICONS[state] ?? 'wallpaper';
+    }
+    function atSetView() {
+      if (!frameCentre) return false;
+      const centre = { x: (canvas.clientWidth / 2 - view.x) / view.scale, y: (canvas.clientHeight / 2 - view.y) / view.scale };
+      return Math.abs(view.scale / zoomBase - 1) < 1e-6 && Math.hypot(centre.x - frameCentre.x, centre.y - frameCentre.y) * view.scale < 0.5;
+    }
+    // Cover and Contain sit in the phone's bottom bezel whenever the frame shows.
+    function showFrameButtons() {
+      const fits = document.getElementById('frame-fits');
+      fits.hidden = backgroundTools.hidden || !showFrameToggle.checked;
+      if (!fits.hidden) {
+        const { x, y, w, h, view: area } = phoneScreen();
+        fits.style.left = `${canvas.offsetLeft + x + w / 2}px`;
+        fits.style.top = `${canvas.offsetTop + (area.y + area.h + y + h) / 2}px`;
+      }
+      if (document.getElementById('set-background').dataset.state === 'set' && !atSetView()) showSetState('');
+    }
     // The pixels a background needs to stay sharp at its deepest zoom on a phone.
     const MIN_RESOLUTION_ZOOM = 3;
     const PHONE_PIXEL_DENSITY = 3;
@@ -4867,6 +4908,7 @@
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
       document.getElementById('frame-actions').hidden = backgroundTools.hidden || !showFrameToggle.checked || frameEditing;
+      showFrameButtons();
       showFitFrameButton();
       if (!backgroundTools.hidden) showMinResolution();
       // Under Automatic, names the layers the current zoom shows.

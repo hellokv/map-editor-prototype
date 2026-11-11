@@ -11963,19 +11963,83 @@
         for (const { a, b } of kept) for (const n of [a, b]) degree.set(n, (degree.get(n) ?? 0) + 1);
         kept = kept.filter(({ a, b, run }) => !((degree.get(a) === 1 || degree.get(b) === 1) && lengthOf(run) < 12 * S));
       }
-      // Each run straightened to within a pixel and a half, Douglas-Peucker.
-      const simplify = (pts) => {
-        if (pts.length < 3) return pts;
-        const [a, b] = [pts[0], pts[pts.length - 1]];
-        const L = Math.hypot(b.x - a.x, b.y - a.y);
+      // Each run as few cubic curves as stay within two pixels of it (Schneider's
+      // fit), the pixel staircase smoothed first. Ends are kept where they are.
+      const smooth = (pts) => pts.map((p, k) => {
+        if (k === 0 || k === pts.length - 1) return p;
+        const near2 = pts.slice(Math.max(0, k - 3), k + 4);
+        return { x: near2.reduce((t, q) => t + q.x, 0) / near2.length, y: near2.reduce((t, q) => t + q.y, 0) / near2.length };
+      });
+      const unitOf = (x, y) => {
+        const L = Math.hypot(x, y) || 1;
+        return { x: x / L, y: y / L };
+      };
+      const fitCurves = (pts, t1, t2) => {
+        const n = pts.length;
+        const first = pts[0];
+        const last = pts[n - 1];
+        const u = [0];
+        for (let k = 1; k < n; k++) u.push(u[k - 1] + Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y));
+        const total = u[n - 1] || 1;
+        for (let k = 0; k < n; k++) u[k] /= total;
+        // Least-squares lengths for the two handles along their tangents.
+        let c00 = 0, c01 = 0, c11 = 0, x0b = 0, x1b = 0;
+        for (let k = 0; k < n; k++) {
+          const t = u[k];
+          const b0 = (1 - t) ** 3, b1 = 3 * t * (1 - t) ** 2, b2 = 3 * t * t * (1 - t), b3 = t ** 3;
+          const A1 = { x: t1.x * b1, y: t1.y * b1 };
+          const A2 = { x: t2.x * b2, y: t2.y * b2 };
+          c00 += A1.x * A1.x + A1.y * A1.y;
+          c01 += A1.x * A2.x + A1.y * A2.y;
+          c11 += A2.x * A2.x + A2.y * A2.y;
+          const rx = pts[k].x - (first.x * (b0 + b1) + last.x * (b2 + b3));
+          const ry = pts[k].y - (first.y * (b0 + b1) + last.y * (b2 + b3));
+          x0b += A1.x * rx + A1.y * ry;
+          x1b += A2.x * rx + A2.y * ry;
+        }
+        const det = c00 * c11 - c01 * c01;
+        const chord = Math.hypot(last.x - first.x, last.y - first.y) || total;
+        let l1 = det ? (x0b * c11 - c01 * x1b) / det : chord / 3;
+        let l2 = det ? (c00 * x1b - c01 * x0b) / det : chord / 3;
+        if (!(l1 > chord * 1e-3) || !(l2 > chord * 1e-3) || l1 > total || l2 > total) l1 = l2 = chord / 3;
+        const c1 = { x: first.x + t1.x * l1, y: first.y + t1.y * l1 };
+        const c2 = { x: last.x + t2.x * l2, y: last.y + t2.y * l2 };
         let worst = 0;
-        let at2 = 0;
-        pts.forEach((p, k) => {
-          // A loop's ends meet, so its farthest point from them splits it.
-          const d = L ? Math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / L : Math.hypot(p.x - a.x, p.y - a.y);
-          if (d > worst) [worst, at2] = [d, k];
-        });
-        return worst > 0.8 * S ? [...simplify(pts.slice(0, at2 + 1)).slice(0, -1), ...simplify(pts.slice(at2))] : [a, b];
+        let split = 0;
+        for (let k = 1; k < n - 1; k++) {
+          const t = u[k];
+          const q = {
+            x: (1 - t) ** 3 * first.x + 3 * t * (1 - t) ** 2 * c1.x + 3 * t * t * (1 - t) * c2.x + t ** 3 * last.x,
+            y: (1 - t) ** 3 * first.y + 3 * t * (1 - t) ** 2 * c1.y + 3 * t * t * (1 - t) * c2.y + t ** 3 * last.y,
+          };
+          const d = Math.hypot(q.x - pts[k].x, q.y - pts[k].y);
+          if (d > worst) [worst, split] = [d, k];
+        }
+        if (worst <= 2 * S || n < 8) return [{ from: first, to: last, c1, c2 }];
+        split = Math.min(n - 4, Math.max(3, split));
+        const mid = unitOf(pts[split + 1].x - pts[split - 1].x, pts[split + 1].y - pts[split - 1].y);
+        return [...fitCurves(pts.slice(0, split + 1), t1, { x: -mid.x, y: -mid.y }), ...fitCurves(pts.slice(split), mid, t2)];
+      };
+      // A curve whose handles lie on its chord is drawn as a straight segment.
+      const isStraight = ({ from, to, c1, c2 }) => {
+        const L = Math.hypot(to.x - from.x, to.y - from.y);
+        const off = (p) => Math.abs((to.x - from.x) * (from.y - p.y) - (from.x - p.x) * (to.y - from.y)) / L;
+        return L > 0 && off(c1) < 1.5 * S && off(c2) < 1.5 * S;
+      };
+      const curvesOf = (raw) => {
+        const pts = smooth(raw);
+        const n = pts.length;
+        if (n < 3) return [{ from: pts[0], to: pts[n - 1], c1: pts[0], c2: pts[n - 1] }];
+        const reach = Math.min(n - 1, 6);
+        const t1 = unitOf(pts[reach].x - pts[0].x, pts[reach].y - pts[0].y);
+        const t2 = unitOf(pts[n - 1 - reach].x - pts[n - 1].x, pts[n - 1 - reach].y - pts[n - 1].y);
+        // A loop's ends meet, so it's fitted as two halves.
+        if (Math.hypot(pts[n - 1].x - pts[0].x, pts[n - 1].y - pts[0].y) < 2 * S && n >= 16) {
+          const half = n >> 1;
+          const mid = unitOf(pts[half + 1].x - pts[half - 1].x, pts[half + 1].y - pts[half - 1].y);
+          return [...fitCurves(pts.slice(0, half + 1), t1, { x: -mid.x, y: -mid.y }), ...fitCurves(pts.slice(half), mid, t2)];
+        }
+        return fitCurves(pts, t1, t2);
       };
       // Pixels to map units, the background drawn as large as fits in the padded box, centred.
       const roomW = Math.max(0, board.w - 2 * board.padding);
@@ -11993,10 +12057,12 @@
       const segments = new Map();
       for (const { a, b, run } of kept) {
         const pts = [nodes[a], ...run.slice(1, -1).map((i) => ({ x: i % W, y: (i / W) | 0 })), nodes[b]];
-        const line = simplify(pts).map(pointAt);
-        for (let k = 0; k < line.length - 1; k++) {
-          if (line[k] === line[k + 1]) continue;
-          segments.set([line[k], line[k + 1]].map((p) => `${p.x},${p.y}`).sort().join('|'), [line[k], line[k + 1]]);
+        for (const curve of curvesOf(pts)) {
+          const [from, to] = [pointAt(curve.from), pointAt(curve.to)];
+          if (from === to) continue;
+          const toMap = (p) => ({ x: x0 + p.x * scale, y: y0 + p.y * scale });
+          const key = [from, to].map((p) => `${p.x},${p.y}`).sort().join('|') + (isStraight(curve) ? '' : `|${Math.round(curve.c1.x)},${Math.round(curve.c1.y)}`);
+          segments.set(key, isStraight(curve) ? [from, to] : [from, to, toMap(curve.c1), toMap(curve.c2)]);
         }
       }
       // Only the network with the most length is kept; anything not joined to it is noise.

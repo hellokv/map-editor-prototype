@@ -12934,6 +12934,7 @@
     // box's corner is the map's origin, so nothing shifts on screen.
     const FRAME_MIN_SIZE = 100;
     const FRAME_HANDLE_REACH = 8;
+    const FRAME_SNAP = 8;
     const FRAME_CURSORS = { move: 'move', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize' };
     const editFrameButton = document.getElementById('edit-frame');
     function setFrameEditing(on) {
@@ -13005,7 +13006,7 @@
     function setBoardSize(w, h) {
       for (const [id, value] of [['board-width', w], ['board-height', h]]) {
         const input = document.getElementById(id);
-        input.value = Math.round(value);
+        input.value = value;
         input.dispatchEvent(new Event('input'));
       }
     }
@@ -13016,30 +13017,40 @@
       e.stopImmediatePropagation();
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
-      frameDrag = { part, x: e.clientX, y: e.clientY };
+      const edges = backgroundImage ? backgroundRect() : satelliteReference ? satelliteRect() : null;
+      frameDrag = { part, x: e.clientX, y: e.clientY, start: { w: board.w, h: board.h, viewX: view.x, viewY: view.y }, shifted: { x: 0, y: 0 }, edges };
     }, { capture: true });
     window.addEventListener('pointermove', (e) => {
       if (!frameDrag) return;
       const dx = (e.clientX - frameDrag.x) / view.scale;
       const dy = (e.clientY - frameDrag.y) / view.scale;
       const { part } = frameDrag;
+      // A move follows the pointer step by step; a resize goes by the whole drag from its start.
       if (part === 'move') {
         translateContent(dx, dy);
         frameDrag.x = e.clientX;
         frameDrag.y = e.clientY;
       } else {
-        const grow = (size, by) => Math.max(FRAME_MIN_SIZE, Math.round(size + by));
-        const w = part.includes('e') ? grow(board.w, dx) : part.includes('w') ? grow(board.w, -dx) : board.w;
-        const h = part.includes('s') ? grow(board.h, dy) : part.includes('n') ? grow(board.h, -dy) : board.h;
-        const ox = part.includes('w') ? board.w - w : 0;
-        const oy = part.includes('n') ? board.h - h : 0;
-        translateContent(-ox, -oy);
-        view.x += ox * view.scale;
-        view.y += oy * view.scale;
-        // Sizes are whole units, so the pointer is followed only as far as the box moved.
-        frameDrag.x += (part.includes('w') ? ox : w - board.w) * view.scale;
-        frameDrag.y += (part.includes('n') ? oy : h - board.h) * view.scale;
-        setBoardSize(w, h);
+        // The box's edges, in the map's units as they were when the drag
+        // began, follow the pointer and snap to the background's edges.
+        const { start, edges } = frameDrag;
+        const reach = FRAME_SNAP / view.scale;
+        const snap = (value, targets) => {
+          const near = targets.filter((t) => Math.abs(t - value) <= reach).sort((a, b) => Math.abs(a - value) - Math.abs(b - value));
+          return near.length ? near[0] : value;
+        };
+        const xs = edges ? [edges.x, edges.x + edges.w] : [];
+        const ys = edges ? [edges.y, edges.y + edges.h] : [];
+        let [left, right, top, bottom] = [0, start.w, 0, start.h];
+        if (part.includes('w')) left = Math.min(snap(dx, xs), start.w - FRAME_MIN_SIZE);
+        if (part.includes('e')) right = Math.max(snap(start.w + dx, xs), FRAME_MIN_SIZE);
+        if (part.includes('n')) top = Math.min(snap(dy, ys), start.h - FRAME_MIN_SIZE);
+        if (part.includes('s')) bottom = Math.max(snap(start.h + dy, ys), FRAME_MIN_SIZE);
+        translateContent(-left - frameDrag.shifted.x, -top - frameDrag.shifted.y);
+        frameDrag.shifted = { x: -left, y: -top };
+        view.x = start.viewX + left * view.scale;
+        view.y = start.viewY + top * view.scale;
+        setBoardSize(right - left, bottom - top);
       }
       draw();
     });

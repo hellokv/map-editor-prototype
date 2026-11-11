@@ -666,6 +666,53 @@
     }
     /* Slides off the right edge as the canvas widens into its place; it
        becomes invisible only once it's out of sight. */
+    #panel.blank {
+      display: none;
+    }
+    #blank-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 16px;
+      pointer-events: none;
+    }
+    #blank-state[hidden] {
+      display: none;
+    }
+    #blank-state button {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      width: 260px;
+      padding: 20px;
+      border: none;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      color: #000;
+      font: 13px/1.4 'National Park', system-ui, sans-serif;
+      text-align: left;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    #blank-state button:hover {
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+    }
+    #blank-state .material-symbols-rounded {
+      font-size: 28px;
+      font-variation-settings: 'wght' 300, 'opsz' 24;
+    }
+    #blank-state strong {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    #blank-state span:last-child {
+      color: #555;
+    }
     #panel.closed {
       margin-right: -300px;
       visibility: hidden;
@@ -1981,6 +2028,18 @@
     <div id="mode-note" hidden>
       <span></span>
       <button type="button">Add Background</button>
+    </div>
+    <div id="blank-state" hidden>
+      <button id="blank-upload" type="button">
+        <span class="material-symbols-rounded">map</span>
+        <strong>Upload your own map</strong>
+        <span>Start from an illustrated map of your park, then trace its paths and place labels over it.</span>
+      </button>
+      <button id="blank-satellite" type="button">
+        <span class="material-symbols-rounded">satellite_alt</span>
+        <strong>Start from satellite view</strong>
+        <span>Find your park from above, capture it, and download a template to draw your map over.</span>
+      </button>
     </div>
     <button id="panel-open" type="button" aria-label="Open panel" hidden><span class="material-symbols-rounded">right_panel_open</span></button>
     <span id="auto-layers" hidden></span>
@@ -3638,7 +3697,16 @@
 
     // Preview takes over the view and the layer, and gives both back after.
     let beforePreview = null;
+    // With nothing to work over yet, no mode is chosen: the panel and view
+    // menu go, and the canvas offers the two ways to start instead.
+    let noMode = false;
+    const mapIsBlank = () => !backgroundImage && !satelliteReference;
+    const currentMode = () => document.querySelector('#mode-menu [data-mode][aria-pressed="true"]')?.dataset.mode ?? null;
     function setMode(mode) {
+      noMode = !mode;
+      document.getElementById('panel').classList.toggle('blank', noMode);
+      document.getElementById('blank-state').hidden = !noMode;
+      if (noMode) document.getElementById('panel-open').hidden = true;
       if (mode === 'preview' && !inPreview()) {
         setSplit(false);
         beforePreview = { view: { ...view }, layer: layerSelect.value };
@@ -3650,7 +3718,7 @@
         setSplit(splitOn());
       }
       showViewMenu();
-      document.getElementById('view-menu').hidden = mode === 'preview';
+      document.getElementById('view-menu').hidden = mode === 'preview' || noMode;
       for (const button of modeButtons) {
         button.setAttribute('aria-pressed', button.dataset.mode === mode);
       }
@@ -3699,7 +3767,7 @@
         if (BACKGROUND_MODES.includes(button.dataset.mode)) button.setAttribute('aria-disabled', modeLocked(button.dataset.mode));
       }
       if (BACKGROUND_MODES.every((mode) => !modeLocked(mode))) hideModeNote();
-      if (BACKGROUND_MODES.some((mode) => modeLocked(mode) && document.querySelector(`#mode-menu [data-mode="${mode}"]`).getAttribute('aria-pressed') === 'true')) setMode('background');
+      if (BACKGROUND_MODES.some((mode) => modeLocked(mode) && currentMode() === mode)) setMode(mapIsBlank() ? null : 'background');
     }
     for (const button of modeButtons) {
       button.addEventListener('click', () => {
@@ -6401,6 +6469,7 @@
         ctx.fillStyle = colorOf(canvasColor);
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       }
+      if (noMode) return;
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
@@ -11544,7 +11613,14 @@
       if (!file) return;
       const url = URL.createObjectURL(file);
       if (file.type === 'image/svg+xml') svgUploads.add(url);
-      setBackgroundImage(url);
+      setBackgroundImage(url).then(() => {
+        if (noMode && backgroundImage) setMode('background');
+      });
+    });
+    document.getElementById('blank-upload').addEventListener('click', () => upload.click());
+    document.getElementById('blank-satellite').addEventListener('click', () => {
+      setMode('location');
+      if (!capture) captureButton.click();
     });
 
     // The editor opens on labelling a map that has a background, and on
@@ -12598,6 +12674,9 @@
         fitSatellite();
         draw();
       }
+      if (mapIsBlank() && currentMode() !== 'location') setMode(null);
+      else if (!mapIsBlank() && noMode) setMode('background');
+      draw();
     }
     // Capture Background: a rectangle drawn over the satellite, in location
     // units so it stays on it as the view moves, is taken at 100% as the
@@ -12765,7 +12844,6 @@
       await startImageLoaded;
       mapExample.value = 'wildlife-safari';
       mapExample.dispatchEvent(new Event('change'));
-      setMode('location');
     })();
   </script>
 </body>

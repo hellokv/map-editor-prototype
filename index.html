@@ -11704,8 +11704,11 @@
         }
         if (noMode) setMode('background');
         // Leaving the blank state brings the panel back, narrowing the canvas;
-        // the fit waits until that resize has been taken in.
-        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('fit-button').click()));
+        // the frame cover and the fit wait until that resize has been taken in.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          coverFrame();
+          document.getElementById('fit-button').click();
+        }));
       });
     });
     // Upload a map first says what makes a good background, then picks the file.

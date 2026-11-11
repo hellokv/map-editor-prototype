@@ -2479,7 +2479,7 @@
     </div>
     <div id="location-panel" hidden>
       <div class="label-section">
-        <label class="field">
+        <label class="field" hidden>
           Background
           <span class="slider"><span class="percent-field"><input id="location-background" type="number" min="0" max="100" step="1" value="100"></span><input type="range" min="0" max="100" step="1" value="100" aria-label="Background opacity"></span>
         </label>
@@ -11205,6 +11205,7 @@
     const preview = document.getElementById('image-preview');
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
+    const locationBackgroundField = document.getElementById('location-background').closest('.field');
 
     // Loads finish out of order, so only the latest asked for is shown.
     let backgroundRequest = 0;
@@ -11218,6 +11219,7 @@
             previewImg.src = img.src;
             upload.closest('.field').hidden = true;
             preview.hidden = false;
+            locationBackgroundField.hidden = false;
             draw();
           }
           resolve();
@@ -11249,6 +11251,7 @@
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
+      locationBackgroundField.hidden = true;
       upload.closest('.field').hidden = false;
       draw();
     }

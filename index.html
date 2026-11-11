@@ -2954,6 +2954,7 @@
             <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
           </label>
         </div>
+        <button id="edit-frame" class="new-style" type="button" aria-pressed="false">Edit Inner Frame<span class="material-symbols-rounded">crop_free</span></button>
         <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
         <div class="field">
@@ -3679,16 +3680,24 @@
       minResolutionField.value = `${min.w} × ${min.h}`;
       document.getElementById('resolution-low').hidden = !backgroundImage || backgroundIsSvg() || (backgroundImage.naturalWidth >= min.w && backgroundImage.naturalHeight >= min.h);
     }
-    // What the background covers: its image, or before one, the whole box.
-    const templateSize = () => (backgroundImage ? backgroundSize() : { w: board.w, h: board.h });
-    // The background image on the map: as large as fits inside the padded
-    // box, never stretched.
-    function backgroundSize() {
+    // Where the background image and satellite reference lie on the map.
+    // Until the inner frame is edited, the image is as large as fits inside
+    // the padded box, centred and never stretched, and the reference fills it.
+    let backgroundPlace = null;
+    let satellitePlace = null;
+    function backgroundRect() {
+      if (backgroundPlace) return { ...backgroundPlace };
       const roomW = Math.max(0, board.w - 2 * board.padding);
       const roomH = Math.max(0, board.h - 2 * board.padding);
       const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
-      return { w: backgroundImage.naturalWidth * s, h: backgroundImage.naturalHeight * s };
+      const w = backgroundImage.naturalWidth * s;
+      const h = backgroundImage.naturalHeight * s;
+      return { x: (board.w - w) / 2, y: (board.h - h) / 2, w, h };
     }
+    const backgroundSize = backgroundRect;
+    const satelliteRect = () => (satellitePlace ? { ...satellitePlace } : { x: 0, y: 0, w: board.w, h: board.h });
+    // What the background covers: its image, or before one, the whole box.
+    const templateSize = () => (backgroundImage ? backgroundRect() : { x: 0, y: 0, w: board.w, h: board.h });
     // The frame's screen on the canvas, and the part of it left to the map.
     function phoneScreen() {
       const k = deviceScale();
@@ -3773,6 +3782,7 @@
     const mapIsBlank = () => !backgroundImage && !satelliteReference;
     const currentMode = () => document.querySelector('#mode-menu [data-mode][aria-pressed="true"]')?.dataset.mode ?? null;
     function setMode(mode) {
+      if (mode !== 'background' && frameEditing) setFrameEditing(false);
       noMode = !mode;
       document.getElementById('panel').classList.toggle('blank', noMode);
       document.getElementById('blank-state').hidden = !noMode;
@@ -4628,6 +4638,9 @@
     let captureDrag = null;
     // Autodetect Paths' picked colours while it's picking them.
     let autodetect = null;
+    // Edit Inner Frame: on while the box's edges and the background move by hand.
+    let frameEditing = false;
+    let frameDrag = null;
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
     // Background's Scale: how large everything on the map is drawn about its
@@ -6561,14 +6574,18 @@
       ctx.restore();
       if (backgroundImage && !noBackground) {
         // Centred, and cut to the box's rounded corners.
-        const { w, h } = backgroundSize();
+        const { x, y, w, h } = backgroundRect();
         ctx.save();
         ctx.clip(boardShape());
-        ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
+        ctx.drawImage(backgroundImage, x, y, w, h);
         ctx.restore();
       }
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
-        ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
+        const r = satelliteRect();
+        ctx.save();
+        ctx.clip(boardShape());
+        ctx.drawImage(satelliteReference, r.x, r.y, r.w, r.h);
+        ctx.restore();
       }
       if (locationPart !== 'paths') {
         drawShapes();
@@ -6609,6 +6626,7 @@
           drawSketch();
           drawShapeSelection();
           if (showFrameToggle.checked) drawPhoneFrame();
+          if (frameEditing) drawFrameHandles();
         }
         if (!modePanels.preview.hidden) drawDeviceFrame();
         drawMarquee();
@@ -10706,6 +10724,13 @@
         canvas.style.cursor = 'crosshair';
         return;
       }
+      if (frameEditing && !spaceHeld && (frameDrag || pointer)) {
+        const part = frameDrag?.part ?? frameHandleAt(pointer);
+        if (part) {
+          canvas.style.cursor = FRAME_CURSORS[part];
+          return;
+        }
+      }
       let boxPart = inLocation() && !spaceHeld && (drag?.mapBox ?? (pointer && !drag && mapBoxAt(pointer)?.part));
       if (boxPart === 'scale' && !drag && commandHeld) boxPart = 'turn';
       if (boxPart === 'turn' || boxPart === 'scale') {
@@ -11696,6 +11721,7 @@
       if (file.type === 'image/svg+xml') svgUploads.add(url);
       setBackgroundImage(url).then(() => {
         if (!backgroundImage || backgroundImage.src !== url) return;
+        backgroundPlace = null;
         // An uploaded image sets the map's box to its own pixel size.
         for (const [id, value] of [['board-width', backgroundImage.naturalWidth], ['board-height', backgroundImage.naturalHeight]]) {
           const input = document.getElementById(id);
@@ -11737,6 +11763,7 @@
     if (START_IMAGE) loadPaths(JSON.parse(document.getElementById('starter-paths').textContent));
 
     function clearBackgroundImage() {
+      if (frameEditing) setFrameEditing(false);
       if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundRequest++;
       backgroundImage = null;
@@ -11823,6 +11850,8 @@
         layerZoom,
         zoomBase,
         frameCentre,
+        backgroundPlace,
+        satellitePlace,
         settings,
       };
       file.images = await Promise.all(images.map(imageData));
@@ -11844,6 +11873,8 @@
       const images = await Promise.all((file.images ?? []).map(loadImage));
       loadPaths(file);
       zoomBase = file.zoomBase ?? 1;
+      backgroundPlace = file.backgroundPlace ?? null;
+      satellitePlace = file.satellitePlace ?? null;
       frameCentre = file.frameCentre ?? null;
       // Files from before icon styles keep each label style's icon settings
       // as an icon style of the same id, which its labels then use.
@@ -11945,10 +11976,10 @@
       templateButton.setAttribute('aria-expanded', !templateFormats.hidden);
     });
     function templateGeometry() {
-      const { w, h } = templateSize();
+      const { x, y, w, h } = templateSize();
       const perUnit = minResolutionPerUnit() * TEMPLATE_SCALE;
       const fit = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (w * perUnit * h * perUnit)), MAX_CANVAS_SIDE / (w * perUnit), MAX_CANVAS_SIDE / (h * perUnit));
-      return { w, h, x: (board.w - w) / 2, y: (board.h - h) / 2, perUnit, fit, W: Math.round(w * perUnit * fit), H: Math.round(h * perUnit * fit) };
+      return { w, h, x, y, perUnit, fit, W: Math.round(w * perUnit * fit), H: Math.round(h * perUnit * fit) };
     }
     // The template's area drawn by paint onto a canvas of its own, as the
     // editor would at the recommended zoom, scaled up to the phone's pixels,
@@ -11981,7 +12012,10 @@
         ctx.save();
         ctx.clip(boardShape());
         if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
-        if (showsSatelliteReference()) ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
+        if (showsSatelliteReference()) {
+          const r = satelliteRect();
+          ctx.drawImage(satelliteReference, r.x, r.y, r.w, r.h);
+        }
         ctx.restore();
         drawShapes();
         drawSketchFills();
@@ -11998,7 +12032,10 @@
       const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
       const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
       if (backgroundImage) layers.push(image(await imageData(backgroundImage), g.x, g.y, g.w, g.h));
-      if (showsSatelliteReference()) layers.push(image(await imageData(satelliteReference), 0, 0, board.w, board.h));
+      if (showsSatelliteReference()) {
+        const r = satelliteRect();
+        layers.push(image(await imageData(satelliteReference), r.x, r.y, r.w, r.h));
+      }
       const under = paintTemplate(g, () => {
         drawShapes();
         drawSketchFills();
@@ -12109,9 +12146,8 @@
     const traceSource = () => (satelliteReference && (satelliteReferenceOn.checked || !backgroundImage) ? satelliteReference : backgroundImage);
     const traceSourceIsSvg = () => traceSource() === backgroundImage && backgroundIsSvg();
     function imageArea(image) {
-      if (image === satelliteReference) return { x: 0, y: 0, w: board.w };
-      const { w, h } = backgroundSize();
-      return { x: (board.w - w) / 2, y: (board.h - h) / 2, w };
+      const { x, y, w } = image === satelliteReference ? satelliteRect() : backgroundRect();
+      return { x, y, w };
     }
     function showPathsFromBackground() {
       pathsFromBackground.hidden = !traceSource() || (traceSourceIsSvg() && !sample);
@@ -12165,12 +12201,11 @@
       if (!samples.length) return null;
       const picked = samples.filter((_, k) => k % Math.ceil(samples.length / 300) === 0);
       for (let i = 0.5; i < 20; i++) for (let j = 0.5; j < 15; j++) picked.push({ x: (board.w * i) / 20, y: (board.h * j) / 15, everywhere: true });
-      // Map units to the SVG's own, the background drawn as large as fits in the padded box, centred.
-      const roomW = Math.max(0, board.w - 2 * board.padding);
-      const roomH = Math.max(0, board.h - 2 * board.padding);
-      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
-      const x0 = (board.w - backgroundImage.naturalWidth * s) / 2;
-      const y0 = (board.h - backgroundImage.naturalHeight * s) / 2;
+      // Map units to the SVG's own, by where the background lies on the map.
+      const placed = backgroundRect();
+      const s = placed.w / backgroundImage.naturalWidth;
+      const x0 = placed.x;
+      const y0 = placed.y;
       const box = svg.viewBox.baseVal;
       const unitX = box?.width ? box.width / backgroundImage.naturalWidth : 1;
       const unitY = box?.height ? box.height / backgroundImage.naturalHeight : 1;
@@ -12745,7 +12780,7 @@
           settings: { ...file.settings, ...mapStarts[next]?.settings },
           background: mapStarts[next]?.background ?? null,
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
-          zoomBase: 1, frameCentre: null, satelliteReference: null,
+          zoomBase: 1, frameCentre: null, satelliteReference: null, backgroundPlace: null, satellitePlace: null,
           ...mapStarts[next]?.paths,
         },
         mesh: { offsets: new Map(), erased: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },
@@ -12888,8 +12923,130 @@
       view.x += rect.x * view.scale;
       view.y += rect.y * view.scale;
       setCapture(false);
+      satellitePlace = null;
       coverFrame();
       await setSatelliteReference(out.toDataURL('image/png'));
+    });
+
+    // Edit Inner Frame: dragging the box's edges or corners resizes it, and
+    // dragging inside it moves the background, and everything laid over it,
+    // within it. The left and top edges move the rest the other way, as the
+    // box's corner is the map's origin, so nothing shifts on screen.
+    const FRAME_MIN_SIZE = 100;
+    const FRAME_HANDLE_REACH = 8;
+    const FRAME_CURSORS = { move: 'move', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize' };
+    const editFrameButton = document.getElementById('edit-frame');
+    function setFrameEditing(on) {
+      frameEditing = on;
+      frameDrag = null;
+      editFrameButton.setAttribute('aria-pressed', on);
+      if (on) {
+        // The image and reference keep their size as the box changes.
+        if (backgroundImage) backgroundPlace = backgroundRect();
+        if (satelliteReference) satellitePlace = satelliteRect();
+      }
+      updateCursor();
+      draw();
+    }
+    editFrameButton.addEventListener('click', () => {
+      editFrameButton.blur();
+      setFrameEditing(!frameEditing);
+    });
+    function frameHandles() {
+      const [x0, y0] = [view.x, view.y];
+      const [x1, y1] = [view.x + board.w * view.scale, view.y + board.h * view.scale];
+      const [xm, ym] = [(x0 + x1) / 2, (y0 + y1) / 2];
+      return { nw: [x0, y0], n: [xm, y0], ne: [x1, y0], e: [x1, ym], se: [x1, y1], s: [xm, y1], sw: [x0, y1], w: [x0, ym] };
+    }
+    function frameHandleAt(p) {
+      for (const [part, [x, y]] of Object.entries(frameHandles())) {
+        if (Math.abs(p.x - x) <= FRAME_HANDLE_REACH && Math.abs(p.y - y) <= FRAME_HANDLE_REACH) return part;
+      }
+      const m = toBackground(p.x, p.y);
+      return m.x >= 0 && m.y >= 0 && m.x <= board.w && m.y <= board.h ? 'move' : null;
+    }
+    function drawFrameHandles() {
+      const dpr = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = SELECTED_COLOR;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(view.x, view.y, board.w * view.scale, board.h * view.scale);
+      ctx.fillStyle = '#fff';
+      for (const [x, y] of Object.values(frameHandles())) {
+        ctx.fillRect(x - 4, y - 4, 8, 8);
+        ctx.strokeRect(x - 4, y - 4, 8, 8);
+      }
+      ctx.restore();
+    }
+    // Moves everything placed on the map, leaving the box where it is.
+    function translateContent(dx, dy) {
+      const moved = new Set();
+      const shift = (p) => {
+        if (!p || moved.has(p)) return;
+        moved.add(p);
+        p.x += dx;
+        p.y += dy;
+      };
+      for (const path of paths) {
+        path.points.forEach(shift);
+        for (const [a, b, ...controls] of path.segments) [a, b, ...controls].forEach(shift);
+      }
+      for (const label of labels) {
+        shift(label);
+        (label.pins ?? []).forEach(shift);
+      }
+      lists.forEach(shift);
+      shapes.forEach(shift);
+      sketch.points.forEach(shift);
+      for (const [, , ...controls] of sketch.segments) controls.forEach(shift);
+      [backgroundPlace, satellitePlace, frameCentre].forEach(shift);
+    }
+    function setBoardSize(w, h) {
+      for (const [id, value] of [['board-width', w], ['board-height', h]]) {
+        const input = document.getElementById(id);
+        input.value = Math.round(value);
+        input.dispatchEvent(new Event('input'));
+      }
+    }
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!frameEditing || backgroundTools.hidden || e.button !== 0 || spaceHeld) return;
+      const part = frameHandleAt(canvasPoint(e));
+      if (!part) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
+      frameDrag = { part, x: e.clientX, y: e.clientY };
+    }, { capture: true });
+    window.addEventListener('pointermove', (e) => {
+      if (!frameDrag) return;
+      const dx = (e.clientX - frameDrag.x) / view.scale;
+      const dy = (e.clientY - frameDrag.y) / view.scale;
+      const { part } = frameDrag;
+      if (part === 'move') {
+        translateContent(dx, dy);
+        frameDrag.x = e.clientX;
+        frameDrag.y = e.clientY;
+      } else {
+        const grow = (size, by) => Math.max(FRAME_MIN_SIZE, Math.round(size + by));
+        const w = part.includes('e') ? grow(board.w, dx) : part.includes('w') ? grow(board.w, -dx) : board.w;
+        const h = part.includes('s') ? grow(board.h, dy) : part.includes('n') ? grow(board.h, -dy) : board.h;
+        const ox = part.includes('w') ? board.w - w : 0;
+        const oy = part.includes('n') ? board.h - h : 0;
+        translateContent(-ox, -oy);
+        view.x += ox * view.scale;
+        view.y += oy * view.scale;
+        // Sizes are whole units, so the pointer is followed only as far as the box moved.
+        frameDrag.x += (part.includes('w') ? ox : w - board.w) * view.scale;
+        frameDrag.y += (part.includes('n') ? oy : h - board.h) * view.scale;
+        setBoardSize(w, h);
+      }
+      draw();
+    });
+    window.addEventListener('pointerup', () => {
+      if (!frameDrag) return;
+      frameDrag = null;
+      updateCursor();
     });
 
     // Fits the satellite, at its offset, to most of the view.

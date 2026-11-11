@@ -2755,14 +2755,12 @@
           Background Inside
           <span class="color-field"><input id="board-color" type="color" value="#7b8365"></span>
         </label>
-        <label class="field">
-          Width
-          <input id="board-width" type="number" min="100" step="1" value="1500">
-        </label>
-        <label class="field">
-          Height
-          <input id="board-height" type="number" min="100" step="1" value="1500">
-        </label>
+        <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
+        <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
+        <div class="field">
+          Resolution
+          <output id="background-resolution"></output>
+        </div>
         <label class="field">
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">
@@ -11332,6 +11330,9 @@
     const preview = document.getElementById('image-preview');
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
+    const resolutionField = document.getElementById('background-resolution');
+    // Uploads load from blob URLs, which don't say they're SVG.
+    const svgUploads = new Set();
     const locationBackgroundField = document.getElementById('location-background').closest('.field');
 
     // Loads finish out of order, so only the latest asked for is shown.
@@ -11347,6 +11348,7 @@
             upload.closest('.field').hidden = true;
             preview.hidden = false;
             locationBackgroundField.hidden = false;
+            resolutionField.value = backgroundIsSvg() ? 'NA' : `${img.naturalWidth} × ${img.naturalHeight}`;
             showModeLocks();
             draw();
           }
@@ -11362,7 +11364,10 @@
 
     upload.addEventListener('change', () => {
       const file = upload.files[0];
-      if (file) setBackgroundImage(URL.createObjectURL(file));
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      if (file.type === 'image/svg+xml') svgUploads.add(url);
+      setBackgroundImage(url);
     });
 
     // The editor opens on labelling a map that has a background, and on
@@ -11631,7 +11636,7 @@
       sample = found;
       showPathsFromBackground();
     });
-    const backgroundIsSvg = () => !!backgroundImage && /^data:image\/svg\+xml|\.svg(\?|$)/.test(backgroundImage.src);
+    const backgroundIsSvg = () => !!backgroundImage && (svgUploads.has(backgroundImage.src) || /^data:image\/svg\+xml|\.svg(\?|$)/.test(backgroundImage.src));
     function showPathsFromBackground() {
       pathsFromBackground.hidden = !backgroundImage || (backgroundIsSvg() && !sample);
       if (pathsFromBackground.hidden) pathsFromBackgroundStatus.hidden = true;

@@ -1702,6 +1702,12 @@
     #background-panel #image-preview[hidden] ~ :not(.template-setting) {
       display: none;
     }
+    #background-panel #template-formats[hidden] {
+      display: none;
+    }
+    #template-formats button.new-style {
+      margin: 0;
+    }
     :is(#panel, #style-panel, #settings-panel).label-look #image-preview {
       border: none;
     }
@@ -2811,7 +2817,11 @@
           Recommended
           <output id="background-min-resolution"></output>
         </div>
-        <button id="download-template" class="new-style template-setting" type="button">Download Template<span class="material-symbols-rounded">download</span></button>
+        <button id="download-template" class="new-style template-setting" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
+        <div id="template-formats" class="field-pair template-setting" hidden>
+          <button class="new-style" type="button" data-format="png">PNG<span class="material-symbols-rounded">image</span></button>
+          <button class="new-style" type="button" data-format="svg">SVG<span class="material-symbols-rounded">polyline</span></button>
+        </div>
         <p id="download-template-status" class="panel-note template-setting" hidden></p>
         <label class="field">
           Padding
@@ -11708,34 +11718,50 @@
     const MAX_CANVAS_SIDE = 32767;
     const templateButton = document.getElementById('download-template');
     const templateStatus = document.getElementById('download-template-status');
-    templateButton.addEventListener('click', async () => {
+    const templateFormats = document.getElementById('template-formats');
+    templateButton.addEventListener('click', () => {
       templateButton.blur();
+      templateFormats.hidden = !templateFormats.hidden;
+      templateButton.setAttribute('aria-expanded', !templateFormats.hidden);
+    });
+    function templateGeometry() {
       const { w, h } = templateSize();
       const perUnit = minResolutionPerUnit() * TEMPLATE_SCALE;
       const fit = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (w * perUnit * h * perUnit)), MAX_CANVAS_SIDE / (w * perUnit), MAX_CANVAS_SIDE / (h * perUnit));
-      const out = Object.assign(document.createElement('canvas'), { width: Math.round(w * perUnit * fit), height: Math.round(h * perUnit * fit) });
-      templateStatus.hidden = false;
-      templateStatus.textContent = fit < 1 ? `Too large for the browser; making it ${out.width} × ${out.height}.` : 'Making the template…';
-      await new Promise(requestAnimationFrame);
+      return { w, h, x: (board.w - w) / 2, y: (board.h - h) / 2, perUnit, fit, W: Math.round(w * perUnit * fit), H: Math.round(h * perUnit * fit) };
+    }
+    // The template's area drawn by paint onto a canvas of its own, as the
+    // editor would at the recommended zoom, scaled up to the phone's pixels,
+    // so labels and lines keep their size at that zoom.
+    function paintTemplate(g, paint) {
+      const out = Object.assign(document.createElement('canvas'), { width: g.W, height: g.H });
       const screenCtx = ctx;
       const screenView = { ...view };
       try {
         ctx = out.getContext('2d');
-        // Drawn as the editor would at the recommended zoom, scaled up to the
-        // phone's pixels, so labels and lines keep their size at that zoom.
         view.scale = MIN_RESOLUTION_ZOOM * zoomBase;
-        const density = (perUnit * fit) / view.scale;
-        view.x = -((board.w - w) / 2) * view.scale;
-        view.y = -((board.h - h) / 2) * view.scale;
+        const density = (g.perUnit * g.fit) / view.scale;
+        view.x = -g.x * view.scale;
+        view.y = -g.y * view.scale;
         ctx.setTransform(density, 0, 0, density, 0, 0);
         ctx.translate(view.x, view.y);
         ctx.scale(view.scale, view.scale);
+        paint();
+      } finally {
+        ctx = screenCtx;
+        Object.assign(view, screenView);
+      }
+      return out;
+    }
+    const showsSatelliteReference = () => !!satelliteReference && satelliteReferenceOn.checked;
+    function templatePng(g) {
+      return paintTemplate(g, () => {
         ctx.fillStyle = colorOf(boardColor);
         ctx.fill(boardShape());
         ctx.save();
         ctx.clip(boardShape());
-        if (backgroundImage) ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
-        if (satelliteReference && satelliteReferenceOn.checked) ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
+        if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
+        if (showsSatelliteReference()) ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
         ctx.restore();
         drawShapes();
         drawSketchFills();
@@ -11744,19 +11770,48 @@
           drawPathLines();
         }
         if (showLabelsToggle.checked) drawLabels();
-      } finally {
-        ctx = screenCtx;
-        Object.assign(view, screenView);
+      });
+    }
+    // The images embedded, the paths' lines kept as vectors, and what else
+    // shows drawn as images under and over them.
+    async function templateSvg(g) {
+      const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
+      const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
+      if (backgroundImage) layers.push(image(await imageData(backgroundImage), g.x, g.y, g.w, g.h));
+      if (showsSatelliteReference()) layers.push(image(await imageData(satelliteReference), 0, 0, board.w, board.h));
+      const under = paintTemplate(g, () => {
+        drawShapes();
+        drawSketchFills();
+        if (showPathsToggle.checked) drawPaths();
+      });
+      layers.push(image(under.toDataURL('image/png'), g.x, g.y, g.w, g.h));
+      if (showPathsToggle.checked) {
+        const d = paths.flatMap((path) => path.segments.map(([a, b, c1, c2]) => (c1 ? `M${a.x} ${a.y}C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}` : `M${a.x} ${a.y}L${b.x} ${b.y}`))).join('');
+        layers.push(`<path d="${d}" fill="none" stroke="${colorOf(pathColor)}" stroke-width="${2 / (MIN_RESOLUTION_ZOOM * zoomBase)}" stroke-linecap="round" stroke-linejoin="round"/>`);
       }
-      const data = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
-      templateStatus.hidden = fit === 1;
-      if (!data) {
+      if (showLabelsToggle.checked) layers.push(image(paintTemplate(g, drawLabels).toDataURL('image/png'), g.x, g.y, g.w, g.h));
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.W}" height="${g.H}" viewBox="${g.x} ${g.y} ${g.w} ${g.h}">${layers.join('')}</svg>`;
+    }
+    for (const button of templateFormats.querySelectorAll('button')) {
+      button.addEventListener('click', async () => {
+        button.blur();
+        const { format } = button.dataset;
+        const g = templateGeometry();
         templateStatus.hidden = false;
-        templateStatus.textContent = 'The browser could not make an image this large.';
-        return;
-      }
-      await saveFile('template.png', data, 'The template could not be saved here.');
-    });
+        templateStatus.textContent = g.fit < 1 ? `Too large for the browser; making it ${g.W} × ${g.H}.` : 'Making the template…';
+        await new Promise(requestAnimationFrame);
+        const data = format === 'svg'
+          ? new Blob([await templateSvg(g)], { type: 'image/svg+xml' })
+          : await new Promise((resolve) => templatePng(g).toBlob(resolve, 'image/png'));
+        templateStatus.hidden = g.fit === 1;
+        if (!data) {
+          templateStatus.hidden = false;
+          templateStatus.textContent = 'The browser could not make an image this large.';
+          return;
+        }
+        await saveFile(`template.${format}`, data, 'The template could not be saved here.');
+      });
+    }
     const mapFileInput = document.getElementById('map-file');
     document.getElementById('map-load').addEventListener('click', (e) => {
       e.currentTarget.blur();

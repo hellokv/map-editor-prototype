@@ -249,7 +249,13 @@
     #capture-box [data-handle="ne"], #capture-box [data-handle="sw"] { cursor: nesw-resize; }
     #capture-box [data-handle="n"], #capture-box [data-handle="s"] { cursor: ns-resize; }
     #capture-box [data-handle="e"], #capture-box [data-handle="w"] { cursor: ew-resize; }
+    #capture-go .material-symbols-rounded {
+      font-size: 18px;
+    }
     #capture-go {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       position: absolute;
       top: 50%;
       left: 50%;
@@ -1983,7 +1989,7 @@
     <div id="capture-box" hidden>
       <span data-handle="nw"></span><span data-handle="n"></span><span data-handle="ne"></span><span data-handle="e"></span>
       <span data-handle="se"></span><span data-handle="s"></span><span data-handle="sw"></span><span data-handle="w"></span>
-      <button id="capture-go" type="button">Capture</button>
+      <button id="capture-go" type="button"><span class="material-symbols-rounded">capture</span>Capture</button>
     </div>
     <div id="stack-view" hidden><div class="frame"><div class="stack"></div></div></div>
     <textarea id="label-input" rows="1" hidden></textarea>

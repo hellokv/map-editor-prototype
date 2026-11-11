@@ -254,6 +254,12 @@
       font: 13px system-ui, sans-serif;
       cursor: pointer;
     }
+    .panel-note {
+      margin: 0;
+      padding: 0 4px;
+      font-size: 12px;
+      color: #555;
+    }
     #tooltip .shortcut {
       margin-left: 8px;
       opacity: 0.6;
@@ -2596,6 +2602,11 @@
           Fill Color
           <span class="color-field"><input id="fill-color" type="color"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
         </label>
+      </div>
+      <div class="label-section">
+        <button id="paths-from-background" class="new-style" type="button" hidden>Get Paths from Background<span class="material-symbols-rounded">auto_fix_high</span></button>
+        <p id="paths-from-background-status" class="panel-note" hidden></p>
+        <button id="delete-all-paths" class="new-style" type="button">Delete All Paths<span class="material-symbols-rounded">delete</span></button>
       </div>
     </div>
     <div id="background-panel" hidden>
@@ -7587,6 +7598,7 @@
       document.getElementById('panel-title').textContent = panelTitle();
       showGravityPanel();
       showCaptureBox();
+      showPathsFromBackground();
       const selecting = hasSelection();
       document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
@@ -11344,6 +11356,306 @@
         alert('That file could not be loaded as a map.');
       }
     });
+
+    // Delete All Paths clears the paths, their fills and groups, as one undo step.
+    document.getElementById('delete-all-paths').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      if (!paths.length && !fills.length) return;
+      recordUndo();
+      paths.length = 0;
+      fills.length = 0;
+      groups.length = 0;
+      selected = null;
+      draw();
+    });
+
+    // Get Paths from Background: Claude picks which of an SVG background's
+    // shapes are walkways, from a summary of them grouped by style (the
+    // whole file is often too big to send), and the page traces those
+    // shapes' centre lines into a new path.
+    const pathsFromBackground = document.getElementById('paths-from-background');
+    const pathsFromBackgroundStatus = document.getElementById('paths-from-background-status');
+    let sample = null;
+    (window.claude?.use('sample') ?? Promise.resolve(null)).then((found) => {
+      sample = found;
+      showPathsFromBackground();
+    });
+    const backgroundIsSvg = () => !!backgroundImage && /^data:image\/svg\+xml|\.svg(\?|$)/.test(backgroundImage.src);
+    function showPathsFromBackground() {
+      pathsFromBackground.hidden = !sample || !backgroundIsSvg();
+      if (pathsFromBackground.hidden) pathsFromBackgroundStatus.hidden = true;
+    }
+    const setPathsStatus = (text) => {
+      pathsFromBackgroundStatus.textContent = text;
+      pathsFromBackgroundStatus.hidden = !text;
+    };
+    async function backgroundSvgText() {
+      const { src } = backgroundImage;
+      if (!src.startsWith('data:')) return (await fetch(src)).text();
+      const [head, body] = src.split(/,(.*)/s);
+      if (!head.includes(';base64')) return decodeURIComponent(body);
+      return new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0)));
+    }
+    const SVG_DRAWN = 'path, line, polyline, polygon, rect, circle, ellipse';
+    // Shapes inside these are never drawn themselves.
+    const SVG_UNDRAWN = 'defs, mask, clipPath, pattern, symbol, marker';
+    function svgStyleGroups(svg) {
+      const groups = new Map();
+      for (const el of svg.querySelectorAll(SVG_DRAWN)) {
+        if (el.closest(SVG_UNDRAWN)) continue;
+        const style = getComputedStyle(el);
+        const stroke = style.stroke === 'none' ? 'none' : `${style.stroke} ${parseFloat(style.strokeWidth).toFixed(2)}`;
+        const key = `${el.tagName} fill ${style.fill} stroke ${stroke}`;
+        if (!groups.has(key)) groups.set(key, { key, elements: [], area: 0, length: 0 });
+        const group = groups.get(key);
+        group.elements.push(el);
+        try {
+          const box = el.getBBox();
+          group.area += box.width * box.height;
+          group.length += el.getTotalLength?.() ?? 0;
+        } catch {}
+      }
+      return [...groups.values()];
+    }
+    pathsFromBackground.addEventListener('click', async (e) => {
+      e.currentTarget.blur();
+      pathsFromBackground.disabled = true;
+      // Measured off-screen: shapes only report their size once in the page.
+      const host = Object.assign(document.createElement('div'), { style: 'position:fixed;left:-100000px;top:0;visibility:hidden' });
+      try {
+        setPathsStatus('Reading the background…');
+        const doc = new DOMParser().parseFromString(await backgroundSvgText(), 'image/svg+xml');
+        const svg = document.importNode(doc.documentElement, true);
+        if (svg.tagName.toLowerCase() !== 'svg') throw new Error('not an SVG');
+        host.append(svg);
+        document.body.append(host);
+        const styleGroups = svgStyleGroups(svg);
+        const summary = styleGroups.map((group, k) => `${k}. ${group.key}: ${group.elements.length} shapes, `
+          + `average box ${Math.round(Math.sqrt(group.area / group.elements.length))} units across, total outline length ${Math.round(group.length)}`).join('\n');
+        setPathsStatus('Asking Claude which shapes are paths…');
+        const answer = await sample.json(
+          `Below is every shape in an SVG map of a zoo or park (${svg.getAttribute('width')} × ${svg.getAttribute('height')} units), `
+          + 'grouped by element and style. Which groups draw the visitor walking paths: footpaths and walkways inside the park? '
+          + 'Not roads outside it, buildings, water, planting, labels, outlines of other areas or the background. '
+          + 'Walkways are often long thin light shapes, or lines of one colour and width. '
+          + 'Reply with only JSON like {"groups": [3, 7], "why": "one short sentence"}.\n\n' + summary,
+        );
+        const chosen = (Array.isArray(answer?.groups) ? answer.groups : []).map(Number).filter((k) => styleGroups[k]);
+        if (!chosen.length) throw new Error('no groups');
+        setPathsStatus('Tracing the paths…');
+        await new Promise((resolve) => setTimeout(resolve));
+        const lines = await traceSvgPaths(svg, new Set(chosen.flatMap((k) => styleGroups[k].elements)));
+        if (!lines.segments.length) throw new Error('nothing traced');
+        recordUndo();
+        paths.push(lines);
+        selected = null;
+        draw();
+        setPathsStatus(`Added ${lines.segments.length} segments. ${answer.why ?? ''}`.trim());
+      } catch (error) {
+        const notes = {
+          not_granted: 'Claude isn’t allowed for this page.',
+          rate_limited: 'Claude is busy. Try again in a minute.',
+          invalid_json: 'Claude’s answer couldn’t be read. Try again.',
+        };
+        setPathsStatus(notes[error?.code] ?? 'No paths could be found in this background.');
+      } finally {
+        host.remove();
+        pathsFromBackground.disabled = false;
+      }
+    });
+    // Draws the given shapes white on black, thins them to lines a pixel
+    // wide and traces those into a path, in map units as the background is drawn.
+    async function traceSvgPaths(svg, keep) {
+      const natW = parseFloat(svg.getAttribute('width')) || backgroundImage.naturalWidth;
+      const natH = parseFloat(svg.getAttribute('height')) || backgroundImage.naturalHeight;
+      const S = Math.min(2, 2400 / Math.max(natW, natH));
+      const copy = svg.cloneNode(true);
+      const originals = [...svg.querySelectorAll(SVG_DRAWN)];
+      // Other shapes are drawn black, not hidden, so they still cover what lies under them.
+      [...copy.querySelectorAll(SVG_DRAWN)].forEach((el, k) => {
+        if (el.closest(SVG_UNDRAWN)) return;
+        const style = getComputedStyle(originals[k]);
+        const ink = keep.has(originals[k]) ? '#fff' : '#000';
+        el.setAttribute('style', `fill:${style.fill === 'none' ? 'none' : ink};stroke:${style.stroke === 'none' ? 'none' : ink}`);
+      });
+      for (const el of copy.querySelectorAll('image, text, use')) if (!el.closest(SVG_UNDRAWN)) el.setAttribute('visibility', 'hidden');
+      copy.setAttribute('width', natW * S);
+      copy.setAttribute('height', natH * S);
+      if (!copy.getAttribute('viewBox')) copy.setAttribute('viewBox', `0 0 ${natW} ${natH}`);
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' }));
+      const image = await loadImage(url).finally(() => URL.revokeObjectURL(url));
+      const W = Math.round(natW * S);
+      const H = Math.round(natH * S);
+      const canvas2 = Object.assign(document.createElement('canvas'), { width: W, height: H });
+      const c = canvas2.getContext('2d', { willReadFrequently: true });
+      c.fillStyle = '#000';
+      c.fillRect(0, 0, W, H);
+      c.drawImage(image, 0, 0, W, H);
+      const rgba = c.getImageData(0, 0, W, H).data;
+      let m = new Uint8Array(W * H);
+      for (let i = 0; i < m.length; i++) m[i] = rgba[i * 4] > 128 ? 1 : 0;
+      // A square min or max filter of radius r, each way in turn.
+      const filter = (src, r, pick) => {
+        const tmp = new Uint8Array(src.length);
+        const out = new Uint8Array(src.length);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let v = pick;
+          for (let d = -r; d <= r && v === pick; d++) { const xx = x + d; if (xx >= 0 && xx < W && src[y * W + xx] !== pick) v = 1 - pick; }
+          tmp[y * W + x] = v;
+        }
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          let v = pick;
+          for (let d = -r; d <= r && v === pick; d++) { const yy = y + d; if (yy >= 0 && yy < H && tmp[yy * W + x] !== pick) v = 1 - pick; }
+          out[y * W + x] = v;
+        }
+        return out;
+      };
+      const erode = (src, r) => filter(src, r, 1);
+      const dilate = (src, r) => filter(src.map((v) => 1 - v), r, 1).map((v) => 1 - v);
+      // Lines too thin to be walkways go, then whatever touches the edge, which is land, not path.
+      m = dilate(erode(m, 2), 2);
+      const components = (value, visit) => {
+        const seen = new Uint8Array(W * H);
+        const stack = [];
+        for (let start = 0; start < m.length; start++) {
+          if (m[start] !== value || seen[start]) continue;
+          const cells = [];
+          let edge = false;
+          stack.push(start);
+          seen[start] = 1;
+          while (stack.length) {
+            const i = stack.pop();
+            cells.push(i);
+            const x = i % W;
+            const y = (i / W) | 0;
+            if (x === 0 || y === 0 || x === W - 1 || y === H - 1) edge = true;
+            for (const j of [i - 1, i + 1, i - W, i + W]) {
+              if (j < 0 || j >= m.length || seen[j] || m[j] !== value) continue;
+              if ((j === i - 1 && x === 0) || (j === i + 1 && x === W - 1)) continue;
+              seen[j] = 1;
+              stack.push(j);
+            }
+          }
+          visit(cells, edge);
+        }
+      };
+      const unit = (S / 2) ** 2;
+      components(1, (cells, edge) => { if (edge) for (const i of cells) m[i] = 0; });
+      m = erode(dilate(m, 2), 2);
+      components(0, (cells, edge) => { if (!edge && cells.length < 600 * unit) for (const i of cells) m[i] = 1; });
+      components(1, (cells) => { if (cells.length < 300 * unit) for (const i of cells) m[i] = 0; });
+      // Zhang-Suen thinning.
+      const at = (x, y) => (x >= 0 && y >= 0 && x < W && y < H ? m[y * W + x] : 0);
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const step of [0, 1]) {
+          const clear = [];
+          for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+            if (!m[y * W + x]) continue;
+            const n = [at(x, y - 1), at(x + 1, y - 1), at(x + 1, y), at(x + 1, y + 1), at(x, y + 1), at(x - 1, y + 1), at(x - 1, y), at(x - 1, y - 1)];
+            const count = n.reduce((a, v) => a + v, 0);
+            if (count < 2 || count > 6) continue;
+            let turns = 0;
+            for (let k = 0; k < 8; k++) if (!n[k] && n[(k + 1) % 8]) turns++;
+            if (turns !== 1) continue;
+            if (step === 0 ? n[0] * n[2] * n[4] || n[2] * n[4] * n[6] : n[0] * n[2] * n[6] || n[0] * n[4] * n[6]) continue;
+            clear.push(y * W + x);
+          }
+          for (const i of clear) m[i] = 0;
+          if (clear.length) changed = true;
+        }
+      }
+      // The thin lines as a graph: ends and junctions are nodes, the runs between them edges.
+      const near = (i) => {
+        const x = i % W;
+        const y = (i / W) | 0;
+        const out = [];
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && at(x + dx, y + dy)) out.push((y + dy) * W + x + dx);
+        return out;
+      };
+      const nodeOf = new Map();
+      const nodes = [];
+      const junction = new Uint8Array(W * H);
+      for (let i = 0; i < m.length; i++) if (m[i] && near(i).length >= 3) junction[i] = 1;
+      for (let i = 0; i < m.length; i++) {
+        if (!m[i] || nodeOf.has(i)) continue;
+        const degree = near(i).length;
+        if (degree === 1) {
+          nodeOf.set(i, nodes.length);
+          nodes.push({ x: i % W, y: (i / W) | 0 });
+        } else if (junction[i]) {
+          const cluster = [i];
+          nodeOf.set(i, nodes.length);
+          for (let k = 0; k < cluster.length; k++) {
+            for (const j of near(cluster[k])) if (junction[j] && !nodeOf.has(j)) { nodeOf.set(j, nodes.length); cluster.push(j); }
+          }
+          nodes.push({ x: cluster.reduce((a, j) => a + (j % W), 0) / cluster.length, y: cluster.reduce((a, j) => a + ((j / W) | 0), 0) / cluster.length });
+        }
+      }
+      const edges = [];
+      const walked = new Set();
+      for (const [start] of nodeOf) {
+        for (const next of near(start)) {
+          if (walked.has(`${start},${next}`)) continue;
+          const run = [start, next];
+          let prev = start;
+          let cur = next;
+          while (!nodeOf.has(cur)) {
+            const ahead = near(cur).filter((j) => j !== prev && !run.slice(-3).includes(j));
+            if (!ahead.length) break;
+            [prev, cur] = [cur, ahead[0]];
+            run.push(cur);
+          }
+          walked.add(`${start},${next}`);
+          walked.add(`${cur},${run[run.length - 2]}`);
+          if (nodeOf.has(cur) && nodeOf.get(cur) !== nodeOf.get(start)) edges.push({ a: nodeOf.get(start), b: nodeOf.get(cur), run });
+        }
+      }
+      const lengthOf = (run) => run.reduce((a, i, k) => (k ? a + Math.hypot((i % W) - (run[k - 1] % W), ((i / W) | 0) - ((run[k - 1] / W) | 0)) : 0), 0);
+      // Short stubs off the ends, left by thinning, go.
+      let kept = edges;
+      for (let pass = 0; pass < 4; pass++) {
+        const degree = new Map();
+        for (const { a, b } of kept) for (const n of [a, b]) degree.set(n, (degree.get(n) ?? 0) + 1);
+        kept = kept.filter(({ a, b, run }) => !((degree.get(a) === 1 || degree.get(b) === 1) && lengthOf(run) < 12 * S));
+      }
+      // Each run straightened to within a pixel and a half, Douglas-Peucker.
+      const simplify = (pts) => {
+        if (pts.length < 3) return pts;
+        const [a, b] = [pts[0], pts[pts.length - 1]];
+        const L = Math.hypot(b.x - a.x, b.y - a.y) || 1e-6;
+        let worst = 0;
+        let at2 = 0;
+        pts.forEach((p, k) => {
+          const d = Math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / L;
+          if (d > worst) [worst, at2] = [d, k];
+        });
+        return worst > 0.8 * S ? [...simplify(pts.slice(0, at2 + 1)).slice(0, -1), ...simplify(pts.slice(at2))] : [a, b];
+      };
+      // Pixels to map units, the background drawn as large as fits in the padded box, centred.
+      const roomW = Math.max(0, board.w - 2 * board.padding);
+      const roomH = Math.max(0, board.h - 2 * board.padding);
+      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
+      const x0 = (board.w - backgroundImage.naturalWidth * s) / 2;
+      const y0 = (board.h - backgroundImage.naturalHeight * s) / 2;
+      const scale = (s * backgroundImage.naturalWidth) / (natW * S);
+      const points = new Map();
+      const pointAt = (p) => {
+        const key = `${Math.round(p.x * 4)},${Math.round(p.y * 4)}`;
+        if (!points.has(key)) points.set(key, { x: x0 + p.x * scale, y: y0 + p.y * scale });
+        return points.get(key);
+      };
+      const segments = new Map();
+      for (const { a, b, run } of kept) {
+        const pts = [nodes[a], ...run.slice(1, -1).map((i) => ({ x: i % W, y: (i / W) | 0 })), nodes[b]];
+        const line = simplify(pts).map(pointAt);
+        for (let k = 0; k < line.length - 1; k++) {
+          if (line[k] === line[k + 1]) continue;
+          segments.set([line[k], line[k + 1]].map((p) => `${p.x},${p.y}`).sort().join('|'), [line[k], line[k + 1]]);
+        }
+      }
+      return { points: [...points.values()], segments: [...segments.values()] };
+    }
 
     // The pre-loaded maps. Switching keeps the one left, mesh and all, to
     // come back to. A map not opened yet starts from the open one's styles

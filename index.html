@@ -211,6 +211,49 @@
     #panel.gravity-element #location-panel {
       display: none;
     }
+    /* The rectangle Capture Background takes, with the rest of the view dimmed. */
+    #capture-box {
+      position: absolute;
+      z-index: 4;
+      border: 1.5px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+      cursor: move;
+      touch-action: none;
+    }
+    #capture-box[hidden] {
+      display: none;
+    }
+    #capture-box [data-handle] {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      margin: -6px 0 0 -6px;
+      border: 1px solid #333;
+      background: #fff;
+    }
+    #capture-box [data-handle*="n"] { top: 0; }
+    #capture-box [data-handle*="s"] { top: 100%; }
+    #capture-box [data-handle="e"], #capture-box [data-handle="w"] { top: 50%; }
+    #capture-box [data-handle*="w"] { left: 0; }
+    #capture-box [data-handle*="e"] { left: 100%; }
+    #capture-box [data-handle="n"], #capture-box [data-handle="s"] { left: 50%; }
+    #capture-box [data-handle="nw"], #capture-box [data-handle="se"] { cursor: nwse-resize; }
+    #capture-box [data-handle="ne"], #capture-box [data-handle="sw"] { cursor: nesw-resize; }
+    #capture-box [data-handle="n"], #capture-box [data-handle="s"] { cursor: ns-resize; }
+    #capture-box [data-handle="e"], #capture-box [data-handle="w"] { cursor: ew-resize; }
+    #capture-go {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      background: #000;
+      color: #fff;
+      font: 13px system-ui, sans-serif;
+      cursor: pointer;
+    }
     #tooltip .shortcut {
       margin-left: 8px;
       opacity: 0.6;
@@ -1641,6 +1684,11 @@
       </div>
     </div>
     <canvas id="canvas"></canvas>
+    <div id="capture-box" hidden>
+      <span data-handle="nw"></span><span data-handle="n"></span><span data-handle="ne"></span><span data-handle="e"></span>
+      <span data-handle="se"></span><span data-handle="s"></span><span data-handle="sw"></span><span data-handle="w"></span>
+      <button id="capture-go" type="button">Capture</button>
+    </div>
     <div id="stack-view" hidden><div class="frame"><div class="stack"></div></div></div>
     <textarea id="label-input" rows="1" hidden></textarea>
     <div id="place-suggestions" hidden></div>
@@ -2390,6 +2438,7 @@
           Rotation
           <span class="slider"><input id="satellite-rotation" type="number" min="-180" max="180" step="1" value="0"><input type="range" min="-180" max="180" step="1" value="0" aria-label="Satellite rotation"></span>
         </label>
+        <button id="capture-background" class="new-style" type="button" aria-pressed="false">Capture Background<span class="material-symbols-rounded">crop</span></button>
       </div>
       <div class="label-section">
         <div class="field-group">
@@ -4102,6 +4151,9 @@
       c.stroke(shape);
       c.restore();
     }
+    // Capture Background's rectangle while it's being chosen, and the drag shaping it.
+    let capture = null;
+    let captureDrag = null;
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
 
@@ -7531,6 +7583,7 @@
       placeListDialog();
       document.getElementById('panel-title').textContent = panelTitle();
       showGravityPanel();
+      showCaptureBox();
       const selecting = hasSelection();
       document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
@@ -10118,6 +10171,10 @@
     }
 
     function updateCursor() {
+      if (capture && !spaceHeld) {
+        canvas.style.cursor = 'crosshair';
+        return;
+      }
       let boxPart = inLocation() && !spaceHeld && (drag?.mapBox ?? (pointer && !drag && mapBoxAt(pointer)?.part));
       if (boxPart === 'scale' && !drag && commandHeld) boxPart = 'turn';
       if (boxPart === 'turn' || boxPart === 'scale') {
@@ -11392,6 +11449,114 @@
         draw();
       }
     }
+    // Capture Background: a rectangle drawn over the satellite, in location
+    // units so it stays on it as the view moves, is taken at 100% as the
+    // map's background, with the map's box made that rectangle.
+    const captureButton = document.getElementById('capture-background');
+    const captureBox = document.getElementById('capture-box');
+    const toLocationPoint = (s) => ({ x: (s.x - view.x) / view.scale, y: (s.y - view.y) / view.scale });
+    function setCapture(on) {
+      capture = on ? { rect: null } : null;
+      captureButton.setAttribute('aria-pressed', on);
+      showCaptureBox();
+      updateCursor();
+    }
+    captureButton.addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      setCapture(!capture);
+    });
+    function showCaptureBox() {
+      if (capture && !inLocation()) capture = null;
+      const rect = capture?.rect;
+      captureBox.hidden = !rect || rect.w <= 0 || rect.h <= 0;
+      if (captureBox.hidden) return;
+      Object.assign(captureBox.style, {
+        left: `${canvas.offsetLeft + view.x + rect.x * view.scale}px`,
+        top: `${canvas.offsetTop + view.y + rect.y * view.scale}px`,
+        width: `${rect.w * view.scale}px`,
+        height: `${rect.h * view.scale}px`,
+      });
+    }
+    // A drag on the map draws the rectangle afresh.
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!capture || e.button !== 0 || spaceHeld) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const at = toLocationPoint(canvasPoint(e));
+      captureDrag = { handle: 'se', fixed: at };
+      capture.rect = { x: at.x, y: at.y, w: 0, h: 0 };
+      showCaptureBox();
+    }, { capture: true });
+    // Its handles resize it, the opposite side or corner staying put, and its middle moves it.
+    captureBox.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target === document.getElementById('capture-go')) return;
+      e.preventDefault();
+      const handle = e.target.dataset.handle;
+      const { x, y, w, h } = capture.rect;
+      const fixed = { x: handle?.includes('w') ? x + w : x, y: handle?.includes('n') ? y + h : y };
+      captureDrag = handle ? { handle, fixed, rect: { x, y, w, h } } : { move: toLocationPoint(canvasPoint(e)), rect: { x, y, w, h } };
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!captureDrag || !capture) return;
+      const at = toLocationPoint(canvasPoint(e));
+      const rect = capture.rect;
+      if (captureDrag.move) {
+        rect.x = captureDrag.rect.x + at.x - captureDrag.move.x;
+        rect.y = captureDrag.rect.y + at.y - captureDrag.move.y;
+      } else {
+        const { handle, fixed } = captureDrag;
+        const from = captureDrag.rect ?? { x: fixed.x, y: fixed.y, w: 0, h: 0 };
+        // Side handles change one way only.
+        const x = handle === 'n' || handle === 's' ? null : at.x;
+        const y = handle === 'e' || handle === 'w' ? null : at.y;
+        if (x !== null) [rect.x, rect.w] = [Math.min(x, fixed.x), Math.abs(x - fixed.x)];
+        else [rect.x, rect.w] = [from.x, from.w];
+        if (y !== null) [rect.y, rect.h] = [Math.min(y, fixed.y), Math.abs(y - fixed.y)];
+        else [rect.y, rect.h] = [from.y, from.h];
+      }
+      showCaptureBox();
+    });
+    window.addEventListener('pointerup', () => { captureDrag = null; });
+    document.addEventListener('keydown', (e) => {
+      if (capture && e.key === 'Escape') setCapture(false);
+    });
+    document.getElementById('capture-go').addEventListener('click', async (e) => {
+      e.currentTarget.blur();
+      const rect = capture?.rect;
+      if (!rect || !satellite.naturalWidth) return;
+      const w = Math.max(1, Math.round(rect.w));
+      const h = Math.max(1, Math.round(rect.h));
+      const out = Object.assign(document.createElement('canvas'), { width: w, height: h });
+      const c = out.getContext('2d');
+      // The satellite as the view draws it, one pixel to a location unit.
+      const half = satelliteHalf();
+      const scale = satelliteScale();
+      c.translate(board.w / 2 + satelliteOffset.x - rect.x, board.h / 2 + satelliteOffset.y - rect.y);
+      c.rotate(satelliteTurn());
+      c.scale(scale, scale);
+      c.drawImage(satellite, -half.w, -half.h, half.w * 2, half.h * 2);
+      // The box becomes the rectangle, unturned and unscaled, and the
+      // satellite, which is sized from the box, is scaled and moved back to
+      // where it was on screen.
+      const centre = { x: board.w / 2 + satelliteOffset.x - rect.x, y: board.h / 2 + satelliteOffset.y - rect.y };
+      const drawnW = half.w * scale;
+      for (const [id, value] of [['board-width', w], ['board-height', h]]) {
+        const input = document.getElementById(id);
+        input.value = value;
+        input.dispatchEvent(new Event('input'));
+      }
+      Object.assign(mapPlace, { turn: 0, scale: 1 });
+      const scaleInput = document.getElementById('satellite-scale');
+      scaleInput.value = Math.round(((100 * drawnW) / satelliteHalf().w) * 100) / 100;
+      scaleInput.closest('.slider').querySelector('input[type="range"]').value = scaleInput.value;
+      Object.assign(satelliteOffset, { x: centre.x - w / 2, y: centre.y - h / 2 });
+      view.x += rect.x * view.scale;
+      view.y += rect.y * view.scale;
+      setCapture(false);
+      await setBackgroundImage(out.toDataURL('image/png'));
+      draw();
+    });
+
     // Fits the satellite, at its offset, to most of the view.
     function fitSatellite() {
       const half = satelliteHalf();

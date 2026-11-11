@@ -1655,6 +1655,10 @@
     :is(#panel, #style-panel, #settings-panel).label-look :is(.label-section, .style-picker) > button.new-style {
       margin: 0;
     }
+    :is(#panel, #style-panel, #settings-panel) button.new-style[aria-pressed="true"] {
+      background: #000;
+      color: #fff;
+    }
     :is(#panel, #style-panel, #settings-panel) button.add-style:hover {
       box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
     }

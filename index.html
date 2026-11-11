@@ -2958,7 +2958,7 @@
           Show Paths
           <input id="background-show-paths" class="switch" type="checkbox">
         </label>
-        <button id="background-show-frame-field" class="new-style" type="button" aria-pressed="false">Set Background<span class="material-symbols-rounded">smartphone</span></button>
+        <button id="background-show-frame-field" class="new-style" type="button" aria-pressed="false">Set Default Position<span class="material-symbols-rounded">smartphone</span></button>
         <input id="background-show-frame" type="checkbox" hidden>
         <label id="map-scale-field" class="field">
           Scale
@@ -3689,7 +3689,7 @@
       showPathsToggle.blur();
       draw();
     });
-    // The panel's Set Background button turns the frame on and off.
+    // The panel's Set Default Position button turns the frame on and off.
     document.getElementById('background-show-frame-field').addEventListener('click', (e) => {
       e.currentTarget.blur();
       showFrameToggle.checked = !showFrameToggle.checked;

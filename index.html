@@ -2606,6 +2606,7 @@
       <div class="label-section">
         <button id="paths-from-background" class="new-style" type="button" hidden>Get Paths from Background<span class="material-symbols-rounded">auto_fix_high</span></button>
         <p id="paths-from-background-status" class="panel-note" hidden></p>
+        <button id="reset-paths" class="new-style" type="button" hidden>Reset Default Paths<span class="material-symbols-rounded">restart_alt</span></button>
         <button id="delete-all-paths" class="new-style" type="button">Delete All Paths<span class="material-symbols-rounded">delete</span></button>
       </div>
     </div>
@@ -7599,6 +7600,7 @@
       showGravityPanel();
       showCaptureBox();
       showPathsFromBackground();
+      resetPathsButton.hidden = !defaultPaths();
       const selecting = hasSelection();
       document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
@@ -11365,6 +11367,19 @@
       paths.length = 0;
       fills.length = 0;
       groups.length = 0;
+      selected = null;
+      draw();
+    });
+
+    // Reset Default Paths puts back the paths the open map started with, as one undo step.
+    const resetPathsButton = document.getElementById('reset-paths');
+    const defaultPaths = () => (openMap === 'demo' ? JSON.parse(document.getElementById('starter-paths').textContent) : mapStarts[openMap]?.paths);
+    resetPathsButton.addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      const start = defaultPaths();
+      if (!start) return;
+      recordUndo();
+      loadPaths(start);
       selected = null;
       draw();
     });

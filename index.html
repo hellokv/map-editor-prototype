@@ -513,6 +513,9 @@
     #canvas-area #view-menu select {
       background-color: #f4f1ee;
     }
+    #canvas-area #map-menu select {
+      background-color: transparent;
+    }
     #view-menu select {
       height: 32px;
       padding: 0 8px;
@@ -532,15 +535,14 @@
     }
     #map-menu select {
       height: 32px;
-      padding: 0 4px;
+      padding: 0 4px 0 8px;
       border: none;
       border-radius: 6px;
-      background: none;
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    #map-menu select:hover {
-      background: rgba(0, 0, 0, 0.06);
+    #canvas-area #map-menu select:hover {
+      background-color: rgba(0, 0, 0, 0.06);
     }
     #mode-menu {
       position: absolute;
@@ -711,7 +713,8 @@
     /* The browser's own arrow sits hard against the right edge, so it's
        replaced with one drawn clear of it. */
     :is(#panel, #style-panel, #settings-panel) select,
-    #view-menu select {
+    #view-menu select,
+    #map-menu select {
       appearance: none;
       padding-right: 24px;
       background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23555' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;

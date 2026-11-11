@@ -682,36 +682,51 @@
     #blank-state[hidden] {
       display: none;
     }
-    #blank-state button {
+    /* The house style for blank states: a centred white card with a large
+       icon, heading, short text and one blue button. */
+    #blank-state .blank-card {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-      width: 260px;
-      padding: 20px;
-      border: none;
-      border-radius: 12px;
+      align-items: center;
+      box-sizing: border-box;
+      width: 350px;
+      padding: 40px 32px;
+      border-radius: 10px;
       background: #fff;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
-      color: #000;
-      font: 13px/1.4 'National Park', system-ui, sans-serif;
-      text-align: left;
-      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      text-align: center;
       pointer-events: auto;
     }
-    #blank-state button:hover {
-      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
-    }
     #blank-state .material-symbols-rounded {
-      font-size: 28px;
-      font-variation-settings: 'wght' 300, 'opsz' 24;
+      font-size: 44px;
+      font-variation-settings: 'wght' 400, 'opsz' 48;
+      color: #2a2e1f;
     }
-    #blank-state strong {
-      font-size: 15px;
-      font-weight: 600;
+    #blank-state h2 {
+      margin: 8px 0 0;
+      font: 600 18px 'National Park', system-ui, sans-serif;
+      color: #2a2e1f;
     }
-    #blank-state span:last-child {
-      color: #555;
+    #blank-state p {
+      margin: 10px 0 0;
+      font: 14px/1.6 'National Park', system-ui, sans-serif;
+      color: #7d7a6e;
+    }
+    #blank-state button {
+      height: 42px;
+      margin-top: 24px;
+      padding: 0 18px;
+      border: none;
+      border-radius: 6px;
+      background: #006aab;
+      color: #fff;
+      font: 700 14px 'National Park', system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    #blank-state button:hover {
+      background: #005a91;
     }
     #panel.closed {
       margin-right: -300px;
@@ -2030,16 +2045,18 @@
       <button type="button">Add Background</button>
     </div>
     <div id="blank-state" hidden>
-      <button id="blank-upload" type="button">
+      <div class="blank-card">
         <span class="material-symbols-rounded">map</span>
-        <strong>Upload your own map</strong>
-        <span>Start from an illustrated map of your park, then trace its paths and place labels over it.</span>
-      </button>
-      <button id="blank-satellite" type="button">
+        <h2>Upload your own map</h2>
+        <p>Start from an illustrated map of your park, then trace its paths and place labels over it.</p>
+        <button id="blank-upload" type="button">Upload a map</button>
+      </div>
+      <div class="blank-card">
         <span class="material-symbols-rounded">satellite_alt</span>
-        <strong>Start from satellite view</strong>
-        <span>Find your park from above, capture it, and download a template to draw your map over.</span>
-      </button>
+        <h2>Start from satellite view</h2>
+        <p>Find your park from above, capture it, and download a template to draw your map over.</p>
+        <button id="blank-satellite" type="button">Use satellite view</button>
+      </div>
     </div>
     <button id="panel-open" type="button" aria-label="Open panel" hidden><span class="material-symbols-rounded">right_panel_open</span></button>
     <span id="auto-layers" hidden></span>
@@ -6466,7 +6483,8 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       if (stackPart !== 'level' && !locationPart) {
-        ctx.fillStyle = colorOf(canvasColor);
+        // The blank state sits on the house grey, not the map's own colour.
+        ctx.fillStyle = noMode ? '#eeedeb' : colorOf(canvasColor);
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       }
       if (noMode) return;

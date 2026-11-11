@@ -3682,26 +3682,22 @@
     }
     // Where the background image and satellite reference lie on the map.
     // Until the inner frame is edited, the image is as large as fits inside
-    // the padded box, centred and never stretched, and the reference fills it.
+    // it, centred and never stretched, and the reference fills it.
     let backgroundPlace = null;
     let satellitePlace = null;
     function backgroundRect() {
       if (backgroundPlace) return { ...backgroundPlace };
-      const roomW = Math.max(0, board.w - 2 * board.padding);
-      const roomH = Math.max(0, board.h - 2 * board.padding);
-      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
+      const s = Math.min(board.w / backgroundImage.naturalWidth, board.h / backgroundImage.naturalHeight);
       const w = backgroundImage.naturalWidth * s;
       const h = backgroundImage.naturalHeight * s;
       return { x: (board.w - w) / 2, y: (board.h - h) / 2, w, h };
     }
     const backgroundSize = backgroundRect;
-    // Images are cut to the box's corners and, once placed by hand, kept
-    // the padding in from its edges, as the fitted image already is.
+    // Images show within the inner frame, and within the box's corners.
     function clipToImageRoom() {
       ctx.clip(boardShape());
-      if (!backgroundPlace || !board.padding) return;
       ctx.beginPath();
-      ctx.rect(board.padding, board.padding, Math.max(0, board.w - 2 * board.padding), Math.max(0, board.h - 2 * board.padding));
+      ctx.rect(0, 0, board.w, board.h);
       ctx.clip();
     }
     const satelliteRect = () => (satellitePlace ? { ...satellitePlace } : { x: 0, y: 0, w: board.w, h: board.h });
@@ -4605,7 +4601,9 @@
       w: 1500, h: 1500, padding: 0, outline: null, outlineWidth: 1, corners: 'square', radius: 0,
       shadow: null, shadowX: 0, shadowY: 8, shadowBlur: 24,
     };
-    const boardShape = () => boxPath({ x: 0, y: 0, w: board.w, h: board.h }, board.radius, board.corners);
+    // The box: the inner frame, grown by the padding all round.
+    const boardBox = () => ({ x: -board.padding, y: -board.padding, w: board.w + 2 * board.padding, h: board.h + 2 * board.padding });
+    const boardShape = () => boxPath(boardBox(), board.radius, board.corners);
     // A box as a path, its corners rounded, or cut off when corners is
     // 'chamfer', reaching radius along each side.
     function boxPath(box, radius, corners) {
@@ -4786,9 +4784,10 @@
     });
 
     function centerBackground(w, h) {
-      view.scale = Math.min(w / board.w, h / board.h) * 0.9;
-      view.x = (w - board.w * view.scale) / 2;
-      view.y = (h - board.h * view.scale) / 2;
+      const box = boardBox();
+      view.scale = Math.min(w / box.w, h / box.h) * 0.9;
+      view.x = (w - box.w * view.scale) / 2 - box.x * view.scale;
+      view.y = (h - box.h * view.scale) / 2 - box.y * view.scale;
     }
 
     function resize() {
@@ -6599,7 +6598,7 @@
         drawShapes();
         drawSketchFills();
       }
-      if (board.outline && !noBackground) strokeOutside(ctx, boardShape(), { x: 0, y: 0, w: board.w, h: board.h }, board.outline, board.outlineWidth);
+      if (board.outline && !noBackground) strokeOutside(ctx, boardShape(), boardBox(), board.outline, board.outlineWidth);
       if (stackPart) {
         if (stackPart === 'background') drawPaths();
         else drawLabels();

@@ -1823,8 +1823,9 @@
     #autodetect-colors[hidden] {
       display: none;
     }
-    /* The board's settings wait for a background to set them against. */
-    #background-panel #image-preview[hidden] ~ :not(.template-setting) {
+    /* The board's settings wait for a background or satellite reference to set them against. */
+    #background-panel:not(.has-reference) #image-preview[hidden] ~ :not(.template-setting),
+    #background-panel #image-preview[hidden] ~ #resolution-field {
       display: none;
     }
     #background-panel #template-formats[hidden] {
@@ -2968,7 +2969,7 @@
         </div>
         <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
-        <div class="field">
+        <div id="resolution-field" class="field">
           Resolution
           <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
         </div>
@@ -8131,6 +8132,8 @@
     // Runs after every draw, which follows every change to the selection.
     // Background's toggles and Scale show only once there's something for them to act on.
     function showBackgroundToggles() {
+      // A satellite reference alone still has a box to set up around it.
+      document.getElementById('background-panel').classList.toggle('has-reference', !!satelliteReference);
       const hasLabels = labels.length > 0 || lists.length > 0;
       document.getElementById('background-show-labels-field').hidden = !hasLabels;
       document.getElementById('background-show-paths-field').hidden = !paths.length;

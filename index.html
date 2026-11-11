@@ -11631,7 +11631,8 @@
     });
 
     // The background image's area, with what Background mode shows over it
-    // but the frame, as a PNG at the recommended resolution.
+    // but the frame, as a PNG at a third of the recommended resolution.
+    const TEMPLATE_SCALE = 1 / 3;
     // Browsers refuse canvases past about this many pixels, or this wide.
     const MAX_CANVAS_AREA = 268000000;
     const MAX_CANVAS_SIDE = 32767;
@@ -11640,7 +11641,7 @@
     templateButton.addEventListener('click', async () => {
       templateButton.blur();
       const { w, h } = backgroundSize();
-      const perUnit = minResolutionPerUnit();
+      const perUnit = minResolutionPerUnit() * TEMPLATE_SCALE;
       const fit = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (w * perUnit * h * perUnit)), MAX_CANVAS_SIDE / (w * perUnit), MAX_CANVAS_SIDE / (h * perUnit));
       const out = Object.assign(document.createElement('canvas'), { width: Math.round(w * perUnit * fit), height: Math.round(h * perUnit * fit) });
       templateStatus.hidden = false;

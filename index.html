@@ -1600,6 +1600,10 @@
     #image-upload-field {
       cursor: pointer;
     }
+    /* The board's settings wait for a background to set them against. */
+    #background-panel #image-preview[hidden] ~ * {
+      display: none;
+    }
     :is(#panel, #style-panel, #settings-panel).label-look #image-preview {
       border: none;
     }

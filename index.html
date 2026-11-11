@@ -3526,13 +3526,28 @@
       const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
       return { w: backgroundImage.naturalWidth * s, h: backgroundImage.naturalHeight * s };
     }
-    function drawPhoneFrame() {
+    // The frame's screen on the canvas, and the part of it left to the map.
+    function phoneScreen() {
       const k = deviceScale();
-      const dpr = window.devicePixelRatio || 1;
       const w = FRAME_DEVICE.w * k;
       const h = FRAME_DEVICE.h * k;
       const x = (canvas.clientWidth - w) / 2;
       const y = (canvas.clientHeight - h) / 2;
+      return { x, y, w, h, k, view: { x, y: y + FRAME_DEVICE.top * k, w, h: h - (FRAME_DEVICE.top + FRAME_DEVICE.bottom) * k } };
+    }
+    // Background's 100% and frame position: the whole box just covering the
+    // frame's map area, centred in it.
+    function coverFrame() {
+      const { view: area } = phoneScreen();
+      zoomBase = Math.max(area.w / board.w, area.h / board.h);
+      frameCentre = {
+        x: board.w / 2 - (area.x + area.w / 2 - canvas.clientWidth / 2) / zoomBase,
+        y: board.h / 2 - (area.y + area.h / 2 - canvas.clientHeight / 2) / zoomBase,
+      };
+    }
+    function drawPhoneFrame() {
+      const { x, y, w, h, k, view: area } = phoneScreen();
+      const dpr = window.devicePixelRatio || 1;
       const bezel = FRAME_BEZEL * k;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -3540,7 +3555,7 @@
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.roundRect(x - bezel, y - bezel, w + 2 * bezel, h + 2 * bezel, Math.min(w, h) * 0.13 + bezel);
-      ctx.rect(x, y + FRAME_DEVICE.top * k, w, h - (FRAME_DEVICE.top + FRAME_DEVICE.bottom) * k);
+      ctx.rect(area.x, area.y, area.w, area.h);
       ctx.stroke();
       ctx.restore();
     }
@@ -12512,6 +12527,7 @@
       view.x += rect.x * view.scale;
       view.y += rect.y * view.scale;
       setCapture(false);
+      coverFrame();
       await setSatelliteReference(out.toDataURL('image/png'));
     });
 

@@ -669,6 +669,9 @@
     #panel.blank {
       display: none;
     }
+    #background-panel .label-section:not(:has(> :not([hidden]))) {
+      display: none;
+    }
     #blank-state {
       position: absolute;
       inset: 0;
@@ -2855,19 +2858,19 @@
     </div>
     <div id="background-panel" hidden>
       <div class="label-section background-settings">
-        <label class="field">
+        <label id="background-show-labels-field" class="field">
           Show Labels
           <input id="background-show-labels" class="switch" type="checkbox" checked>
         </label>
-        <label class="field">
+        <label id="background-show-paths-field" class="field">
           Show Paths
           <input id="background-show-paths" class="switch" type="checkbox">
         </label>
-        <label class="field">
+        <label id="background-show-frame-field" class="field">
           Show Frame
           <input id="background-show-frame" class="switch" type="checkbox">
         </label>
-        <label class="field">
+        <label id="map-scale-field" class="field">
           Scale
           <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
         </label>
@@ -8038,8 +8041,17 @@
     }
 
     // Runs after every draw, which follows every change to the selection.
+    // Background's toggles and Scale show only once there's something for them to act on.
+    function showBackgroundToggles() {
+      const hasLabels = labels.length > 0 || lists.length > 0;
+      document.getElementById('background-show-labels-field').hidden = !hasLabels;
+      document.getElementById('background-show-paths-field').hidden = !paths.length;
+      document.getElementById('background-show-frame-field').hidden = mapIsBlank();
+      document.getElementById('map-scale-field').hidden = !hasLabels && !shapes.some((shape) => shape.zoomScale !== undefined) && !groups.some((group) => group.width > 0);
+    }
     function updatePanel() {
       showCorners();
+      showBackgroundToggles();
       const mapGround = colorOf(boardColor);
       const panelStyle = document.getElementById('panel').style;
       panelStyle.setProperty('--map-ground', mapGround);

@@ -731,6 +731,44 @@
     #blank-state button:hover {
       background: #005a91;
     }
+    #blank-state .blank-card[hidden] {
+      display: none;
+    }
+    #blank-state #blank-upload-guide {
+      width: 420px;
+    }
+    #blank-state ul {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin: 24px 0 0;
+      padding: 0;
+      list-style: none;
+      text-align: left;
+      font: 14px/1.5 'National Park', system-ui, sans-serif;
+      color: #7d7a6e;
+    }
+    #blank-state li {
+      display: flex;
+      gap: 12px;
+    }
+    #blank-state li .material-symbols-rounded {
+      flex: none;
+      font-size: 22px;
+    }
+    #blank-state li strong {
+      color: #2a2e1f;
+      font-weight: 600;
+    }
+    #blank-back {
+      margin-top: 14px;
+      font: 14px 'National Park', system-ui, sans-serif;
+      color: #006aab;
+      text-decoration: none;
+    }
+    #blank-back:hover {
+      text-decoration: underline;
+    }
     #panel.closed {
       margin-right: -300px;
       visibility: hidden;
@@ -2059,6 +2097,18 @@
         <h2>Start from satellite view</h2>
         <p>Find your park from above, capture it, and download a template to draw your map over.</p>
         <button id="blank-satellite" type="button">Use satellite view</button>
+      </div>
+      <div id="blank-upload-guide" class="blank-card" hidden>
+        <span class="material-symbols-rounded">map</span>
+        <h2>Upload your map</h2>
+        <p>Use the artwork of your park on its own, so the editor can work over it.</p>
+        <ul>
+          <li><span class="material-symbols-rounded">layers_clear</span><span><strong>A clean plate.</strong> No labels, names, icons, legends or other text. You'll add those in the editor.</span></li>
+          <li><span class="material-symbols-rounded">description</span><span><strong>SVG, PNG, JPG or WebP.</strong> SVG works best: its paths can be detected from the shapes themselves.</span></li>
+          <li><span class="material-symbols-rounded">photo_size_select_large</span><span><strong>As large as you have it.</strong> The Background panel shows the recommended size once it's in.</span></li>
+        </ul>
+        <button id="blank-choose-file" type="button">Choose a file</button>
+        <a id="blank-back" href="#">Back</a>
       </div>
     </div>
     <button id="panel-open" type="button" aria-label="Open panel" hidden><span class="material-symbols-rounded">right_panel_open</span></button>
@@ -3726,6 +3776,7 @@
       noMode = !mode;
       document.getElementById('panel').classList.toggle('blank', noMode);
       document.getElementById('blank-state').hidden = !noMode;
+      if (noMode) showUploadGuide(false);
       if (noMode) document.getElementById('panel-open').hidden = true;
       if (mode === 'preview' && !inPreview()) {
         setSplit(false);
@@ -11647,7 +11698,19 @@
         if (noMode && backgroundImage) setMode('background');
       });
     });
-    document.getElementById('blank-upload').addEventListener('click', () => upload.click());
+    // Upload a map first says what makes a good background, then picks the file.
+    const blankCards = [...document.querySelectorAll('#blank-state > .blank-card:not(#blank-upload-guide)')];
+    const uploadGuide = document.getElementById('blank-upload-guide');
+    function showUploadGuide(on) {
+      for (const card of blankCards) card.hidden = on;
+      uploadGuide.hidden = !on;
+    }
+    document.getElementById('blank-upload').addEventListener('click', () => showUploadGuide(true));
+    document.getElementById('blank-choose-file').addEventListener('click', () => upload.click());
+    document.getElementById('blank-back').addEventListener('click', (e) => {
+      e.preventDefault();
+      showUploadGuide(false);
+    });
     document.getElementById('blank-satellite').addEventListener('click', () => {
       setMode('location');
       if (!capture) captureButton.click();

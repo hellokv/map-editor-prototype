@@ -3721,11 +3721,19 @@
       setBackgroundButton.blur();
       zoomBase = view.scale;
       frameCentre = { x: (canvas.clientWidth / 2 - view.x) / view.scale, y: (canvas.clientHeight / 2 - view.y) / view.scale };
-      // A moment's spinner, then a check that stays until the view moves off what was set.
+      // A moment's spinner and a check, then the frame closes.
       showSetState('setting');
       setTimeout(() => {
         if (setBackgroundButton.dataset.state === 'setting') showSetState('set');
       }, 500);
+      setTimeout(() => {
+        if (setBackgroundButton.dataset.state !== 'set') return;
+        showSetState('');
+        if (showFrameToggle.checked) {
+          showFrameToggle.checked = false;
+          showFrameToggle.dispatchEvent(new Event('change'));
+        }
+      }, 1100);
       draw();
     });
     const SET_ICONS = { setting: 'progress_activity', set: 'check' };

@@ -1707,6 +1707,7 @@
         <option value="demo">Demo</option>
         <option value="national-zoo">National Zoo</option>
         <option value="wildlife-safari">Wildlife Safari</option>
+        <option value="bronx-zoo">Bronx Zoo</option>
       </select>
     </div>
     <div id="mode-menu">
@@ -4684,6 +4685,7 @@
       demo: { src: 'satellite.jpg', reach: 2 },
       'national-zoo': { src: 'national-zoo-satellite.jpg', reach: 1 },
       'wildlife-safari': { src: 'wildlife-safari-satellite.jpg', reach: 1 },
+      'bronx-zoo': { src: 'bronx-zoo-satellite.jpg', reach: 1 },
     };
     let satelliteReach = mapSatellites.demo.reach;
     const satellite = Object.assign(new Image(), { src: mapSatellites.demo.src });
@@ -11359,10 +11361,16 @@
         satelliteOffset: { x: 102.5, y: 63.6 },
         fitSatellite: true,
       },
-      // No background or paths yet; its box takes the satellite's shape, so the two line up.
+      // These have no background or paths yet; each box takes its satellite's
+      // shape, so the two line up.
       'wildlife-safari': {
         settings: { 'board-width': '1248', 'board-height': '1358' },
         location: { 'location-background': '0', 'mesh-spacing': '70', 'mesh-color-opacity': '25' },
+        fitSatellite: true,
+      },
+      'bronx-zoo': {
+        settings: { 'board-width': '2000', 'board-height': '1176' },
+        location: { 'location-background': '0', 'mesh-spacing': '110', 'mesh-color-opacity': '25' },
         fitSatellite: true,
       },
     };

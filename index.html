@@ -887,6 +887,22 @@
       right: 12px;
       background: rgba(255, 255, 255, 0.9);
     }
+    #satellite-reference-field .field-end {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    :is(#panel, #style-panel, #settings-panel) #satellite-reference-delete {
+      display: flex;
+      padding: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      cursor: pointer;
+    }
+    :is(#panel, #style-panel, #settings-panel) #satellite-reference-delete:hover {
+      background: #e4e4e4;
+    }
     .toggle-group {
       display: flex;
       gap: 2px;
@@ -2750,6 +2766,13 @@
           Show Frame
           <input id="background-show-frame" class="switch" type="checkbox">
         </label>
+        <div id="satellite-reference-field" class="field" hidden>
+          Satellite Reference
+          <span class="field-end">
+            <button id="satellite-reference-delete" type="button" aria-label="Delete satellite reference"><span class="material-symbols-rounded">delete</span></button>
+            <input id="satellite-reference-on" class="switch" type="checkbox" checked aria-label="Show satellite reference">
+          </span>
+        </div>
       </div>
       <div class="label-section background-settings">
         <label id="image-upload-field" class="field">
@@ -6333,6 +6356,9 @@
         ctx.clip(boardShape());
         ctx.drawImage(backgroundImage, (board.w - w) / 2, (board.h - h) / 2, w, h);
         ctx.restore();
+      }
+      if (satelliteReference && satelliteReferenceOn.checked && !backgroundTools.hidden && !locationPart && !stackPart) {
+        ctx.drawImage(satelliteReference, 0, 0, board.w, board.h);
       }
       if (locationPart !== 'paths') {
         drawShapes();
@@ -11391,6 +11417,22 @@
     const preview = document.getElementById('image-preview');
     const previewImg = preview.querySelector('img');
     let backgroundImage = null;
+    // Captured from Location's satellite to draw the background over, shown
+    // in Background mode only, across the whole box.
+    let satelliteReference = null;
+    const satelliteReferenceField = document.getElementById('satellite-reference-field');
+    const satelliteReferenceOn = document.getElementById('satellite-reference-on');
+    async function setSatelliteReference(src) {
+      satelliteReference = src ? await loadImage(src) : null;
+      satelliteReferenceField.hidden = !satelliteReference;
+      satelliteReferenceOn.checked = true;
+      draw();
+    }
+    satelliteReferenceOn.addEventListener('change', () => {
+      satelliteReferenceOn.blur();
+      draw();
+    });
+    document.getElementById('satellite-reference-delete').addEventListener('click', () => setSatelliteReference(null));
     const resolutionField = document.getElementById('background-resolution');
     // Uploads load from blob URLs, which don't say they're SVG.
     const svgUploads = new Set();
@@ -11529,6 +11571,7 @@
       };
       file.images = await Promise.all(images.map(imageData));
       file.background = backgroundImage && await imageData(backgroundImage);
+      file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
     // A map file's paths, with their fills and groups, in place of the current ones.
@@ -11595,6 +11638,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
+      await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;
       selectedLabels = [];
@@ -12328,7 +12372,7 @@
           settings: { ...file.settings, ...mapStarts[next]?.settings },
           background: mapStarts[next]?.background ?? null,
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
-          zoomBase: 1, frameCentre: null,
+          zoomBase: 1, frameCentre: null, satelliteReference: null,
           ...mapStarts[next]?.paths,
         },
         mesh: { offsets: new Map(), erased: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },
@@ -12468,8 +12512,7 @@
       view.x += rect.x * view.scale;
       view.y += rect.y * view.scale;
       setCapture(false);
-      await setBackgroundImage(out.toDataURL('image/png'));
-      draw();
+      await setSatelliteReference(out.toDataURL('image/png'));
     });
 
     // Fits the satellite, at its offset, to most of the view.

@@ -11889,7 +11889,7 @@
     // when there's no background image, and where it lies on the map.
     const traceSource = () => (satelliteReference && (satelliteReferenceOn.checked || !backgroundImage) ? satelliteReference : backgroundImage);
     const traceSourceIsSvg = () => traceSource() === backgroundImage && backgroundIsSvg();
-    function traceArea(image) {
+    function imageArea(image) {
       if (image === satelliteReference) return { x: 0, y: 0, w: board.w };
       const { w, h } = backgroundSize();
       return { x: (board.w - w) / 2, y: (board.h - h) / 2, w };
@@ -12092,7 +12092,7 @@
       const rgba = c.getImageData(0, 0, W, H).data;
       const m = new Uint8Array(W * H);
       for (let i = 0; i < m.length; i++) m[i] = rgba[i * 4] > 128 ? 1 : 0;
-      return traceMask(m, W, H, S, natW, true, traceArea(backgroundImage));
+      return traceMask(m, W, H, S, natW, true, imageArea(backgroundImage));
     }
     // An image's pixels within reach of the colour, traced as the SVG's chosen shapes are.
     const RASTER_COLOR_REACH = 48;
@@ -12111,7 +12111,7 @@
       for (let i = 0; i < m.length; i++) {
         m[i] = rgba[i * 4 + 3] > 128 && Math.hypot(rgba[i * 4] - r, rgba[i * 4 + 1] - g, rgba[i * 4 + 2] - b) <= RASTER_COLOR_REACH ? 1 : 0;
       }
-      return traceMask(m, W, H, S, natW, false, traceArea(image));
+      return traceMask(m, W, H, S, natW, false, imageArea(image));
     }
     // A mask of walkway pixels, W × H at S times the image's own size,
     // thinned to lines a pixel wide and traced into a path in map units,

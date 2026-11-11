@@ -683,7 +683,8 @@
     }
     /* Slides off the right edge as the canvas widens into its place; it
        becomes invisible only once it's out of sight. */
-    #panel.blank {
+    #panel.blank,
+    #mode-menu #tool-menu.blank {
       display: none;
     }
     #background-panel .label-section:not(:has(> :not([hidden]))) {
@@ -3800,17 +3801,28 @@
     // Preview takes over the view and the layer, and gives both back after.
     let beforePreview = null;
     // With nothing to work over yet, no mode is chosen: the panel and view
-    // menu go, and the canvas offers the two ways to start instead.
+    // menu go, and the canvas offers the two ways to start instead. Background
+    // mode on a map still without a background offers just the upload.
     let noMode = false;
+    let blankShown = null;
+    function showBlankState() {
+      const backgroundEmpty = !backgroundTools.hidden && mapIsBlank();
+      const shown = noMode ? 'start' : backgroundEmpty ? 'upload' : null;
+      document.getElementById('panel').classList.toggle('blank', !!shown);
+      document.getElementById('tool-menu').classList.toggle('blank', !!shown);
+      document.getElementById('blank-state').hidden = !shown;
+      if (shown !== blankShown) {
+        if (shown) showUploadGuide(shown === 'upload');
+        document.getElementById('panel-open').hidden = !!shown || !document.getElementById('panel').classList.contains('closed');
+        document.getElementById('view-menu').hidden = !!shown || !modePanels.preview.hidden;
+        blankShown = shown;
+      }
+    }
     const mapIsBlank = () => !backgroundImage && !satelliteReference;
     const currentMode = () => document.querySelector('#mode-menu [data-mode][aria-pressed="true"]')?.dataset.mode ?? null;
     function setMode(mode) {
       if (mode !== 'background' && frameEditing) setFrameEditing(false);
       noMode = !mode;
-      document.getElementById('panel').classList.toggle('blank', noMode);
-      document.getElementById('blank-state').hidden = !noMode;
-      if (noMode) showUploadGuide(false);
-      if (noMode) document.getElementById('panel-open').hidden = true;
       if (mode === 'preview' && !inPreview()) {
         setSplit(false);
         beforePreview = { view: { ...view }, layer: layerSelect.value };
@@ -3823,6 +3835,7 @@
       }
       showViewMenu();
       document.getElementById('view-menu').hidden = mode === 'preview' || noMode;
+      blankShown = undefined;
       for (const button of modeButtons) {
         button.setAttribute('aria-pressed', button.dataset.mode === mode);
       }
@@ -3857,6 +3870,7 @@
       if (mode !== 'path') selected = null;
       closeCrossingDialog();
       if (mode !== 'path' || enteringPath) setTool('select');
+      showBlankState();
     }
 
     // Paths, labels and the preview are all laid over a background, so
@@ -6576,12 +6590,13 @@
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      const blank = noMode || (!backgroundTools.hidden && mapIsBlank());
       if (stackPart !== 'level' && !locationPart) {
         // The blank state sits on the house grey, not the map's own colour.
-        ctx.fillStyle = noMode ? '#eeedeb' : colorOf(canvasColor);
+        ctx.fillStyle = blank ? '#eeedeb' : colorOf(canvasColor);
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       }
-      if (noMode) return;
+      if (blank) return;
 
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
@@ -8147,6 +8162,7 @@
       document.getElementById('map-scale-field').hidden = !hasLabels && !shapes.some((shape) => shape.zoomScale !== undefined) && !groups.some((group) => group.width > 0);
     }
     function updatePanel() {
+      showBlankState();
       showCorners();
       showBackgroundToggles();
       const mapGround = colorOf(boardColor);
@@ -11778,17 +11794,16 @@
       });
     });
     // Upload a map first says what makes a good background, then picks the file.
-    const blankCards = [...document.querySelectorAll('#blank-state > .blank-card:not(#blank-upload-guide)')];
-    const uploadGuide = document.getElementById('blank-upload-guide');
     function showUploadGuide(on) {
-      for (const card of blankCards) card.hidden = on;
-      uploadGuide.hidden = !on;
+      for (const card of document.querySelectorAll('#blank-state > .blank-card:not(#blank-upload-guide)')) card.hidden = on;
+      document.getElementById('blank-upload-guide').hidden = !on;
     }
     document.getElementById('blank-upload').addEventListener('click', () => showUploadGuide(true));
     document.getElementById('blank-choose-file').addEventListener('click', () => upload.click());
     document.getElementById('blank-back').addEventListener('click', (e) => {
       e.preventDefault();
-      showUploadGuide(false);
+      if (noMode) showUploadGuide(false);
+      else setMode(null);
     });
     document.getElementById('blank-satellite').addEventListener('click', () => {
       setMode('location');

@@ -4696,7 +4696,9 @@
     // keeping its shape, and the handle above it turns it, both about its centre.
     let mapBoxHover = false;
     let mapBoxSelected = false;
-    const mapBoxShown = () => inLocation() && locationTool === 'select' && (mapBoxHover || mapBoxSelected || !!drag?.mapBox || drag?.locationGrab === 'map');
+    // A map with no background and no paths has nothing to place.
+    const mapIsEmpty = () => !backgroundImage && !paths.length;
+    const mapBoxShown = () => inLocation() && locationTool === 'select' && !mapIsEmpty() && (mapBoxHover || mapBoxSelected || !!drag?.mapBox || drag?.locationGrab === 'map');
     function mapBoxCorners() {
       return [{ x: 0, y: 0 }, { x: board.w, y: 0 }, { x: board.w, y: board.h }, { x: 0, y: board.h }].map((q) => toScreen(q));
     }
@@ -4709,7 +4711,7 @@
     // What of the box is at screen point s: its turn handle, a corner, or
     // inside it.
     function mapBoxAt(s) {
-      if (!inLocation() || locationTool !== 'select' || s.right) return null;
+      if (!inLocation() || locationTool !== 'select' || s.right || mapIsEmpty()) return null;
       const handle = mapBoxHandle();
       if (Math.hypot(handle.x - s.x, handle.y - s.y) <= 8) return { part: 'turn' };
       const corner = mapBoxCorners().findIndex((q) => Math.hypot(q.x - s.x, q.y - s.y) <= 8);
@@ -4763,7 +4765,7 @@
     // its box, however faint; else the satellite view, where it is; else the whole view.
     function locationGrabAt(s) {
       const m = toBackground(s.x, s.y);
-      if (m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h) return 'map';
+      if (!mapIsEmpty() && m.x >= 0 && m.x <= board.w && m.y >= 0 && m.y <= board.h) return 'map';
       const p = { x: (s.x - view.x) / view.scale, y: (s.y - view.y) / view.scale };
       const dx = p.x - board.w / 2 - satelliteOffset.x;
       const dy = p.y - board.h / 2 - satelliteOffset.y;

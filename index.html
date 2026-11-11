@@ -11417,6 +11417,55 @@
       }
       return [...groups.values()];
     }
+    // For each style group, the share of points along the paths already drawn
+    // that land on its shapes, and of points spread evenly over the whole
+    // map, or null when none are drawn. A walkway's is far higher on the
+    // paths; a base layer's is high everywhere.
+    function drawnPathShares(svg, styleGroups) {
+      const samples = [];
+      for (const path of paths) {
+        for (const [a, b] of path.segments) {
+          const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 10));
+          for (let k = 0; k < steps; k++) samples.push({ x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps });
+        }
+      }
+      if (!samples.length) return null;
+      const picked = samples.filter((_, k) => k % Math.ceil(samples.length / 300) === 0);
+      for (let i = 0.5; i < 20; i++) for (let j = 0.5; j < 15; j++) picked.push({ x: (board.w * i) / 20, y: (board.h * j) / 15, everywhere: true });
+      // Map units to the SVG's own, the background drawn as large as fits in the padded box, centred.
+      const roomW = Math.max(0, board.w - 2 * board.padding);
+      const roomH = Math.max(0, board.h - 2 * board.padding);
+      const s = Math.min(roomW / backgroundImage.naturalWidth, roomH / backgroundImage.naturalHeight);
+      const x0 = (board.w - backgroundImage.naturalWidth * s) / 2;
+      const y0 = (board.h - backgroundImage.naturalHeight * s) / 2;
+      const box = svg.viewBox.baseVal;
+      const unitX = box?.width ? box.width / backgroundImage.naturalWidth : 1;
+      const unitY = box?.height ? box.height / backgroundImage.naturalHeight : 1;
+      const rootPoints = picked.map((q) => new DOMPoint((box?.x ?? 0) + ((q.x - x0) / s) * unitX, (box?.y ?? 0) + ((q.y - y0) / s) * unitY));
+      const root = svg.getScreenCTM();
+      return styleGroups.map((group) => {
+        let hits = 0;
+        let everywhere = 0;
+        const local = group.elements.map((el) => {
+          const toLocal = root && el.getScreenCTM() ? el.getScreenCTM().inverse().multiply(root) : null;
+          return { el, toLocal };
+        });
+        rootPoints.forEach((point, k) => {
+          if (local.some(({ el, toLocal }) => {
+            const p = toLocal ? point.matrixTransform(toLocal) : point;
+            try {
+              return el.isPointInFill?.(p) || el.isPointInStroke?.(p);
+            } catch {
+              return false;
+            }
+          })) {
+            if (picked[k].everywhere) everywhere++;
+            else hits++;
+          }
+        });
+        return { drawn: hits / (rootPoints.length - 300), everywhere: everywhere / 300 };
+      });
+    }
     pathsFromBackground.addEventListener('click', async (e) => {
       e.currentTarget.blur();
       pathsFromBackground.disabled = true;
@@ -11430,14 +11479,20 @@
         host.append(svg);
         document.body.append(host);
         const styleGroups = svgStyleGroups(svg);
+        const onDrawn = drawnPathShares(svg, styleGroups);
         const summary = styleGroups.map((group, k) => `${k}. ${group.key}: ${group.elements.length} shapes, `
-          + `average box ${Math.round(Math.sqrt(group.area / group.elements.length))} units across, total outline length ${Math.round(group.length)}`).join('\n');
+          + `average box ${Math.round(Math.sqrt(group.area / group.elements.length))} units across, total outline length ${Math.round(group.length)}`
+          + (onDrawn ? `, under ${Math.round(onDrawn[k].drawn * 100)}% of the drawn path points and ${Math.round(onDrawn[k].everywhere * 100)}% of the map overall` : '')).join('\n');
         setPathsStatus('Asking Claude which shapes are paths…');
         const answer = await sample.json(
           `Below is every shape in an SVG map of a zoo or park (${svg.getAttribute('width')} × ${svg.getAttribute('height')} units), `
           + 'grouped by element and style. Which groups draw the visitor walking paths: footpaths and walkways inside the park? '
           + 'Not roads outside it, buildings, water, planting, labels, outlines of other areas or the background. '
           + 'Walkways are often long thin light shapes, or lines of one colour and width. '
+          + 'The chosen shapes are traced along their middles, so choose the filled walkway shapes where there are any, '
+          + 'and line groups only when they draw paths as single lines, not outlines along the edges of filled walkways. '
+          + (onDrawn ? 'Some paths have already been drawn over this map by hand; a group far more often under them than across the map overall is very likely a walkway, '
+            + 'while one under them about as often as everywhere is a base layer. ' : '')
           + 'Reply with only JSON like {"groups": [3, 7], "why": "one short sentence"}.\n\n' + summary,
         );
         const chosen = (Array.isArray(answer?.groups) ? answer.groups : []).map(Number).filter((k) => styleGroups[k]);
@@ -11476,7 +11531,9 @@
         if (el.closest(SVG_UNDRAWN)) return;
         const style = getComputedStyle(originals[k]);
         const ink = keep.has(originals[k]) ? '#fff' : '#000';
-        el.setAttribute('style', `fill:${style.fill === 'none' ? 'none' : ink};stroke:${style.stroke === 'none' ? 'none' : ink}`);
+        // Chosen lines are kept at least 6 pixels wide, or the cleanup of hairlines would take them.
+        const width = keep.has(originals[k]) ? `;stroke-width:${Math.max(parseFloat(style.strokeWidth) || 0, 6 / S)}` : '';
+        el.setAttribute('style', `fill:${style.fill === 'none' ? 'none' : ink};stroke:${style.stroke === 'none' ? 'none' : ink}${width}`);
       });
       for (const el of copy.querySelectorAll('image, text, use')) if (!el.closest(SVG_UNDRAWN)) el.setAttribute('visibility', 'hidden');
       copy.setAttribute('width', natW * S);

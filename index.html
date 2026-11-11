@@ -12979,7 +12979,10 @@
     // background's edges, without anything moving on screen.
     function showFitFrameButton() {
       const fitFrameButton = document.getElementById('fit-frame');
-      fitFrameButton.hidden = !frameEditing || backgroundTools.hidden;
+      // Only once the frame no longer matches the background's edges.
+      const fit = frameEditing && (backgroundImage ? backgroundRect() : satelliteReference ? satelliteRect() : null);
+      const fitted = !fit || [fit.x, fit.y, fit.w - board.w, fit.h - board.h].every((d) => Math.abs(d) < 0.5);
+      fitFrameButton.hidden = !frameEditing || backgroundTools.hidden || fitted;
       if (fitFrameButton.hidden) return;
       fitFrameButton.style.left = `${canvas.offsetLeft + view.x + (board.w * view.scale) / 2}px`;
       fitFrameButton.style.top = `${canvas.offsetTop + view.y + (board.h * view.scale) / 2}px`;

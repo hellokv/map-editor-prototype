@@ -3695,6 +3695,15 @@
       return { x: (board.w - w) / 2, y: (board.h - h) / 2, w, h };
     }
     const backgroundSize = backgroundRect;
+    // Images are cut to the box's corners and, once placed by hand, kept
+    // the padding in from its edges, as the fitted image already is.
+    function clipToImageRoom() {
+      ctx.clip(boardShape());
+      if (!backgroundPlace || !board.padding) return;
+      ctx.beginPath();
+      ctx.rect(board.padding, board.padding, Math.max(0, board.w - 2 * board.padding), Math.max(0, board.h - 2 * board.padding));
+      ctx.clip();
+    }
     const satelliteRect = () => (satellitePlace ? { ...satellitePlace } : { x: 0, y: 0, w: board.w, h: board.h });
     // What the background covers: its image, or before one, the whole box.
     const templateSize = () => (backgroundImage ? backgroundRect() : { x: 0, y: 0, w: board.w, h: board.h });
@@ -6573,17 +6582,16 @@
       if (!noBackground) ctx.fill(boardShape());
       ctx.restore();
       if (backgroundImage && !noBackground) {
-        // Centred, and cut to the box's rounded corners.
         const { x, y, w, h } = backgroundRect();
         ctx.save();
-        ctx.clip(boardShape());
+        clipToImageRoom();
         ctx.drawImage(backgroundImage, x, y, w, h);
         ctx.restore();
       }
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
         ctx.save();
-        ctx.clip(boardShape());
+        clipToImageRoom();
         ctx.drawImage(satelliteReference, r.x, r.y, r.w, r.h);
         ctx.restore();
       }
@@ -12010,7 +12018,7 @@
         ctx.fillStyle = colorOf(boardColor);
         ctx.fill(boardShape());
         ctx.save();
-        ctx.clip(boardShape());
+        clipToImageRoom();
         if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
         if (showsSatelliteReference()) {
           const r = satelliteRect();

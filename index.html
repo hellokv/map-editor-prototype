@@ -592,6 +592,38 @@
       background: #000;
       color: #fff;
     }
+    #mode-menu button[aria-disabled="true"] {
+      color: #bbb;
+      cursor: default;
+    }
+    #mode-menu button[aria-disabled="true"]:hover {
+      background: none;
+    }
+    #mode-note {
+      position: fixed;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 8px 8px 12px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      font: 13px 'National Park', system-ui, sans-serif;
+      white-space: nowrap;
+    }
+    #mode-note[hidden] {
+      display: none;
+    }
+    #mode-note button {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 6px;
+      background: #000;
+      color: #fff;
+      font: 600 12px 'National Park', system-ui, sans-serif;
+      cursor: pointer;
+    }
     :is(#panel, #style-panel, #settings-panel) {
       flex: none;
       width: 300px;
@@ -1781,16 +1813,16 @@
       <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
       </button>
-      <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false">
+      <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false" aria-disabled="true">
         <span class="material-symbols-rounded">label</span>
       </button>
-      <button type="button" data-mode="path" aria-label="Paths" aria-pressed="true">
+      <button type="button" data-mode="path" aria-label="Paths" aria-pressed="true" aria-disabled="true">
         <span class="material-symbols-rounded">route</span>
       </button>
       <button type="button" data-mode="location" aria-label="Location" aria-pressed="false">
         <span class="material-symbols-rounded">my_location</span>
       </button>
-      <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false">
+      <button type="button" data-mode="preview" aria-label="Preview" aria-pressed="false" aria-disabled="true">
         <span class="material-symbols-rounded">responsive_layout</span>
       </button>
       </div>
@@ -1862,6 +1894,10 @@
       </div>
     </div>
     <div id="tooltip" hidden></div>
+    <div id="mode-note" hidden>
+      <span></span>
+      <button type="button">Add Background</button>
+    </div>
     <button id="panel-open" type="button" aria-label="Open panel" hidden><span class="material-symbols-rounded">right_panel_open</span></button>
     <span id="auto-layers" hidden></span>
     <div id="view-menu">
@@ -3482,9 +3518,41 @@
       if (mode !== 'path' || enteringPath) setTool('select');
     }
 
-    for (const button of modeButtons) {
-      button.addEventListener('click', () => setMode(button.dataset.mode));
+    // Paths, labels and the preview are all laid over a background, so
+    // those modes wait for one.
+    const BACKGROUND_MODES = ['path', 'labels', 'preview'];
+    const modeNote = document.getElementById('mode-note');
+    const hideModeNote = () => { modeNote.hidden = true; };
+    function showModeLocks() {
+      for (const button of modeButtons) {
+        if (BACKGROUND_MODES.includes(button.dataset.mode)) button.setAttribute('aria-disabled', !backgroundImage);
+      }
+      if (backgroundImage) hideModeNote();
+      else if (BACKGROUND_MODES.some((mode) => document.querySelector(`#mode-menu [data-mode="${mode}"]`).getAttribute('aria-pressed') === 'true')) setMode('background');
     }
+    for (const button of modeButtons) {
+      button.addEventListener('click', () => {
+        if (button.getAttribute('aria-disabled') !== 'true') {
+          hideModeNote();
+          setMode(button.dataset.mode);
+          return;
+        }
+        button.blur();
+        modeNote.querySelector('span').textContent = `Add a background image to use ${button.getAttribute('aria-label')}.`;
+        modeNote.hidden = false;
+        const rect = button.getBoundingClientRect();
+        modeNote.style.left = `${rect.right + 8}px`;
+        modeNote.style.top = `${rect.top + rect.height / 2 - modeNote.offsetHeight / 2}px`;
+      });
+    }
+    modeNote.querySelector('button').addEventListener('click', () => {
+      hideModeNote();
+      setMode('background');
+      document.getElementById('image-upload').click();
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!modeNote.hidden && !e.target.closest('#mode-note, #mode-menu')) hideModeNote();
+    });
     for (const button of toolButtons) {
       button.addEventListener('click', () => setTool(button.dataset.tool));
     }
@@ -11226,6 +11294,7 @@
             upload.closest('.field').hidden = true;
             preview.hidden = false;
             locationBackgroundField.hidden = false;
+            showModeLocks();
             draw();
           }
           resolve();
@@ -11258,6 +11327,7 @@
       upload.value = '';
       preview.hidden = true;
       locationBackgroundField.hidden = true;
+      showModeLocks();
       upload.closest('.field').hidden = false;
       draw();
     }

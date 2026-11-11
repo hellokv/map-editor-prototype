@@ -2954,7 +2954,6 @@
             <span class="color-field"><input id="canvas-color" type="color" value="#7b8365"></span>
           </label>
         </div>
-        <button id="edit-frame" class="new-style" type="button" aria-pressed="false">Edit Inner Frame<span class="material-symbols-rounded">crop_free</span></button>
         <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
         <div class="field">
@@ -9900,6 +9899,7 @@
     // step once something changes.
     function shapePointerDown(e, s) {
       const p = toBackground(s.x, s.y);
+      if (frameEditing) setFrameEditing(false);
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
       // In label mode only images are pressed here, whatever background tool is set.
       const inLabels = !labelTools.hidden;
@@ -9965,6 +9965,11 @@
         if (!member) selectedShapes = [pressed];
         // A click on one of several without moving narrows to it.
         drag = { ...base, moving: [...selectedShapes], last: p, narrowTo: member ? pressed : null };
+      } else if (!inLabels && !shiftHeld && frameSelectable() && p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h) {
+        selectedShapes = [];
+        setFrameEditing(true);
+        canvas.setPointerCapture(e.pointerId);
+        frameDrag = { part: 'move', x: e.clientX, y: e.clientY };
       } else {
         drag = { ...base, marquee: true, x0: s.x, y0: s.y, base: shiftHeld ? [...selectedShapes] : [] };
       }
@@ -12935,20 +12940,21 @@
       await setSatelliteReference(out.toDataURL('image/png'));
     });
 
-    // Edit Inner Frame: dragging the box's edges or corners resizes it, and
-    // dragging inside it moves the background, and everything laid over it,
-    // within it. The left and top edges move the rest the other way, as the
+    // The inner frame, selected by clicking the box where nothing else is:
+    // dragging its edges or corners resizes it, and dragging inside it moves
+    // the background, and everything laid over it, within it. The left and top edges move the rest the other way, as the
     // box's corner is the map's origin, so nothing shifts on screen.
     const FRAME_MIN_SIZE = 100;
     const FRAME_HANDLE_REACH = 8;
     const FRAME_SNAP = 8;
     const FRAME_CURSORS = { move: 'move', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize' };
-    const editFrameButton = document.getElementById('edit-frame');
     function setFrameEditing(on) {
+      if (on === frameEditing) return;
       frameEditing = on;
       frameDrag = null;
-      editFrameButton.setAttribute('aria-pressed', on);
       if (on) {
+        selectedShapes = [];
+        sketchSelected = null;
         // The image and reference keep their size as the box changes.
         if (backgroundImage) backgroundPlace = backgroundRect();
         if (satelliteReference) satellitePlace = satelliteRect();
@@ -12956,9 +12962,14 @@
       updateCursor();
       draw();
     }
-    editFrameButton.addEventListener('click', () => {
-      editFrameButton.blur();
-      setFrameEditing(!frameEditing);
+    // The frame is there to select once there's an image to frame.
+    const frameSelectable = () => !backgroundTools.hidden && backgroundTool === 'select' && !!(backgroundImage || satelliteReference);
+    // Shapes and sketch figures lie over the frame and are picked first.
+    function overFrameItem(s) {
+      return !!(shapeAt(toBackground(s.x, s.y)) || sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints()) || sketchSegmentAt(s));
+    }
+    document.addEventListener('keydown', (e) => {
+      if (frameEditing && e.key === 'Escape') setFrameEditing(false);
     });
     function frameHandles() {
       const [x0, y0] = [view.x, view.y];
@@ -13018,9 +13029,10 @@
       }
     }
     canvas.addEventListener('pointerdown', (e) => {
-      if (!frameEditing || backgroundTools.hidden || e.button !== 0 || spaceHeld) return;
-      const part = frameHandleAt(canvasPoint(e));
-      if (!part) return;
+      if (!frameSelectable() || e.button !== 0 || spaceHeld) return;
+      const s = canvasPoint(e);
+      const part = frameEditing ? frameHandleAt(s) : null;
+      if (!part || (part === 'move' && overFrameItem(s))) return;
       e.stopImmediatePropagation();
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
@@ -13107,6 +13119,7 @@
         if (selectedShapes.length) return SHAPE_NAMES[selectedShapes[0].kind];
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
+        if (frameEditing) return 'Inner Frame';
         return 'Background';
       }
       if (selected?.area) return 'Area';

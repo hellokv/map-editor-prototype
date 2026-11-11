@@ -2655,6 +2655,10 @@
           Show Labels
           <input id="background-show-labels" class="switch" type="checkbox" checked>
         </label>
+        <label class="field">
+          Show Frame
+          <input id="background-show-frame" class="switch" type="checkbox">
+        </label>
       </div>
       <div class="label-section background-settings">
         <label id="image-upload-field" class="field">
@@ -3239,12 +3243,15 @@
     const PREVIEW_INSET = 40;
     const PHONE_BORDER = 12;
     const blurCopy = document.createElement('canvas');
-    function previewFrame() {
+    function deviceScale() {
       const room = PREVIEW_INSET + PHONE_BORDER;
-      const k = Math.min(
+      return Math.min(
         (canvas.clientWidth - 2 * room) / Math.max(...DEVICES.map((device) => device.w)),
         (canvas.clientHeight - 2 * room) / Math.max(...DEVICES.map((device) => device.h)),
       );
+    }
+    function previewFrame() {
+      const k = deviceScale();
       const w = previewDevice.w * k;
       const h = previewDevice.h * k;
       return { x: (canvas.clientWidth - w) / 2, y: (canvas.clientHeight - h) / 2, w, h, k };
@@ -3345,6 +3352,35 @@
       ctx.beginPath();
       const b = PHONE_BORDER / 2;
       ctx.roundRect(frame.x - b, frame.y - b, frame.w + 2 * b, frame.h + 2 * b, radius + b);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Background's frame: an iPhone 17 (the 17 Pro's screen in a 15pt bezel)
+    // at Preview's scale, fixed on screen, and inside it the part of the
+    // screen left to the map under the status bar and Safari's toolbar.
+    const FRAME_DEVICE = DEVICES[0];
+    const FRAME_BEZEL = 15;
+    const showFrameToggle = document.getElementById('background-show-frame');
+    showFrameToggle.addEventListener('change', () => {
+      showFrameToggle.blur();
+      draw();
+    });
+    function drawPhoneFrame() {
+      const k = deviceScale();
+      const dpr = window.devicePixelRatio || 1;
+      const w = FRAME_DEVICE.w * k;
+      const h = FRAME_DEVICE.h * k;
+      const x = (canvas.clientWidth - w) / 2;
+      const y = (canvas.clientHeight - h) / 2;
+      const bezel = FRAME_BEZEL * k;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(x - bezel, y - bezel, w + 2 * bezel, h + 2 * bezel, Math.min(w, h) * 0.13 + bezel);
+      ctx.rect(x, y + FRAME_DEVICE.top * k, w, h - (FRAME_DEVICE.top + FRAME_DEVICE.bottom) * k);
       ctx.stroke();
       ctx.restore();
     }
@@ -6146,6 +6182,7 @@
         if (!backgroundTools.hidden) {
           drawSketch();
           drawShapeSelection();
+          if (showFrameToggle.checked) drawPhoneFrame();
         }
         if (!modePanels.preview.hidden) drawDeviceFrame();
         drawMarquee();

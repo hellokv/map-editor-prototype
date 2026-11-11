@@ -550,15 +550,15 @@
     #canvas-area #map-menu select:hover {
       background-color: rgba(0, 0, 0, 0.06);
     }
-    #fit-frame {
+    :is(#set-background, #fit-frame) {
       display: flex;
       align-items: center;
       gap: 6px;
     }
-    #fit-frame[hidden] {
+    :is(#set-background, #fit-frame)[hidden] {
       display: none;
     }
-    #fit-frame .material-symbols-rounded {
+    :is(#set-background, #fit-frame) .material-symbols-rounded {
       font-size: 18px;
     }
     :is(#set-background, #fit-frame) {
@@ -2004,7 +2004,7 @@
       <button id="list-yes" type="button">Yes</button>
       <button id="list-no" type="button">No</button>
     </div>
-    <button id="set-background" type="button" hidden>Set Background</button>
+    <button id="set-background" type="button" hidden><span class="material-symbols-rounded">wallpaper</span>Set Background</button>
     <button id="fit-frame" type="button" hidden><span class="material-symbols-rounded">zoom_in_map</span>Resize to Fit</button>
     <div id="map-menu">
       <select id="map-example" aria-label="Map">

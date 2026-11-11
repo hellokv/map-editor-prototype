@@ -562,6 +562,18 @@
     #set-background:hover {
       background: #333;
     }
+    #resolution-low {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: #e5484d;
+      vertical-align: 1px;
+    }
+    #resolution-low[hidden] {
+      display: none;
+    }
     #mode-menu {
       position: absolute;
       top: 64px;
@@ -2761,7 +2773,7 @@
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
         <div class="field">
           Resolution
-          <output id="background-resolution"></output>
+          <output id="background-resolution"><span id="resolution-low" title="Below the Min Resolution" hidden></span><span></span></output>
         </div>
         <div class="field">
           Min Resolution
@@ -2783,8 +2795,8 @@
         <div class="field">
           Corners
           <select id="board-corners">
-            <option value="square">Square</option>
-            <option value="round" selected>Rounded</option>
+            <option value="square" selected>Square</option>
+            <option value="round">Rounded</option>
             <option value="chamfer">Chamfered</option>
           </select>
         </div>
@@ -3467,7 +3479,9 @@
       const perUnit = (zoomBase / deviceScale()) * MIN_RESOLUTION_ZOOM * PHONE_PIXEL_DENSITY;
       if (!backgroundImage) return;
       const { w, h } = backgroundSize();
-      minResolutionField.value = `${Math.round(w * perUnit)} × ${Math.round(h * perUnit)}`;
+      const min = { w: Math.round(w * perUnit), h: Math.round(h * perUnit) };
+      minResolutionField.value = `${min.w} × ${min.h}`;
+      document.getElementById('resolution-low').hidden = backgroundIsSvg() || (backgroundImage.naturalWidth >= min.w && backgroundImage.naturalHeight >= min.h);
     }
     // The background image on the map: as large as fits inside the padded
     // box, never stretched.
@@ -4344,7 +4358,7 @@
     // sits wholly outside its edge. corners is 'round' or 'chamfer', reaching
     // radius along each side. shadow is null when off.
     const board = {
-      w: 1500, h: 1500, padding: 0, outline: null, outlineWidth: 1, corners: 'round', radius: 0,
+      w: 1500, h: 1500, padding: 0, outline: null, outlineWidth: 1, corners: 'square', radius: 0,
       shadow: null, shadowX: 0, shadowY: 8, shadowBlur: 24,
     };
     const boardShape = () => boxPath({ x: 0, y: 0, w: board.w, h: board.h }, board.radius, board.corners);
@@ -11370,7 +11384,7 @@
             upload.closest('.field').hidden = true;
             preview.hidden = false;
             locationBackgroundField.hidden = false;
-            resolutionField.value = backgroundIsSvg() ? 'NA' : `${img.naturalWidth} × ${img.naturalHeight}`;
+            resolutionField.lastChild.textContent = backgroundIsSvg() ? 'NA' : `${img.naturalWidth} × ${img.naturalHeight}`;
             showModeLocks();
             draw();
           }

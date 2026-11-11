@@ -6457,6 +6457,7 @@
         traceArea(area);
         ctx.fill();
       };
+      // Filled areas show faintly, and fully only while selected.
       for (const area of areas) {
         const fill = fillOf(area.points);
         if (!fill) continue;
@@ -6467,6 +6468,7 @@
           ctx.fillStyle = color;
           ctx.globalAlpha = 0.8;
         }
+        if (!(selected?.area && samePoints(area.points, selected.area))) ctx.globalAlpha *= 0.3;
         fillArea(area);
         ctx.restore();
       }

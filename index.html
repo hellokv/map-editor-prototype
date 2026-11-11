@@ -7777,7 +7777,7 @@
       const list = newList({ x: area.x, y: area.y });
       const ordered = [...selectedLabels].sort((a, b) => a.y - b.y);
       list.heading = '';
-      list.items = ordered.map((label) => ({ text: label.text, styleId: styleOf(label).id, ...(label.icon ? { icon: label.icon } : {}), ...(label.place ? { place: label.place } : {}) }));
+      list.items = ordered.map((label) => ({ text: labelText(label), styleId: styleOf(label).id, ...(label.icon ? { icon: label.icon } : {}), ...(label.place ? { place: label.place } : {}) }));
       lists.push(list);
       for (const label of selectedLabels) labels.splice(labels.indexOf(label), 1);
       selectedLabels = [];
@@ -8298,6 +8298,7 @@
         // Leave a field alone while it's being typed in.
         const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
         show(labelTextInput, selectedLabel.text);
+        labelTextInput.placeholder = selectedLabel.place ?? '';
         show(labelXInput, Math.round(selectedLabel.x));
         show(labelYInput, Math.round(selectedLabel.y));
         for (const button of pointerButtons) {
@@ -8343,6 +8344,8 @@
       }
     }
 
+    // A label with a place and no text of its own shows the place's name.
+    const labelText = (label) => label.text || label.place || '';
     const labelPlaceSelect = document.getElementById('label-place');
     labelPlaceSelect.replaceChildren(
       Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
@@ -8352,11 +8355,12 @@
       const label = soleLabel();
       if (!label) return;
       recordUndo();
-      // Picking a place names the label after it; the name can then be retyped.
+      // A new place names the label after it, until its own text is typed.
       if (labelPlaceSelect.value) {
         label.place = labelPlaceSelect.value;
-        label.text = labelPlaceSelect.value;
+        label.text = '';
       } else {
+        label.text = labelText(label);
         delete label.place;
       }
       labelPlaceSelect.blur();
@@ -8443,7 +8447,7 @@
       const iconStyleIds = new Set(selectedLabels.filter((label) => label.icon).map((label) => iconStyleOf(label).id));
       // The backdrop follows the label around the map and the map's zoom.
       const backdropKey = soleLabel() ? [source.x, source.y, view.scale] : null;
-      const key = JSON.stringify([source.text, iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, iconStylePickerOpen, [...labelStyleIds], [...iconStyleIds], kind, backdropKey]);
+      const key = JSON.stringify([labelText(source), iconSettingsOf(source), labelStyles, iconStyles, loadedFontCount, labelStylePicker.clientWidth, stylePickerOpen, iconStylePickerOpen, [...labelStyleIds], [...iconStyleIds], kind, backdropKey]);
       if (key === labelPickersKey) return;
       labelPickersKey = key;
       // With both lists showing, an open one is named.
@@ -8452,7 +8456,7 @@
       if (shownStyleLists.label) {
         renderStylePicker(labelStylePicker, {
           title: listTitle(stylePickerOpen, 'Label Styles'),
-          text: source.text,
+          text: labelText(source),
           iconSettings: iconSettingsOf(source),
           styleIds: labelStyleIds,
           open: stylePickerOpen,
@@ -8464,7 +8468,7 @@
       if (shownStyleLists.icon) {
         renderStylePicker(iconStylePicker, {
           title: listTitle(iconStylePickerOpen, 'Icon Styles'),
-          text: source.text,
+          text: labelText(source),
           iconSettings: { icon: source.icon },
           styleIds: iconStyleIds,
           open: iconStylePickerOpen,
@@ -8658,7 +8662,7 @@
       finishLabel(true);
       editingLabel = { x: p.x, y: p.y, label };
       if (!label) editingLabel.kind = newLabelKind;
-      labelInput.value = label?.text ?? '';
+      labelInput.value = label ? labelText(label) : '';
       labelInput.hidden = false;
       placeLabelInput();
       labelInput.focus();
@@ -8670,15 +8674,17 @@
       const text = labelInput.value.trim();
       const { label } = editingLabel;
       let created = null;
-      if (label && keep && text !== label.text) {
-        // Clearing an existing label's text deletes it.
+      if (label && keep && text !== labelText(label)) {
+        // Clearing an existing label's text deletes it, unless it has a
+        // place, whose name it then shows again.
         recordUndo();
-        if (text) label.text = text;
+        if (text) label.text = text === label.place ? '' : text;
+        else if (label.place) label.text = '';
         else labels.splice(labels.indexOf(label), 1);
         selectedLabels = selectedLabels.filter((other) => labels.includes(other));
       } else if (!label && keep && text) {
         recordUndo();
-        created = { x: editingLabel.x, y: editingLabel.y, text, styleId: currentStyle().id, pins: [] };
+        created = { x: editingLabel.x, y: editingLabel.y, text: text === editingLabel.place ? '' : text, styleId: currentStyle().id, pins: [] };
         if (editingLabel.kind !== 'text') Object.assign(created, { iconStyleId: currentIconStyle().id, icon: 'pets' });
         if (editingLabel.kind === 'icon') created.styleId = null;
         if (editingLabel.place) created.place = editingLabel.place;
@@ -8815,7 +8821,7 @@
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
       const hidden = textIsHidden(label);
-      const texts = hidden ? [] : (style.caps ? label.text.toUpperCase() : label.text).split('\n');
+      const texts = hidden ? [] : (style.caps ? labelText(label).toUpperCase() : labelText(label)).split('\n');
       ctx.save();
       ctx.font = fontOf(style);
       ctx.letterSpacing = `${style.letterSpacing}px`;

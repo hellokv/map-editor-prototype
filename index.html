@@ -3462,6 +3462,7 @@
       labelTools.hidden = mode !== 'labels';
       backgroundTools.hidden = mode !== 'background';
       if (mode === 'location' && locationTools.hidden) setLocationTool('select');
+      if (mode === 'location') showLocationPathFields();
       locationTools.hidden = mode !== 'location';
       if (enteringLabels) setLabelTool('select');
       if (mode !== 'background') {
@@ -4652,6 +4653,9 @@
     // canvas on its own, copied aside, and then laid back down faded.
     function inLocation() { return !document.getElementById('location-panel').hidden; }
     const locationInputs = { background: document.getElementById('location-background'), paths: document.getElementById('location-paths') };
+    function showLocationPathFields() {
+      for (const id of ['location-paths', 'location-path-color']) document.getElementById(id).closest('.field').hidden = !paths.length;
+    }
     for (const slider of document.querySelectorAll('#location-panel .slider input[type="range"]')) {
       const input = slider.closest('.slider').querySelector('input[type="number"]');
       slider.addEventListener('input', () => {
@@ -11920,6 +11924,7 @@
         fitSatellite: start?.fitSatellite,
       };
       await loadMapFile(saved.file);
+      showLocationPathFields();
       setLocationState(saved.location);
       Object.assign(satelliteOffset, saved.satelliteOffset);
       // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.

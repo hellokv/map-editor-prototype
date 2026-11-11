@@ -12077,7 +12077,7 @@
       for (const [a, b] of segments.values()) length.set(root(a), (length.get(root(a)) ?? 0) + Math.hypot(b.x - a.x, b.y - a.y));
       const main = [...length].sort((x, y) => y[1] - x[1])[0]?.[0];
       const kept2 = [...segments.values()].filter(([a]) => root(a) === main);
-      return { points: [...new Set(kept2.flat())], segments: kept2 };
+      return { points: [...new Set(kept2.flatMap(([a, b]) => [a, b]))], segments: kept2 };
     }
 
     // The pre-loaded maps. Switching keeps the one left, mesh and all, to

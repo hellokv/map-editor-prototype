@@ -3372,6 +3372,7 @@
       meshWallSelected = null;
       meshPinSelected = null;
       mapBoxSelected = false;
+      locationSelected = new Set();
       showLocationTool();
       updateCursor();
       // Edit paths shows the path nodes, and leaving it hides them.
@@ -5563,16 +5564,27 @@
         if (p) locationPathEdits.set(p, at);
       }
     }
-    // Moves a node in Location as the path editor would, its bends kept in shape.
-    function moveLocationNode(point, dx, dy) {
-      const controls = paths.flatMap((path) => path.segments).filter(([a, b]) => a === point || b === point).flatMap(([, , ...c]) => c);
-      for (const p of [point, ...controls]) if (!locationPathEdits.has(p)) locationPathEdits.set(p, { x: p.x, y: p.y });
+    // The nodes picked out in Edit paths, to move together.
+    let locationSelected = new Set();
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && locationSelected.size) {
+        locationSelected = new Set();
+        draw();
+      }
+    });
+    // Moves nodes in Location as the path editor would, their bends kept in shape.
+    function moveLocationNodes(points, dx, dy) {
+      const controls = paths.flatMap((path) => path.segments).filter(([a, b]) => points.has(a) || points.has(b)).flatMap(([, , ...c]) => c);
+      const touched = [...points, ...controls];
+      for (const p of touched) if (!locationPathEdits.has(p)) locationPathEdits.set(p, { x: p.x, y: p.y });
       withLocationPaths(() => {
-        keepingBends(new Set([point]), () => {
-          point.x += dx;
-          point.y += dy;
+        keepingBends(points, () => {
+          for (const point of points) {
+            point.x += dx;
+            point.y += dy;
+          }
         });
-        for (const p of [point, ...controls]) locationPathEdits.set(p, { x: p.x, y: p.y });
+        for (const p of touched) locationPathEdits.set(p, { x: p.x, y: p.y });
       });
     }
     // A map point carried by the mesh, interpolated between lattice nodes as
@@ -5620,12 +5632,22 @@
       ctx.lineWidth = 1.5;
       for (const point of pathNodes()) {
         const q = locationNodeScreen(point);
+        const picked = locationSelected.has(point);
         ctx.beginPath();
-        ctx.arc(q.x, q.y, 4, 0, 2 * Math.PI);
-        ctx.fillStyle = '#fff';
+        ctx.arc(q.x, q.y, picked ? 5 : 4, 0, 2 * Math.PI);
+        ctx.fillStyle = picked ? SELECTED_COLOR : '#fff';
         ctx.fill();
-        ctx.strokeStyle = toolColor.value;
+        ctx.strokeStyle = picked ? '#fff' : toolColor.value;
         ctx.stroke();
+      }
+      const box = drag?.locationMarquee;
+      if (box) {
+        ctx.fillStyle = 'rgba(0, 143, 240, 0.08)';
+        ctx.strokeStyle = SELECTED_COLOR;
+        ctx.lineWidth = 1;
+        const [x, y, w, h] = [Math.min(box.x0, box.x1), Math.min(box.y0, box.y1), Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0)];
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
       }
       ctx.restore();
     }
@@ -11057,7 +11079,7 @@
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'nodes' && !spaceHeld && !drag?.spacePan) {
-        const held = drag?.locationNode;
+        const held = drag?.locationNodes;
         const over = !drag && pointer && pathNodeAt(pointer);
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : '';
       }
@@ -11313,11 +11335,18 @@
         return;
       }
       if (inLocation() && locationTool === 'nodes' && !spaceHeld) {
+        // A press on a node picks it, Shift adding it to the others or
+        // taking it out, and drags all picked; elsewhere a drag boxes nodes in.
         const point = pathNodeAt(s);
-        if (point) {
-          drag = { locationNode: point, last: toBackground(s.x, s.y) };
+        if (point && e.shiftKey && locationSelected.has(point)) {
+          locationSelected.delete(point);
+        } else if (point) {
+          if (e.shiftKey) locationSelected.add(point);
+          else if (!locationSelected.has(point)) locationSelected = new Set([point]);
+          drag = { locationNodes: locationSelected, last: toBackground(s.x, s.y) };
         } else {
-          drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: 'view', views: viewsAt(s, e) };
+          drag = { locationMarquee: { x0: s.x, y0: s.y, x1: s.x, y1: s.y }, base: e.shiftKey ? new Set(locationSelected) : new Set() };
+          locationSelected = new Set(drag.base);
         }
         draw();
         updateCursor();
@@ -11692,10 +11721,24 @@
         draw();
         return;
       }
-      if (drag?.locationNode) {
+      if (drag?.locationNodes) {
         const p = toBackground(pointer.x, pointer.y);
-        moveLocationNode(drag.locationNode, p.x - drag.last.x, p.y - drag.last.y);
+        moveLocationNodes(drag.locationNodes, p.x - drag.last.x, p.y - drag.last.y);
         drag.last = p;
+        draw();
+        return;
+      }
+      if (drag?.locationMarquee) {
+        const box = drag.locationMarquee;
+        box.x1 = pointer.x;
+        box.y1 = pointer.y;
+        const [x0, x1] = [Math.min(box.x0, box.x1), Math.max(box.x0, box.x1)];
+        const [y0, y1] = [Math.min(box.y0, box.y1), Math.max(box.y0, box.y1)];
+        locationSelected = new Set(drag.base);
+        for (const point of pathNodes()) {
+          const q = locationNodeScreen(point);
+          if (q.x >= x0 && q.x <= x1 && q.y >= y0 && q.y <= y1) locationSelected.add(point);
+        }
         draw();
         return;
       }
@@ -11888,7 +11931,7 @@
         updateCursor();
         return;
       }
-      if (drag.locationNode) {
+      if (drag.locationNodes || drag.locationMarquee) {
         drag = null;
         draw();
         updateCursor();
@@ -13124,6 +13167,7 @@
       showLocationPathFields();
       setLocationState(saved.location);
       locationEditsIn(saved.locationPathEdits);
+      locationSelected = new Set();
       Object.assign(satelliteOffset, saved.satelliteOffset);
       // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.
       meshLattice();

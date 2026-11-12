@@ -2824,6 +2824,7 @@
           <span class="slider"><input id="satellite-rotation" type="number" min="-180" max="180" step="1" value="0"><input type="range" min="-180" max="180" step="1" value="0" aria-label="Satellite rotation"></span>
         </label>
         <button id="capture-background" class="new-style" type="button" aria-pressed="false">Capture Background<span class="material-symbols-rounded">crop</span></button>
+        <button id="match-mesh" class="new-style" type="button" hidden>Match Mesh to Paths<span class="material-symbols-rounded">gesture</span></button>
       </div>
       <div class="label-section">
         <div class="field-group">
@@ -3373,6 +3374,7 @@
       meshPinSelected = null;
       mapBoxSelected = false;
       locationSelected = new Set();
+      showMatchMesh();
       showLocationTool();
       updateCursor();
       // Edit paths shows the path nodes, and leaving it hides them.
@@ -5526,6 +5528,8 @@
     // and the bends that move with them, keep their Location positions here,
     // leaving the map's paths as they are.
     let locationPathEdits = new Map();
+    // Segments bent in Location, with the bend controls they have there.
+    let locationBends = new Map();
     const pathNodes = () => [...new Set(paths.flatMap((path) => path.points))];
     const locationAt = (p) => locationPathEdits.get(p) ?? p;
     // Runs fn with the paths in their Location positions, then puts them back.
@@ -5536,12 +5540,146 @@
         p.y = at.y;
         return [p, was];
       });
+      const bent = [...locationBends].map(([segment, controls]) => {
+        const was = segment.slice(2);
+        segment.length = 2;
+        segment.push(...controls);
+        return [segment, was];
+      });
       try {
         return fn();
       } finally {
+        for (const [segment, was] of bent) {
+          segment.length = 2;
+          segment.push(...was);
+        }
         for (const [p, was] of kept) Object.assign(p, was);
       }
     }
+    // Bends a segment in Location alone, as the path editor would.
+    function bendLocationSegment(segment, t, m) {
+      if (!locationBends.has(segment)) withLocationPaths(() => locationBends.set(segment, segment.slice(2).map((c) => ({ x: c.x, y: c.y }))));
+      withLocationPaths(() => {
+        bendSegment(segment, t, m);
+        locationBends.set(segment, [segment[2], segment[3]]);
+      });
+    }
+    // The segment nearest screen point s, as Location draws it, and where along it.
+    function locationSegmentAt(s) {
+      return withLocationPaths(() => {
+        let best = null;
+        let bestDistance = Number(segmentDistanceInput.value) || 8;
+        for (const segment of paths.flatMap((path) => path.segments)) {
+          const steps = segment[2] ? 16 : 1;
+          let prev = locationScreen(segmentPoint(segment, 0));
+          for (let k = 1; k <= steps; k++) {
+            const next = locationScreen(segmentPoint(segment, k / steps));
+            const dx = next.x - prev.x;
+            const dy = next.y - prev.y;
+            const lengthSq = dx * dx + dy * dy;
+            const u = lengthSq ? Math.min(1, Math.max(0, ((s.x - prev.x) * dx + (s.y - prev.y) * dy) / lengthSq)) : 0;
+            const d = Math.hypot(prev.x + dx * u - s.x, prev.y + dy * u - s.y);
+            if (d <= bestDistance) {
+              best = { segment, t: bendT((k - 1 + u) / steps) };
+              bestDistance = d;
+            }
+            prev = next;
+          }
+        }
+        return best;
+      });
+    }
+    // Match Mesh to Paths: warps the mesh so the map's paths land where
+    // Location's edits put them, then lets the edits go, the paths now
+    // carried there by the mesh. Points along the paths are matched by a
+    // smooth field of Gaussian bumps, fitted to move each point exactly and
+    // fading out away from them; unmoved points nearby hold their ground.
+    function showMatchMesh() {
+      document.getElementById('match-mesh').hidden = !(locationTool === 'nodes' && (locationPathEdits.size || locationBends.size));
+    }
+    function matchMeshToPaths() {
+      const { step } = meshLattice();
+      // Each segment's ends and quarter points, and where Location shows them.
+      const ts = [0, 0.25, 0.5, 0.75, 1];
+      const seen = new Set();
+      const samples = [];
+      for (const segment of paths.flatMap((path) => path.segments)) {
+        const edited = withLocationPaths(() => ts.map((t) => segmentPoint(segment, t)));
+        ts.forEach((t, k) => {
+          const p = segmentPoint(segment, t);
+          const key = `${Math.round(p.x)},${Math.round(p.y)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          samples.push({ p, base: toMesh(p), to: meshWarpedPoint(edited[k]) });
+        });
+      }
+      const sigma = 1.5 * step;
+      const reach = 4 * sigma;
+      const kernel = (a, b) => Math.exp(-((a.x - b.x) ** 2 + (a.y - b.y) ** 2) / (2 * sigma * sigma));
+      // The lattice can't follow every point at once, so the fit is repeated
+      // on what's left over until the paths are where they should be.
+      for (let round = 0; round < 4; round++) {
+        const points = samples.map(({ p, base, to }) => {
+          const from = meshWarpedPoint(p);
+          return { base, dx: to.x - from.x, dy: to.y - from.y };
+        });
+        const moved = points.filter(({ dx, dy }) => Math.hypot(dx, dy) > 0.25 / view.scale);
+        if (!moved.length) break;
+        // Only points near a moved one shape the field; it is nothing further out.
+        const used = points.filter((q) => moved.some((m) => Math.hypot(m.base.x - q.base.x, m.base.y - q.base.y) < reach));
+        const n = used.length;
+        // Solves (K + λI) w = d for both axes by Cholesky; λ keeps close points from fighting.
+        const L = new Float64Array(n * n);
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j <= i; j++) {
+            let sum = kernel(used[i].base, used[j].base) + (i === j ? 1e-3 : 0);
+            for (let k = 0; k < j; k++) sum -= L[i * n + k] * L[j * n + k];
+            L[i * n + j] = i === j ? Math.sqrt(Math.max(sum, 1e-12)) : sum / L[j * n + j];
+          }
+        }
+        const solve = (d) => {
+          const y = new Float64Array(n);
+          for (let i = 0; i < n; i++) {
+            let sum = d[i];
+            for (let k = 0; k < i; k++) sum -= L[i * n + k] * y[k];
+            y[i] = sum / L[i * n + i];
+          }
+          const w = new Float64Array(n);
+          for (let i = n - 1; i >= 0; i--) {
+            let sum = y[i];
+            for (let k = i + 1; k < n; k++) sum -= L[k * n + i] * w[k];
+            w[i] = sum / L[i * n + i];
+          }
+          return w;
+        };
+        const wx = solve(used.map((q) => q.dx));
+        const wy = solve(used.map((q) => q.dy));
+        const { node, from, to } = meshLattice(Math.ceil(reach / step) + 2, true);
+        for (let i = from.i; i <= to.i; i++) {
+          for (let j = from.j; j <= to.j; j++) {
+            const b = node.base(i, j);
+            let fx = 0;
+            let fy = 0;
+            for (let k = 0; k < n; k++) {
+              const g = kernel(b, used[k].base);
+              fx += wx[k] * g;
+              fy += wy[k] * g;
+            }
+            if (Math.abs(fx) > 1e-4 || Math.abs(fy) > 1e-4) moveMeshNode(`${i},${j}`, fx, fy);
+          }
+        }
+      }
+      meshWarp.checked = true;
+      locationPathEdits = new Map();
+      locationBends = new Map();
+      locationSelected = new Set();
+    }
+    document.getElementById('match-mesh').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      matchMeshToPaths();
+      showMatchMesh();
+      draw();
+    });
     // Switching maps rebuilds the paths, so the edits are kept by place: a
     // node's index among the nodes, or a bend's segment and control.
     function locationEditsOut() {
@@ -5553,13 +5691,19 @@
         if (i >= 0) out.push({ node: i, at });
         segments.forEach(([, , ...controls], j) => controls.forEach((c, k) => { if (c === p) out.push({ segment: j, control: k, at }); }));
       }
+      for (const [segment, controls] of locationBends) out.push({ bend: segments.indexOf(segment), controls: controls.map((c) => ({ x: c.x, y: c.y })) });
       return out;
     }
     function locationEditsIn(list = []) {
       const nodes = pathNodes();
       const segments = paths.flatMap((path) => path.segments);
       locationPathEdits = new Map();
-      for (const { node, segment, control, at } of list) {
+      locationBends = new Map();
+      for (const { node, segment, control, at, bend, controls } of list) {
+        if (bend !== undefined) {
+          if (segments[bend]) locationBends.set(segments[bend], controls);
+          continue;
+        }
         const p = node !== undefined ? nodes[node] : segments[segment]?.[2 + control];
         if (p) locationPathEdits.set(p, at);
       }
@@ -5574,7 +5718,8 @@
     });
     // Moves nodes in Location as the path editor would, their bends kept in shape.
     function moveLocationNodes(points, dx, dy) {
-      const controls = paths.flatMap((path) => path.segments).filter(([a, b]) => points.has(a) || points.has(b)).flatMap(([, , ...c]) => c);
+      // Bends of Location's own move in place with them; the map's are kept as edits.
+      const controls = paths.flatMap((path) => path.segments).filter((segment) => !locationBends.has(segment) && (points.has(segment[0]) || points.has(segment[1]))).flatMap(([, , ...c]) => c);
       const touched = [...points, ...controls];
       for (const p of touched) if (!locationPathEdits.has(p)) locationPathEdits.set(p, { x: p.x, y: p.y });
       withLocationPaths(() => {
@@ -5612,7 +5757,8 @@
       }
       return { x, y };
     }
-    const locationNodeScreen = (point) => toScreen(fromMesh(meshWarpedPoint(locationAt(point))));
+    const locationScreen = (p) => toScreen(fromMesh(meshWarpedPoint(p)));
+    const locationNodeScreen = (point) => locationScreen(locationAt(point));
     const PATH_NODE_REACH = 10;
     function pathNodeAt(s) {
       let best = null;
@@ -5629,7 +5775,31 @@
     }
     function drawPathNodes() {
       ctx.save();
+      // A dotted arrow from where each moved node was to where it is now.
+      ctx.strokeStyle = toolColor.value;
+      ctx.fillStyle = toolColor.value;
       ctx.lineWidth = 1.5;
+      for (const point of pathNodes()) {
+        if (!locationPathEdits.has(point)) continue;
+        const from = locationScreen(point);
+        const to = locationNodeScreen(point);
+        const length = Math.hypot(to.x - from.x, to.y - from.y);
+        if (length < 6) continue;
+        const ux = (to.x - from.x) / length;
+        const uy = (to.y - from.y) / length;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x - ux * 6, to.y - uy * 6);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(to.x - ux * 5, to.y - uy * 5);
+        ctx.lineTo(to.x - ux * 12 - uy * 4, to.y - uy * 12 + ux * 4);
+        ctx.lineTo(to.x - ux * 12 + uy * 4, to.y - uy * 12 - ux * 4);
+        ctx.closePath();
+        ctx.fill();
+      }
       for (const point of pathNodes()) {
         const q = locationNodeScreen(point);
         const picked = locationSelected.has(point);
@@ -11344,6 +11514,9 @@
           if (e.shiftKey) locationSelected.add(point);
           else if (!locationSelected.has(point)) locationSelected = new Set([point]);
           drag = { locationNodes: locationSelected, last: toBackground(s.x, s.y) };
+        } else if (!e.shiftKey && locationSegmentAt(s)) {
+          const { segment, t } = locationSegmentAt(s);
+          drag = { locationBend: segment, t };
         } else {
           drag = { locationMarquee: { x0: s.x, y0: s.y, x1: s.x, y1: s.y }, base: e.shiftKey ? new Set(locationSelected) : new Set() };
           locationSelected = new Set(drag.base);
@@ -11725,6 +11898,13 @@
         const p = toBackground(pointer.x, pointer.y);
         moveLocationNodes(drag.locationNodes, p.x - drag.last.x, p.y - drag.last.y);
         drag.last = p;
+        showMatchMesh();
+        draw();
+        return;
+      }
+      if (drag?.locationBend) {
+        bendLocationSegment(drag.locationBend, drag.t, toBackground(pointer.x, pointer.y));
+        showMatchMesh();
         draw();
         return;
       }
@@ -11931,7 +12111,7 @@
         updateCursor();
         return;
       }
-      if (drag.locationNodes || drag.locationMarquee) {
+      if (drag.locationNodes || drag.locationMarquee || drag.locationBend) {
         drag = null;
         draw();
         updateCursor();
@@ -13168,6 +13348,7 @@
       setLocationState(saved.location);
       locationEditsIn(saved.locationPathEdits);
       locationSelected = new Set();
+      showMatchMesh();
       Object.assign(satelliteOffset, saved.satelliteOffset);
       // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.
       meshLattice();

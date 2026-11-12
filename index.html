@@ -5521,9 +5521,60 @@
       const { step } = meshLattice();
       return meshLattice(Math.ceil((reach + 4 * (spread ?? meshReach(step).spread)) / step) + 2);
     };
-    // Edit paths: the map's path nodes where the mesh has carried them. One
-    // dragged becomes a pull from there; the rest hold the mesh as anchors.
+    // Edit paths: Location's own variation of the paths. Nodes moved there,
+    // and the bends that move with them, keep their Location positions here,
+    // leaving the map's paths as they are.
+    let locationPathEdits = new Map();
     const pathNodes = () => [...new Set(paths.flatMap((path) => path.points))];
+    const locationAt = (p) => locationPathEdits.get(p) ?? p;
+    // Runs fn with the paths in their Location positions, then puts them back.
+    function withLocationPaths(fn) {
+      const kept = [...locationPathEdits].map(([p, at]) => {
+        const was = { x: p.x, y: p.y };
+        p.x = at.x;
+        p.y = at.y;
+        return [p, was];
+      });
+      try {
+        return fn();
+      } finally {
+        for (const [p, was] of kept) Object.assign(p, was);
+      }
+    }
+    // Switching maps rebuilds the paths, so the edits are kept by place: a
+    // node's index among the nodes, or a bend's segment and control.
+    function locationEditsOut() {
+      const nodes = pathNodes();
+      const segments = paths.flatMap((path) => path.segments);
+      const out = [];
+      for (const [p, at] of locationPathEdits) {
+        const i = nodes.indexOf(p);
+        if (i >= 0) out.push({ node: i, at });
+        segments.forEach(([, , ...controls], j) => controls.forEach((c, k) => { if (c === p) out.push({ segment: j, control: k, at }); }));
+      }
+      return out;
+    }
+    function locationEditsIn(list = []) {
+      const nodes = pathNodes();
+      const segments = paths.flatMap((path) => path.segments);
+      locationPathEdits = new Map();
+      for (const { node, segment, control, at } of list) {
+        const p = node !== undefined ? nodes[node] : segments[segment]?.[2 + control];
+        if (p) locationPathEdits.set(p, at);
+      }
+    }
+    // Moves a node in Location as the path editor would, its bends kept in shape.
+    function moveLocationNode(point, dx, dy) {
+      const controls = paths.flatMap((path) => path.segments).filter(([a, b]) => a === point || b === point).flatMap(([, , ...c]) => c);
+      for (const p of [point, ...controls]) if (!locationPathEdits.has(p)) locationPathEdits.set(p, { x: p.x, y: p.y });
+      withLocationPaths(() => {
+        keepingBends(new Set([point]), () => {
+          point.x += dx;
+          point.y += dy;
+        });
+        for (const p of [point, ...controls]) locationPathEdits.set(p, { x: p.x, y: p.y });
+      });
+    }
     // A map point carried by the mesh, interpolated between lattice nodes as
     // the warp draws it.
     function meshWarpedPoint(p) {
@@ -5549,19 +5600,13 @@
       }
       return { x, y };
     }
-    const movedPathNodes = () => new Set(meshPulls.map((pull) => pull.node).filter(Boolean));
-    function pathAnchors(pull) {
-      const moved = movedPathNodes();
-      return pathNodes().filter((point) => point !== pull.node && !moved.has(point)).map(meshWarpedPoint);
-    }
+    const locationNodeScreen = (point) => toScreen(fromMesh(meshWarpedPoint(locationAt(point))));
     const PATH_NODE_REACH = 10;
     function pathNodeAt(s) {
       let best = null;
       let bestDistance = PATH_NODE_REACH;
-      const moved = movedPathNodes();
       for (const point of pathNodes()) {
-        if (moved.has(point)) continue;
-        const q = toScreen(fromMesh(meshWarpedPoint(point)));
+        const q = locationNodeScreen(point);
         const d = Math.hypot(q.x - s.x, q.y - s.y);
         if (d <= bestDistance) {
           best = point;
@@ -5571,12 +5616,10 @@
       return best;
     }
     function drawPathNodes() {
-      const moved = movedPathNodes();
       ctx.save();
       ctx.lineWidth = 1.5;
       for (const point of pathNodes()) {
-        if (moved.has(point)) continue;
-        const q = toScreen(fromMesh(meshWarpedPoint(point)));
+        const q = locationNodeScreen(point);
         ctx.beginPath();
         ctx.arc(q.x, q.y, 4, 0, 2 * Math.PI);
         ctx.fillStyle = '#fff';
@@ -5600,22 +5643,16 @@
       const pins = others.map(({ end }) => end);
       const gravity = Math.min(100, Math.max(0, Number(meshGravity.value) || 0)) / 100;
       const reach = (q) => Math.exp(-((q.x - g.x) ** 2 + (q.y - g.y) ** 2) / (2 * spread * spread));
-      const ease = (d, r) => {
-        const t = Math.min(1, Math.max(0, (d - r) / r));
-        return t * t * (3 - 2 * t);
+      const hold = (d) => {
+        const t = Math.min(1, Math.max(0, (d - pin) / pin));
+        return gravity + (1 - gravity) * t * t * (3 - 2 * t);
       };
-      const hold = (d) => gravity + (1 - gravity) * ease(d, pin);
-      // A path node's pull is held by the path's other nodes, wholly, each
-      // over no more than half its distance from the node, so the node
-      // itself stays free to move.
-      const anchors = pull.node ? pathAnchors(pull).map((q) => ({ q, r: Math.min(pin, Math.hypot(q.x - g.x, q.y - g.y) / 2) })).filter(({ r }) => r > 0) : [];
       const shares = [];
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           let share = reach(n);
           for (const q of pins) share *= hold(Math.hypot(n.x - q.x, n.y - q.y));
-          for (const { q, r } of anchors) share *= ease(Math.hypot(n.x - q.x, n.y - q.y), r);
           if (share >= 0.001) shares.push([`${i},${j}`, share]);
         }
       }
@@ -6123,7 +6160,7 @@
       const a = (pull.turnFrom ?? -Math.PI / 2) - Math.sign(pull.turn) * (20 / (MESH_ANCHOR_RING + 6));
       return { x: pull.end.x + rr * Math.cos(a), y: pull.end.y + rr * Math.sin(a) };
     }
-    const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select' || locationTool === 'nodes');
+    const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select');
     // The pull whose start dot is under the pointer, or being dragged.
     function meshStartLit() {
       if (!pullMarkerTool()) return null;
@@ -6846,14 +6883,16 @@
       }
       if (locationPart) {
         if (locationPart === 'paths') {
-          drawPaths();
-          // The paths' own lines, one on-screen width at any zoom, in
-          // Location's own path color; the map's paths keep theirs.
-          ctx.strokeStyle = colorOf(locationPathColor);
-          ctx.lineWidth = 2 / view.scale;
-          ctx.beginPath();
-          for (const path of paths) path.segments.forEach(traceSegment);
-          ctx.stroke();
+          withLocationPaths(() => {
+            drawPaths();
+            // The paths' own lines, one on-screen width at any zoom, in
+            // Location's own path color; the map's paths keep theirs.
+            ctx.strokeStyle = colorOf(locationPathColor);
+            ctx.lineWidth = 2 / view.scale;
+            ctx.beginPath();
+            for (const path of paths) path.segments.forEach(traceSegment);
+            ctx.stroke();
+          });
         }
         return;
       }
@@ -11018,8 +11057,8 @@
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
       }
       else if (inLocation() && locationTool === 'nodes' && !spaceHeld && !drag?.spacePan) {
-        const held = drag?.meshStart || drag?.meshPull;
-        const over = !drag && pointer && (meshAnchorLit() || meshStartLit() || pathNodeAt(pointer));
+        const held = drag?.locationNode;
+        const over = !drag && pointer && pathNodeAt(pointer);
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : '';
       }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
@@ -11274,19 +11313,9 @@
         return;
       }
       if (inLocation() && locationTool === 'nodes' && !spaceHeld) {
-        meshWallSelected = meshPinSelected = null;
-        const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
-        const point = hit ? null : pathNodeAt(s);
-        if (hit) {
-          meshPullSelected = hit.pull;
-          pressMeshPull(hit, s);
-        } else if (point) {
-          startMeshEdit();
-          meshPullSelected = null;
-          const at = meshWarpedPoint(point);
-          const meshPull = { start: at, end: at, moves: new Map(), node: point };
-          meshPulls.push(meshPull);
-          drag = { meshPull, shares: meshPullShares(at, meshPull), last: toMesh(toBackground(s.x, s.y)), fresh: true };
+        const point = pathNodeAt(s);
+        if (point) {
+          drag = { locationNode: point, last: toBackground(s.x, s.y) };
         } else {
           drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: 'view', views: viewsAt(s, e) };
         }
@@ -11663,23 +11692,19 @@
         draw();
         return;
       }
+      if (drag?.locationNode) {
+        const p = toBackground(pointer.x, pointer.y);
+        moveLocationNode(drag.locationNode, p.x - drag.last.x, p.y - drag.last.y);
+        drag.last = p;
+        draw();
+        return;
+      }
       if (drag?.meshPull) {
         const at = toMesh(toBackground(pointer.x, pointer.y));
         const { end } = drag.meshPull;
         pullMesh(drag.meshPull, drag.shares, at.x - drag.last.x, at.y - drag.last.y);
         drag.meshPull.end = { x: end.x + at.x - drag.last.x, y: end.y + at.y - drag.last.y };
         drag.last = at;
-        // Anchors close by hold back the mesh round a path node, so it's
-        // pulled on until the node itself sits under the pointer.
-        if (drag.meshPull.node) {
-          for (let tries = 0; tries < 6; tries++) {
-            const now = meshWarpedPoint(drag.meshPull.node);
-            const ex = drag.meshPull.end.x - now.x;
-            const ey = drag.meshPull.end.y - now.y;
-            if (Math.hypot(ex, ey) < 0.5 / view.scale) break;
-            pullMesh(drag.meshPull, { shares: drag.shares.shares, tugs: [] }, ex, ey);
-          }
-        }
         draw();
         return;
       }
@@ -11858,6 +11883,12 @@
         }
         // A wall that's been dragged is let go of, not left selected.
         else if (moved) meshWallSelected = null;
+        drag = null;
+        draw();
+        updateCursor();
+        return;
+      }
+      if (drag.locationNode) {
         drag = null;
         draw();
         updateCursor();
@@ -13070,6 +13101,7 @@
         file,
         mesh: { offsets: new Map(meshOffsets), erased: new Map(meshErased), pulls: [...meshPulls], circles: [...meshCircles], walls: [...meshWalls], pins: [...meshPins], place: { ...mapPlace } },
         location: locationState(),
+        locationPathEdits: locationEditsOut(),
         satelliteOffset: { ...satelliteOffset },
       };
       openMap = next;
@@ -13091,6 +13123,7 @@
       await loadMapFile(saved.file);
       showLocationPathFields();
       setLocationState(saved.location);
+      locationEditsIn(saved.locationPathEdits);
       Object.assign(satelliteOffset, saved.satelliteOffset);
       // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.
       meshLattice();

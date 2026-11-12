@@ -6446,7 +6446,6 @@
           for (let j = fj - MESH_FOLD_REACH; j <= fj + 1 + MESH_FOLD_REACH; j++) near.add(`${i},${j}`);
         }
       }
-      const shown = (i, j) => !folds.length || near.has(`${i},${j}`);
       // Each line, in runs of the nodes that show.
       const trace = (points, keep) => {
         let run = [];
@@ -6459,36 +6458,46 @@
         });
         if (run.length > 1) traceThrough(run);
       };
+      // The lines through the nodes that pass the test, all of them by default.
+      const traceLines = (shown = () => true) => {
+        ctx.beginPath();
+        for (let i = from.i; i <= to.i; i++) {
+          const down = [];
+          const keep = [];
+          for (let j = from.j; j <= to.j; j++) {
+            down.push(node(i, j));
+            keep.push(shown(i, j));
+          }
+          trace(down, keep);
+        }
+        for (let j = from.j; j <= to.j; j++) {
+          const across = [];
+          const keep = [];
+          for (let i = from.i; i <= to.i; i++) {
+            across.push(node(i, j));
+            keep.push(shown(i, j));
+          }
+          trace(across, keep);
+        }
+      };
       ctx.save();
       ctx.translate(board.w / 2, board.h / 2);
       ctx.rotate(meshTurn());
-      ctx.beginPath();
-      for (let i = from.i; i <= to.i; i++) {
-        const down = [];
-        const keep = [];
-        for (let j = from.j; j <= to.j; j++) {
-          down.push(node(i, j));
-          keep.push(shown(i, j));
-        }
-        trace(down, keep);
-      }
-      for (let j = from.j; j <= to.j; j++) {
-        const across = [];
-        const keep = [];
-        for (let i = from.i; i <= to.i; i++) {
-          across.push(node(i, j));
-          keep.push(shown(i, j));
-        }
-        trace(across, keep);
-      }
+      traceLines();
       // Line thickness in screen pixels; the border is a pixel either side of it.
       const thickness = Math.max(0.1, Number(meshThickness.value) || 1);
       ctx.strokeStyle = colorOf(meshBorder);
       ctx.lineWidth = (thickness + 2) / (view.scale * mapPlace.scale);
       ctx.stroke();
-      ctx.strokeStyle = folds.length ? '#ff0000' : colorOf(meshColor);
+      ctx.strokeStyle = colorOf(meshColor);
       ctx.lineWidth = thickness / (view.scale * mapPlace.scale);
       ctx.stroke();
+      // Where the mesh folds over itself, those cells are picked out in red.
+      if (folds.length) {
+        traceLines((i, j) => near.has(`${i},${j}`));
+        ctx.strokeStyle = '#ff0000';
+        ctx.stroke();
+      }
       ctx.restore();
       ctx.save();
       ctx.translate(board.w / 2, board.h / 2);

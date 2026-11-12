@@ -2086,6 +2086,9 @@
         <button type="button" data-location-tool="pan" data-shortcut="P" aria-label="Pan" aria-pressed="false">
           <span class="material-symbols-rounded">pan_tool</span>
         </button>
+        <button type="button" data-location-tool="nodes" data-shortcut="N" aria-label="Edit paths" aria-pressed="false">
+          <span class="material-symbols-rounded">rebase</span>
+        </button>
         <button type="button" data-location-tool="mesh" data-shortcut="V" aria-label="Gravity vector" aria-pressed="false">
           <span class="material-symbols-rounded">linear_scale</span>
         </button>
@@ -3371,6 +3374,8 @@
       mapBoxSelected = false;
       showLocationTool();
       updateCursor();
+      // Edit paths shows the path nodes, and leaving it hides them.
+      draw();
     }
     // Holding Space shows Pan as the tool until it's let go.
     function showLocationTool() {
@@ -5516,6 +5521,71 @@
       const { step } = meshLattice();
       return meshLattice(Math.ceil((reach + 4 * (spread ?? meshReach(step).spread)) / step) + 2);
     };
+    // Edit paths: the map's path nodes where the mesh has carried them. One
+    // dragged becomes a pull from there; the rest hold the mesh as anchors.
+    const pathNodes = () => [...new Set(paths.flatMap((path) => path.points))];
+    // A map point carried by the mesh, interpolated between lattice nodes as
+    // the warp draws it.
+    function meshWarpedPoint(p) {
+      if (!meshWarp.checked || !meshOffsets.size) return toMesh(p);
+      const q = toMesh(p);
+      const { step, node } = meshLattice();
+      const u = q.x / step;
+      const v = q.y / step;
+      const i = Math.floor(u);
+      const j = Math.floor(v);
+      const weights = (t) => [(-t * t * t + 2 * t * t - t) / 2, (3 * t * t * t - 5 * t * t + 2) / 2, (-3 * t * t * t + 4 * t * t + t) / 2, (t * t * t - t * t) / 2];
+      const wu = weights(u - i);
+      const wv = weights(v - j);
+      let x = q.x;
+      let y = q.y;
+      for (let a = 0; a < 4; a++) {
+        for (let b = 0; b < 4; b++) {
+          const n = node(i - 1 + a, j - 1 + b);
+          const base = node.base(i - 1 + a, j - 1 + b);
+          x += (n.x - base.x) * wu[a] * wv[b];
+          y += (n.y - base.y) * wu[a] * wv[b];
+        }
+      }
+      return { x, y };
+    }
+    const movedPathNodes = () => new Set(meshPulls.map((pull) => pull.node).filter(Boolean));
+    function pathAnchors(pull) {
+      const moved = movedPathNodes();
+      return pathNodes().filter((point) => point !== pull.node && !moved.has(point)).map(meshWarpedPoint);
+    }
+    const PATH_NODE_REACH = 10;
+    function pathNodeAt(s) {
+      let best = null;
+      let bestDistance = PATH_NODE_REACH;
+      const moved = movedPathNodes();
+      for (const point of pathNodes()) {
+        if (moved.has(point)) continue;
+        const q = toScreen(fromMesh(meshWarpedPoint(point)));
+        const d = Math.hypot(q.x - s.x, q.y - s.y);
+        if (d <= bestDistance) {
+          best = point;
+          bestDistance = d;
+        }
+      }
+      return best;
+    }
+    function drawPathNodes() {
+      const moved = movedPathNodes();
+      ctx.save();
+      ctx.lineWidth = 1.5;
+      for (const point of pathNodes()) {
+        if (moved.has(point)) continue;
+        const q = toScreen(fromMesh(meshWarpedPoint(point)));
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = toolColor.value;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     // How much of a pull from mesh point g each node takes, less the further
     // away: Rubber sets how far the pull spreads, from the nearest nodes at 0
     // to about half the map's width at 100. Where other pulls ended, the sheet is
@@ -5530,16 +5600,22 @@
       const pins = others.map(({ end }) => end);
       const gravity = Math.min(100, Math.max(0, Number(meshGravity.value) || 0)) / 100;
       const reach = (q) => Math.exp(-((q.x - g.x) ** 2 + (q.y - g.y) ** 2) / (2 * spread * spread));
-      const hold = (d) => {
-        const t = Math.min(1, Math.max(0, (d - pin) / pin));
-        return gravity + (1 - gravity) * t * t * (3 - 2 * t);
+      const ease = (d, r) => {
+        const t = Math.min(1, Math.max(0, (d - r) / r));
+        return t * t * (3 - 2 * t);
       };
+      const hold = (d) => gravity + (1 - gravity) * ease(d, pin);
+      // A path node's pull is held by the path's other nodes, wholly, each
+      // over no more than half its distance from the node, so the node
+      // itself stays free to move.
+      const anchors = pull.node ? pathAnchors(pull).map((q) => ({ q, r: Math.min(pin, Math.hypot(q.x - g.x, q.y - g.y) / 2) })).filter(({ r }) => r > 0) : [];
       const shares = [];
       for (let i = from.i; i <= to.i; i++) {
         for (let j = from.j; j <= to.j; j++) {
           const n = node(i, j);
           let share = reach(n);
           for (const q of pins) share *= hold(Math.hypot(n.x - q.x, n.y - q.y));
+          for (const { q, r } of anchors) share *= ease(Math.hypot(n.x - q.x, n.y - q.y), r);
           if (share >= 0.001) shares.push([`${i},${j}`, share]);
         }
       }
@@ -6047,7 +6123,7 @@
       const a = (pull.turnFrom ?? -Math.PI / 2) - Math.sign(pull.turn) * (20 / (MESH_ANCHOR_RING + 6));
       return { x: pull.end.x + rr * Math.cos(a), y: pull.end.y + rr * Math.sin(a) };
     }
-    const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select');
+    const pullMarkerTool = () => inLocation() && (locationTool === 'mesh' || locationTool === 'select' || locationTool === 'nodes');
     // The pull whose start dot is under the pointer, or being dragged.
     function meshStartLit() {
       if (!pullMarkerTool()) return null;
@@ -6639,6 +6715,11 @@
         ctx.scale(view.scale, view.scale);
         placeMap(ctx);
         drawMesh();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      if (locationTool === 'nodes' && !locationPart) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawPathNodes();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
       if (mapBoxShown()) {
@@ -10936,6 +11017,11 @@
         const over = pointer && !drag && meshWallAt(pointer);
         canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : `url("${pullCursorImage(pullCursorShapes.crosshair)}") 12 12, crosshair`;
       }
+      else if (inLocation() && locationTool === 'nodes' && !spaceHeld && !drag?.spacePan) {
+        const held = drag?.meshStart || drag?.meshPull;
+        const over = !drag && pointer && (meshAnchorLit() || meshStartLit() || pathNodeAt(pointer));
+        canvas.style.cursor = held ? 'grabbing' : over ? 'grab' : '';
+      }
       else if (inLocation() && locationTool === 'mesh' && !spaceHeld && !drag?.spacePan) {
         const turning = drag?.meshTurn || (commandHeld && !drag && meshAnchorLit());
         // A pull's anchor or start dot shows the hand, to be taken up again.
@@ -11182,6 +11268,27 @@
           const meshWall = { start: at, end: at, width: Math.max(1, Number(meshWallWidth.value) || 200), moves: new Map() };
           meshWalls.push(meshWall);
           drag = { meshWall, part: 'new', from: s };
+        }
+        draw();
+        updateCursor();
+        return;
+      }
+      if (inLocation() && locationTool === 'nodes' && !spaceHeld) {
+        meshWallSelected = meshPinSelected = null;
+        const hit = meshPullAt(s, e.metaKey || e.ctrlKey);
+        const point = hit ? null : pathNodeAt(s);
+        if (hit) {
+          meshPullSelected = hit.pull;
+          pressMeshPull(hit, s);
+        } else if (point) {
+          startMeshEdit();
+          meshPullSelected = null;
+          const at = meshWarpedPoint(point);
+          const meshPull = { start: at, end: at, moves: new Map(), node: point };
+          meshPulls.push(meshPull);
+          drag = { meshPull, shares: meshPullShares(at, meshPull), last: toMesh(toBackground(s.x, s.y)), fresh: true };
+        } else {
+          drag = { x: e.clientX, y: e.clientY, spacePan: true, locationGrab: 'view', views: viewsAt(s, e) };
         }
         draw();
         updateCursor();
@@ -11562,6 +11669,17 @@
         pullMesh(drag.meshPull, drag.shares, at.x - drag.last.x, at.y - drag.last.y);
         drag.meshPull.end = { x: end.x + at.x - drag.last.x, y: end.y + at.y - drag.last.y };
         drag.last = at;
+        // Anchors close by hold back the mesh round a path node, so it's
+        // pulled on until the node itself sits under the pointer.
+        if (drag.meshPull.node) {
+          for (let tries = 0; tries < 6; tries++) {
+            const now = meshWarpedPoint(drag.meshPull.node);
+            const ex = drag.meshPull.end.x - now.x;
+            const ey = drag.meshPull.end.y - now.y;
+            if (Math.hypot(ex, ey) < 0.5 / view.scale) break;
+            pullMesh(drag.meshPull, { shares: drag.shares.shares, tugs: [] }, ex, ey);
+          }
+        }
         draw();
         return;
       }

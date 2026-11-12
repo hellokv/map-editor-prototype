@@ -5591,81 +5591,124 @@
     }
     // Match Mesh to Paths: warps the mesh so the map's paths land where
     // Location's edits put them, then lets the edits go, the paths now
-    // carried there by the mesh. Points along the paths are matched by a
-    // smooth field of Gaussian bumps, fitted to move each point exactly and
-    // fading out away from them; unmoved points nearby hold their ground.
+    // carried there by the mesh. Every point along the paths is held to its
+    // place, moved or not, and the rest of the mesh takes the smoothest shape
+    // between them, as a stretched sheet does: squeezing ahead of what moved
+    // and easing behind it, with the mesh's far edges left where they are.
     function showMatchMesh() {
       document.getElementById('match-mesh').hidden = !(locationTool === 'nodes' && (locationPathEdits.size || locationBends.size));
     }
+    const MATCH_MARGIN = 8;
+    const MATCH_ROUNDS = 6;
+    // How firmly each path point is held against the mesh's smoothness: firm,
+    // but soft enough that points asking a cell for opposite moves are
+    // averaged rather than forced, which would fold the mesh.
+    const MATCH_HOLD = 20;
     function matchMeshToPaths() {
       const { step } = meshLattice();
       // Each segment's ends and quarter points, and where Location shows them.
       const ts = [0, 0.25, 0.5, 0.75, 1];
-      const seen = new Set();
       const samples = [];
       for (const segment of paths.flatMap((path) => path.segments)) {
         const edited = withLocationPaths(() => ts.map((t) => segmentPoint(segment, t)));
-        ts.forEach((t, k) => {
-          const p = segmentPoint(segment, t);
-          const key = `${Math.round(p.x)},${Math.round(p.y)}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-          samples.push({ p, base: toMesh(p), to: meshWarpedPoint(edited[k]) });
-        });
+        ts.forEach((t, k) => samples.push({ p: segmentPoint(segment, t), to: meshWarpedPoint(edited[k]) }));
       }
-      const sigma = 1.5 * step;
-      const reach = 4 * sigma;
-      const kernel = (a, b) => Math.exp(-((a.x - b.x) ** 2 + (a.y - b.y) ** 2) / (2 * sigma * sigma));
-      // The lattice can't follow every point at once, so the fit is repeated
-      // on what's left over until the paths are where they should be.
-      for (let round = 0; round < 4; round++) {
-        const points = samples.map(({ p, base, to }) => {
-          const from = meshWarpedPoint(p);
-          return { base, dx: to.x - from.x, dy: to.y - from.y };
-        });
-        const moved = points.filter(({ dx, dy }) => Math.hypot(dx, dy) > 0.25 / view.scale);
-        if (!moved.length) break;
-        // Only points near a moved one shape the field; it is nothing further out.
-        const used = points.filter((q) => moved.some((m) => Math.hypot(m.base.x - q.base.x, m.base.y - q.base.y) < reach));
-        const n = used.length;
-        // Solves (K + λI) w = d for both axes by Cholesky; λ keeps close points from fighting.
-        const L = new Float64Array(n * n);
-        for (let i = 0; i < n; i++) {
-          for (let j = 0; j <= i; j++) {
-            let sum = kernel(used[i].base, used[j].base) + (i === j ? 1e-3 : 0);
-            for (let k = 0; k < j; k++) sum -= L[i * n + k] * L[j * n + k];
-            L[i * n + j] = i === j ? Math.sqrt(Math.max(sum, 1e-12)) : sum / L[j * n + j];
+      // The lattice that may move: round the map and every point, its
+      // outermost ring staying put.
+      const map = meshLattice(0, true);
+      let [i0, i1, j0, j1] = [map.from.i, map.to.i, map.from.j, map.to.j];
+      for (const { p } of samples) {
+        const q = toMesh(p);
+        i0 = Math.min(i0, Math.floor(q.x / step));
+        i1 = Math.max(i1, Math.ceil(q.x / step));
+        j0 = Math.min(j0, Math.floor(q.y / step));
+        j1 = Math.max(j1, Math.ceil(q.y / step));
+      }
+      [i0, i1, j0, j1] = [i0 - MATCH_MARGIN, i1 + MATCH_MARGIN, j0 - MATCH_MARGIN, j1 + MATCH_MARGIN];
+      const rows = j1 - j0 + 1;
+      const size = (i1 - i0 + 1) * rows;
+      const index = (i, j) => (i > i0 && i < i1 && j > j0 && j < j1 ? (i - i0) * rows + (j - j0) : -1);
+      // Each point bears on the four lattice nodes round it, by how near it is to each.
+      const holds = samples.map(({ p, to }) => {
+        const q = toMesh(p);
+        const u = q.x / step;
+        const v = q.y / step;
+        const i = Math.floor(u);
+        const j = Math.floor(v);
+        const terms = [[0, 0, (1 - (u - i)) * (1 - (v - j))], [1, 0, (u - i) * (1 - (v - j))], [0, 1, (1 - (u - i)) * (v - j)], [1, 1, (u - i) * (v - j)]]
+          .map(([di, dj, w]) => ({ k: index(i + di, j + dj), w })).filter(({ k, w }) => k >= 0 && w > 0);
+        return { p, to, terms };
+      });
+      const diagonal = new Float64Array(size);
+      for (let i = i0 + 1; i < i1; i++) for (let j = j0 + 1; j < j1; j++) diagonal[index(i, j)] = 4;
+      for (const { terms } of holds) for (const { k, w } of terms) diagonal[k] += MATCH_HOLD * w * w;
+      // Neighbouring nodes moving alike, and each point moving as asked.
+      const apply = (x, out) => {
+        out.fill(0);
+        for (let i = i0 + 1; i < i1; i++) {
+          for (let j = j0 + 1; j < j1; j++) {
+            const k = index(i, j);
+            let v = 0;
+            for (const [a, c] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+              const n = index(a, c);
+              v += x[k] - (n >= 0 ? x[n] : 0);
+            }
+            out[k] = v;
           }
         }
-        const solve = (d) => {
-          const y = new Float64Array(n);
-          for (let i = 0; i < n; i++) {
-            let sum = d[i];
-            for (let k = 0; k < i; k++) sum -= L[i * n + k] * y[k];
-            y[i] = sum / L[i * n + i];
+        for (const { terms } of holds) {
+          let v = 0;
+          for (const { k, w } of terms) v += w * x[k];
+          for (const { k, w } of terms) out[k] += MATCH_HOLD * w * v;
+        }
+      };
+      const solve = (b) => {
+        const x = new Float64Array(size);
+        const r = Float64Array.from(b);
+        const z = r.map((v, k) => (diagonal[k] ? v / diagonal[k] : 0));
+        const d = Float64Array.from(z);
+        const ad = new Float64Array(size);
+        let rz = r.reduce((t, v, k) => t + v * z[k], 0);
+        const target = 1e-12 * Math.max(b.reduce((t, v) => t + v * v, 0), 1e-30);
+        for (let iteration = 0; iteration < 3000 && rz > target; iteration++) {
+          apply(d, ad);
+          const dad = d.reduce((t, v, k) => t + v * ad[k], 0);
+          if (!dad) break;
+          const alpha = rz / dad;
+          for (let k = 0; k < size; k++) {
+            x[k] += alpha * d[k];
+            r[k] -= alpha * ad[k];
+            z[k] = diagonal[k] ? r[k] / diagonal[k] : 0;
           }
-          const w = new Float64Array(n);
-          for (let i = n - 1; i >= 0; i--) {
-            let sum = y[i];
-            for (let k = i + 1; k < n; k++) sum -= L[k * n + i] * w[k];
-            w[i] = sum / L[i * n + i];
+          const next = r.reduce((t, v, k) => t + v * z[k], 0);
+          for (let k = 0; k < size; k++) d[k] = z[k] + (next / rz) * d[k];
+          rz = next;
+        }
+        return x;
+      };
+      // Each round asks for what's still left over, so where points agree
+      // the mesh closes in on them exactly.
+      for (let round = 0; round < MATCH_ROUNDS; round++) {
+        const bx = new Float64Array(size);
+        const by = new Float64Array(size);
+        let worst = 0;
+        for (const { p, to, terms } of holds) {
+          const now = meshWarpedPoint(p);
+          const rx = to.x - now.x;
+          const ry = to.y - now.y;
+          worst = Math.max(worst, Math.hypot(rx, ry));
+          for (const { k, w } of terms) {
+            bx[k] += MATCH_HOLD * w * rx;
+            by[k] += MATCH_HOLD * w * ry;
           }
-          return w;
-        };
-        const wx = solve(used.map((q) => q.dx));
-        const wy = solve(used.map((q) => q.dy));
-        const { node, from, to } = meshLattice(Math.ceil(reach / step) + 2, true);
-        for (let i = from.i; i <= to.i; i++) {
-          for (let j = from.j; j <= to.j; j++) {
-            const b = node.base(i, j);
-            let fx = 0;
-            let fy = 0;
-            for (let k = 0; k < n; k++) {
-              const g = kernel(b, used[k].base);
-              fx += wx[k] * g;
-              fy += wy[k] * g;
-            }
-            if (Math.abs(fx) > 1e-4 || Math.abs(fy) > 1e-4) moveMeshNode(`${i},${j}`, fx, fy);
+        }
+        if (worst < 0.25 / view.scale) break;
+        const dx = solve(bx);
+        const dy = solve(by);
+        for (let i = i0 + 1; i < i1; i++) {
+          for (let j = j0 + 1; j < j1; j++) {
+            const k = index(i, j);
+            if (Math.abs(dx[k]) > 1e-6 || Math.abs(dy[k]) > 1e-6) moveMeshNode(`${i},${j}`, dx[k], dy[k]);
           }
         }
       }

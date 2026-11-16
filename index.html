@@ -3030,6 +3030,10 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
+        <label id="buildings-lift-field" class="field" hidden>
+          Lift
+          <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
+        </label>
         <div class="field-pair">
           <label class="field">
             Inside
@@ -5007,11 +5011,11 @@
         const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
         autoLayers.textContent = names.join(', ') || 'None';
       }
+      tiltCanvas(noMode || (!backgroundTools.hidden && mapIsBlank()));
       if (inLocation()) paintLocation();
       else if (layerSelect.value === 'Split Screen') paintSplit();
       else if (layerSelect.value === 'Stacked') paintStack();
       else paintView();
-      tiltCanvas(noMode || (!backgroundTools.hidden && mapIsBlank()));
       stackView.hidden = !stackOn();
       updatePanel();
     }
@@ -7127,12 +7131,7 @@
         ctx.drawImage(backgroundImage, x, y, w, h);
         ctx.restore();
       }
-      if (buildingsImage && !noBackground) {
-        ctx.save();
-        clipToImageRoom();
-        drawBuildings(ctx);
-        ctx.restore();
-      }
+      if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
         ctx.save();
@@ -12410,6 +12409,8 @@
     // Buildings: an image laid over the background, in the same place, so
     // the park and its buildings can be drawn and swapped apart.
     let buildingsImage = null;
+    // The buildings darkened, for the walls under their lifted roofs.
+    let buildingsShade = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
     async function setBuildingsImage(src) {
@@ -12418,6 +12419,8 @@
       buildingsPreview.querySelector('img').src = img ? img.src : '';
       buildingsPreview.hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
+      document.getElementById('buildings-lift-field').hidden = !img;
+      buildingsShade = null;
       if (!img) buildingsUpload.value = '';
       draw();
     }
@@ -12432,18 +12435,60 @@
     };
     // Tilt tips the whole map back from the box's bottom edge, as a 3D
     // transform of the canvas element; canvasLocal undoes it for the pointer.
-    const mapTiltInput = document.getElementById('map-tilt');
-    {
-      const slider = mapTiltInput.closest('.slider').querySelector('input[type="range"]');
+    function linkSlider(input) {
+      const slider = input.closest('.slider').querySelector('input[type="range"]');
       slider.addEventListener('input', () => {
-        mapTiltInput.value = slider.value;
+        input.value = slider.value;
         draw();
       });
       slider.addEventListener('change', () => slider.blur());
-      mapTiltInput.addEventListener('input', () => {
-        slider.value = mapTiltInput.value;
+      input.addEventListener('input', () => {
+        slider.value = input.value;
         draw();
       });
+    }
+    const mapTiltInput = document.getElementById('map-tilt');
+    linkSlider(mapTiltInput);
+    const buildingsLiftInput = document.getElementById('buildings-lift');
+    linkSlider(buildingsLiftInput);
+    function shadedBuildings() {
+      if (buildingsShade) return buildingsShade;
+      const W = buildingsImage.naturalWidth;
+      const H = buildingsImage.naturalHeight;
+      const c = new OffscreenCanvas(W, H).getContext('2d');
+      c.drawImage(buildingsImage, 0, 0, W, H);
+      c.globalCompositeOperation = 'source-atop';
+      c.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      c.fillRect(0, 0, W, H);
+      return (buildingsShade = c.canvas);
+    }
+    // Over a tilted map, a layer raised h screen pixels off it shows exactly
+    // as the flat layer scaled about the point under the camera, so lifted
+    // buildings are stacked slices, each scaled a little further.
+    function drawLiftedBuildings(c) {
+      const lift = Math.max(0, Number(buildingsLiftInput.value) || 0) * view.scale;
+      if (!canvasTilt || !lift) {
+        c.save();
+        clipToImageRoom();
+        drawBuildings(c);
+        c.restore();
+        return;
+      }
+      const { ox, oy, d, angle } = canvasTilt;
+      const height = d * Math.cos(angle);
+      const fx = ox;
+      const fy = oy + d * Math.sin(angle);
+      const top = Math.min(lift, height * 0.9);
+      const dpr = window.devicePixelRatio || 1;
+      const base = c.getTransform();
+      const { x, y, w, h } = buildingsRect();
+      const slices = Math.max(1, Math.ceil(top / 1.5));
+      for (let i = 1; i <= slices; i++) {
+        const k = height / (height - (top * i) / slices);
+        c.setTransform(new DOMMatrix().scale(dpr).translate(fx, fy).scale(k).translate(-fx, -fy).scale(1 / dpr).multiply(base));
+        c.drawImage(i === slices ? buildingsImage : shadedBuildings(), x, y, w, h);
+      }
+      c.setTransform(base);
     }
     let canvasTilt = null;
     function tiltCanvas(blank) {
@@ -12494,7 +12539,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'buildings-lift',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

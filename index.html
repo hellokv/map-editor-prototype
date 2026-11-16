@@ -3046,6 +3046,10 @@
           Lift
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
         </label>
+        <label id="buildings-side-field" class="field" hidden>
+          Sides
+          <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
+        </label>
         <div class="field-pair">
           <label class="field">
             Inside
@@ -12421,7 +12425,7 @@
     // Buildings: an image laid over the background, in the same place, so
     // the park and its buildings can be drawn and swapped apart.
     let buildingsImage = null;
-    // The buildings darkened, for the walls under their lifted roofs.
+    // The buildings' silhouette in the side colour, for the walls under their lifted roofs.
     let buildingsShade = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
@@ -12432,6 +12436,7 @@
       buildingsPreview.hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
       document.getElementById('buildings-lift-field').hidden = !img;
+      document.getElementById('buildings-side-field').hidden = !img;
       buildingsShade = null;
       if (!img) buildingsUpload.value = '';
       draw();
@@ -12466,6 +12471,11 @@
         mapIsometric.dispatchEvent(new Event('change'));
       });
     }
+    const buildingsSideColor = document.getElementById('buildings-side-color');
+    buildingsSideColor.addEventListener('input', () => {
+      buildingsShade = null;
+      draw();
+    });
     const buildingsLiftInput = document.getElementById('buildings-lift');
     linkSlider(buildingsLiftInput);
     buildingsLiftInput.addEventListener('input', draw);
@@ -12476,7 +12486,7 @@
       const c = new OffscreenCanvas(W, H).getContext('2d');
       c.drawImage(buildingsImage, 0, 0, W, H);
       c.globalCompositeOperation = 'source-atop';
-      c.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      c.fillStyle = colorOf(buildingsSideColor);
       c.fillRect(0, 0, W, H);
       return (buildingsShade = c.canvas);
     }
@@ -12579,7 +12589,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-side-color',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

@@ -13759,11 +13759,11 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode(START_IMAGE ? 'labels' : 'background');
-    // The editor opens on the Wildlife Safari, lined up on its satellite. The
-    // demo is kept as it's left, so its background must be in first.
+    // The editor opens on Demo Buildings. The demo is kept as it's left, so
+    // its background must be in first.
     (async () => {
       await startImageLoaded;
-      mapExample.value = 'wildlife-safari';
+      mapExample.value = 'demo-buildings';
       mapExample.dispatchEvent(new Event('change'));
     })();
   </script>

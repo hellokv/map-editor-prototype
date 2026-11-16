@@ -2055,6 +2055,7 @@
     <div id="map-menu">
       <select id="map-example" aria-label="Map">
         <option value="demo">Demo</option>
+        <option value="demo-buildings">Demo Buildings</option>
         <option value="national-zoo">National Zoo</option>
         <option value="wildlife-safari">Wildlife Safari</option>
         <option value="bronx-zoo">Bronx Zoo</option>
@@ -5372,6 +5373,7 @@
     const mapSatellites = {
       // Made from the demo map's background, so it lines up with that one only.
       demo: { src: 'satellite.jpg', reach: 2 },
+      'demo-buildings': { src: 'satellite.jpg', reach: 2 },
       'national-zoo': { src: 'national-zoo-satellite.jpg', reach: 1 },
       'wildlife-safari': { src: 'wildlife-safari-satellite.jpg', reach: 1 },
       'bronx-zoo': { src: 'bronx-zoo-satellite.jpg', reach: 1 },
@@ -13313,6 +13315,12 @@
     // from the panel's defaults with the map's own changes; a map placed on
     // its satellite opens fitted to the satellite rather than the map.
     const mapStarts = {
+      // A copy of the demo as it opens: its background, paths and box.
+      'demo-buildings': {
+        background: START_IMAGE,
+        settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#eeedeb', 'board-color': '#ffffff' },
+        paths: JSON.parse(document.getElementById('starter-paths').textContent),
+      },
       'national-zoo': {
         background: 'national-zoo-background.svg',
         settings: { 'board-width': '675', 'board-height': '1500', 'canvas-color': '#7b8365', 'board-color': '#7b8365' },

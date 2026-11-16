@@ -13318,7 +13318,7 @@
       // A copy of the demo as it opens: its background, paths and box.
       'demo-buildings': {
         background: START_IMAGE,
-        settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#eeedeb', 'board-color': '#7b8365' },
+        settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#626d4b', 'board-color': '#7b8365' },
         paths: JSON.parse(document.getElementById('starter-paths').textContent),
       },
       'national-zoo': {
@@ -13758,7 +13758,7 @@
       return 'Paths';
     }
     new ResizeObserver(resize).observe(canvas);
-    setMode(START_IMAGE ? 'labels' : 'background');
+    setMode('background');
     // The editor opens on Demo Buildings. The demo is kept as it's left, so
     // its background must be in first.
     (async () => {

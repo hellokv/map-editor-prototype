@@ -1024,17 +1024,17 @@
       display: block;
       margin: 4px 0;
     }
-    :is(#panel, #style-panel, #settings-panel) #image-delete {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete) {
       flex: none;
       display: flex;
       padding: 2px;
       border: none;
       background: none;
     }
-    :is(#panel, #style-panel, #settings-panel) #image-delete:hover {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete):hover {
       background: #e4e4e4;
     }
-    :is(#panel, #style-panel, #settings-panel) #image-delete {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete) {
       position: absolute;
       top: 12px;
       right: 12px;
@@ -1081,14 +1081,14 @@
       font: inherit;
     }
     /* The image sits on the background color, as it does on the map. */
-    #image-preview {
+    :is(#image-preview, #buildings-preview) {
       position: relative;
       margin-top: 8px;
       padding: 8px;
       border: 1px solid #ccc;
       border-radius: 6px;
     }
-    #image-preview img {
+    :is(#image-preview, #buildings-preview) img {
       display: block;
       width: 100%;
     }
@@ -1787,7 +1787,7 @@
     :is(#panel, #style-panel, #settings-panel) .style-card .style-menu .material-symbols-rounded,
     :is(#panel, #style-panel, #settings-panel) button.new-style .material-symbols-rounded,
     :is(#panel, #style-panel, #settings-panel) #satellite-reference-delete .material-symbols-rounded,
-    :is(#panel, #style-panel, #settings-panel) #image-upload-field .material-symbols-rounded {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-upload-field, #buildings-upload-field) .material-symbols-rounded {
       font-size: 24px;
       font-variation-settings: 'wght' 300, 'opsz' 24;
     }
@@ -1834,8 +1834,11 @@
       background: var(--label-ink);
       color: #fff;
     }
-    #image-upload-field {
+    :is(#image-upload-field, #buildings-upload-field) {
       cursor: pointer;
+    }
+    #buildings-preview[hidden] {
+      display: none;
     }
     #autodetect-swatches {
       display: flex;
@@ -1873,7 +1876,7 @@
     #template-formats button.new-style {
       margin: 0;
     }
-    :is(#panel, #style-panel, #settings-panel).label-look #image-preview {
+    :is(#panel, #style-panel, #settings-panel).label-look :is(#image-preview, #buildings-preview) {
       border: none;
     }
     #label-layers {
@@ -3009,6 +3012,17 @@
         <div id="image-preview" hidden>
           <img alt="Background image">
           <button id="image-delete" type="button" aria-label="Delete image">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+        <label id="buildings-upload-field" class="field">
+          Buildings
+          <input id="buildings-upload" type="file" accept="image/*" hidden>
+          <span class="material-symbols-rounded">upload</span>
+        </label>
+        <div id="buildings-preview" hidden>
+          <img alt="Buildings image">
+          <button id="buildings-delete" type="button" aria-label="Delete buildings image">
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
@@ -4882,7 +4896,9 @@
     const boardColor = document.getElementById('board-color');
     canvasColor.addEventListener('input', () => draw());
     boardColor.addEventListener('input', () => draw());
-    const showPreviewColor = () => { document.getElementById('image-preview').style.background = colorOf(boardColor); };
+    const showPreviewColor = () => {
+      for (const id of ['image-preview', 'buildings-preview']) document.getElementById(id).style.background = colorOf(boardColor);
+    };
     boardColor.addEventListener('input', showPreviewColor);
     showPreviewColor();
 
@@ -7108,6 +7124,13 @@
         ctx.save();
         clipToImageRoom();
         ctx.drawImage(backgroundImage, x, y, w, h);
+        ctx.restore();
+      }
+      if (buildingsImage && !noBackground) {
+        const { x, y, w, h } = buildingsRect();
+        ctx.save();
+        clipToImageRoom();
+        ctx.drawImage(buildingsImage, x, y, w, h);
         ctx.restore();
       }
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
@@ -12385,6 +12408,34 @@
     }
     document.getElementById('image-delete').addEventListener('click', clearBackgroundImage);
 
+    // Buildings: an image laid over the background, in the same place, so
+    // the park and its buildings can be drawn and swapped apart.
+    let buildingsImage = null;
+    const buildingsUpload = document.getElementById('buildings-upload');
+    const buildingsPreview = document.getElementById('buildings-preview');
+    async function setBuildingsImage(src) {
+      const img = src ? await loadImage(src).catch(() => null) : null;
+      buildingsImage = img;
+      buildingsPreview.querySelector('img').src = img ? img.src : '';
+      buildingsPreview.hidden = !img;
+      document.getElementById('buildings-upload-field').hidden = !!img;
+      if (!img) buildingsUpload.value = '';
+      draw();
+    }
+    buildingsUpload.addEventListener('change', () => {
+      const file = buildingsUpload.files[0];
+      if (file) setBuildingsImage(URL.createObjectURL(file));
+    });
+    document.getElementById('buildings-delete').addEventListener('click', () => setBuildingsImage(null));
+    // Over the background image where there is one, else as large as fits the box.
+    function buildingsRect() {
+      if (backgroundImage) return backgroundRect();
+      const s = Math.min(board.w / buildingsImage.naturalWidth, board.h / buildingsImage.naturalHeight);
+      const w = buildingsImage.naturalWidth * s;
+      const h = buildingsImage.naturalHeight * s;
+      return { x: (board.w - w) / 2, y: (board.h - h) / 2, w, h };
+    }
+
     // A map file holds the whole map, images included as data URLs, so it
     // can be loaded back into a later version of the editor. Shared points
     // and segments are saved as indexes into their lists. Anything a file
@@ -12464,6 +12515,7 @@
       };
       file.images = await Promise.all(images.map(imageData));
       file.background = backgroundImage && await imageData(backgroundImage);
+      file.buildings = buildingsImage && await imageData(buildingsImage);
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -12533,6 +12585,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
+      await setBuildingsImage(file.buildings ?? null);
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;
@@ -12620,6 +12673,10 @@
         ctx.save();
         clipToImageRoom();
         if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
+        if (buildingsImage) {
+          const r = buildingsRect();
+          ctx.drawImage(buildingsImage, r.x, r.y, r.w, r.h);
+        }
         if (showsSatelliteReference()) {
           const r = satelliteRect();
           ctx.drawImage(satelliteReference, r.x, r.y, r.w, r.h);
@@ -12640,6 +12697,10 @@
       const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
       const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
       if (backgroundImage) layers.push(image(await imageData(backgroundImage), g.x, g.y, g.w, g.h));
+      if (buildingsImage) {
+        const r = buildingsRect();
+        layers.push(image(await imageData(buildingsImage), r.x, r.y, r.w, r.h));
+      }
       if (showsSatelliteReference()) {
         const r = satelliteRect();
         layers.push(image(await imageData(satelliteReference), r.x, r.y, r.w, r.h));
@@ -13394,6 +13455,7 @@
           ...file,
           settings: { ...file.settings, ...mapStarts[next]?.settings },
           background: mapStarts[next]?.background ?? null,
+          buildings: mapStarts[next]?.buildings ?? null,
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null,
           zoomBase: 1, frameCentre: null, satelliteReference: null, backgroundPlace: null, satellitePlace: null,
           ...mapStarts[next]?.paths,

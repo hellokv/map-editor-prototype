@@ -3026,6 +3026,10 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
+        <label id="buildings-tilt-field" class="field" hidden>
+          Tilt
+          <span class="slider"><input id="buildings-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Buildings tilt"></span>
+        </label>
         <div class="field-pair">
           <label class="field">
             Inside
@@ -7127,10 +7131,9 @@
         ctx.restore();
       }
       if (buildingsImage && !noBackground) {
-        const { x, y, w, h } = buildingsRect();
         ctx.save();
         clipToImageRoom();
-        ctx.drawImage(buildingsImage, x, y, w, h);
+        drawBuildings(ctx);
         ctx.restore();
       }
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
@@ -12418,6 +12421,7 @@
       buildingsImage = img;
       buildingsPreview.querySelector('img').src = img ? img.src : '';
       buildingsPreview.hidden = !img;
+      document.getElementById('buildings-tilt-field').hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
       if (!img) buildingsUpload.value = '';
       draw();
@@ -12427,6 +12431,49 @@
       if (file) setBuildingsImage(URL.createObjectURL(file));
     });
     document.getElementById('buildings-delete').addEventListener('click', () => setBuildingsImage(null));
+    // Tilt tips the buildings back from their bottom edge, as if the map were
+    // leaning away: drawn in thin bands, each narrowed and lowered as a
+    // camera twice the image's height away would see it.
+    const buildingsTiltInput = document.getElementById('buildings-tilt');
+    {
+      const slider = buildingsTiltInput.closest('.slider').querySelector('input[type="range"]');
+      slider.addEventListener('input', () => {
+        buildingsTiltInput.value = slider.value;
+        draw();
+      });
+      slider.addEventListener('change', () => slider.blur());
+      buildingsTiltInput.addEventListener('input', () => {
+        slider.value = buildingsTiltInput.value;
+        draw();
+      });
+    }
+    const BUILDINGS_TILT_BANDS = 400;
+    function drawBuildings(c) {
+      const { x, y, w, h } = buildingsRect();
+      const tilt = (Math.min(75, Math.max(0, Number(buildingsTiltInput.value) || 0)) * Math.PI) / 180;
+      if (!tilt) {
+        c.drawImage(buildingsImage, x, y, w, h);
+        return;
+      }
+      const W = buildingsImage.naturalWidth;
+      const H = buildingsImage.naturalHeight;
+      const camera = 2 * h;
+      // d is how far up the image a point is, from its bottom edge.
+      const scale = (d) => camera / (camera + d * Math.sin(tilt));
+      const lift = (d) => d * Math.cos(tilt) * scale(d);
+      const bands = Math.min(BUILDINGS_TILT_BANDS, H);
+      for (let k = 0; k < bands; k++) {
+        const sy = (k / bands) * H;
+        const sh = H / bands;
+        const top = h * (1 - k / bands);
+        const bottom = h * (1 - (k + 1) / bands);
+        const s = scale((top + bottom) / 2);
+        const bw = w * s;
+        const y0 = y + h - lift(top);
+        const y1 = y + h - lift(bottom);
+        c.drawImage(buildingsImage, 0, sy, W, sh, x + (w - bw) / 2, y0, bw, y1 - y0 + 0.5);
+      }
+    }
     // Over the background image where there is one, else as large as fits the box.
     function buildingsRect() {
       if (backgroundImage) return backgroundRect();
@@ -12444,7 +12491,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'buildings-tilt',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -12673,10 +12720,7 @@
         ctx.save();
         clipToImageRoom();
         if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
-        if (buildingsImage) {
-          const r = buildingsRect();
-          ctx.drawImage(buildingsImage, r.x, r.y, r.w, r.h);
-        }
+        if (buildingsImage) drawBuildings(ctx);
         if (showsSatelliteReference()) {
           const r = satelliteRect();
           ctx.drawImage(satelliteReference, r.x, r.y, r.w, r.h);
@@ -12697,10 +12741,8 @@
       const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
       const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
       if (backgroundImage) layers.push(image(await imageData(backgroundImage), g.x, g.y, g.w, g.h));
-      if (buildingsImage) {
-        const r = buildingsRect();
-        layers.push(image(await imageData(buildingsImage), r.x, r.y, r.w, r.h));
-      }
+      // Tilted, the buildings are no longer one flat image, so they're drawn as they show.
+      if (buildingsImage) layers.push(image(paintTemplate(g, () => drawBuildings(ctx)).toDataURL('image/png'), g.x, g.y, g.w, g.h));
       if (showsSatelliteReference()) {
         const r = satelliteRect();
         layers.push(image(await imageData(satelliteReference), r.x, r.y, r.w, r.h));

@@ -13315,9 +13315,9 @@
     // from the panel's defaults with the map's own changes; a map placed on
     // its satellite opens fitted to the satellite rather than the map.
     const mapStarts = {
-      // A copy of the demo as it opens: its background, paths and box.
+      // The demo's paths and box over the park without its buildings.
       'demo-buildings': {
-        background: START_IMAGE,
+        background: 'demo-park-no-buildings.svg',
         settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#626d4b', 'board-color': '#7b8365' },
         paths: JSON.parse(document.getElementById('starter-paths').textContent),
       },

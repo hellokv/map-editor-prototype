@@ -34,6 +34,10 @@
       width: 100%;
       height: 100%;
     }
+    #tilt-view {
+      position: absolute;
+      pointer-events: none;
+    }
     #place-suggestions {
       position: absolute;
       z-index: 5;
@@ -2022,6 +2026,7 @@
       </div>
     </div>
     <canvas id="canvas"></canvas>
+    <canvas id="tilt-view" hidden></canvas>
     <div id="capture-box" hidden>
       <span data-handle="nw"></span><span data-handle="n"></span><span data-handle="ne"></span><span data-handle="e"></span>
       <span data-handle="se"></span><span data-handle="s"></span><span data-handle="sw"></span><span data-handle="w"></span>
@@ -5028,10 +5033,12 @@
         autoLayers.textContent = names.join(', ') || 'None';
       }
       tiltCanvas(noMode || (!backgroundTools.hidden && mapIsBlank()));
-      if (inLocation()) paintLocation();
-      else if (layerSelect.value === 'Split Screen') paintSplit();
-      else if (layerSelect.value === 'Stacked') paintStack();
-      else paintView();
+      paintTilted(() => {
+        if (inLocation()) paintLocation();
+        else if (layerSelect.value === 'Split Screen') paintSplit();
+        else if (layerSelect.value === 'Stacked') paintStack();
+        else paintView();
+      });
       stackView.hidden = !stackOn();
       updatePanel();
     }
@@ -12517,21 +12524,29 @@
         const lifted = d === Infinity
           ? new DOMMatrix().translate(0, -raise * Math.tan(angle))
           : new DOMMatrix().translate(fx, fy).scale(height / (height - raise)).translate(-fx, -fy);
-        c.setTransform(new DOMMatrix().scale(dpr).multiply(spin.inverse()).multiply(lifted).multiply(spin).scale(1 / dpr).multiply(base));
+        const { margin } = canvasTilt;
+        c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(spin.inverse()).multiply(lifted).multiply(spin).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(base));
         c.drawImage(i === slices ? buildingsImage : shadedBuildings(), x, y, w, h);
       }
       c.setTransform(base);
     }
     let canvasTilt = null;
+    // Turned or tilted, the map is painted on #tilt-view instead: a canvas
+    // reaching past the window on every side, so what the turn brings into
+    // view from outside the window's rectangle is there to show.
+    const tiltView = document.getElementById('tilt-view');
+    const tiltCtx = tiltView.getContext('2d');
+    const TILT_VIEW_PIXELS = 32e6;
     // Rotation turns the map about the box's centre; tilt then tips it back
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
       const deg = blank ? 0 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
       const turn = blank ? 0 : (Number(mapRotationInput.value) || 0) % 360;
       canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);
-      if (!deg && !turn) {
+      tiltView.hidden = !deg && !turn;
+      canvas.style.opacity = tiltView.hidden ? '' : '0';
+      if (tiltView.hidden) {
         canvasTilt = null;
-        canvas.style.transform = '';
         return;
       }
       const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
@@ -12547,21 +12562,62 @@
       // has it infinitely far away.
       const d = mapIsometric.checked ? Infinity : Math.max(400, 2 * (oy - Math.min(...ys)));
       canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, spin };
-      canvas.style.transformOrigin = `${ox}px ${oy}px`;
-      canvas.style.transform = [
+      // The window's corners, taken back onto the flat map, bound what shows.
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      const seen = [[0, 0], [W, 0], [0, H], [W, H]].map(([x, y]) => untilt(x, y));
+      let left = Math.max(0, -Math.min(...seen.map((p) => p.x)));
+      let right = Math.max(0, Math.max(...seen.map((p) => p.x)) - W);
+      let top = Math.max(0, -Math.min(...seen.map((p) => p.y)));
+      let bottom = Math.max(0, Math.max(...seen.map((p) => p.y)) - H);
+      const dpr = window.devicePixelRatio || 1;
+      const fit = (n) => Math.min(n, 3 * Math.max(W, H));
+      [left, right, top, bottom] = [left, right, top, bottom].map(fit);
+      const over = ((W + left + right) * (H + top + bottom) * dpr * dpr) / TILT_VIEW_PIXELS;
+      if (over > 1) [left, right, top, bottom] = [left, right, top, bottom].map((n) => n / Math.sqrt(over));
+      const margin = { x: Math.ceil(left), y: Math.ceil(top), w: Math.ceil(W + left + right), h: Math.ceil(H + top + bottom) };
+      canvasTilt.margin = margin;
+      Object.assign(tiltView.style, { left: `${-margin.x}px`, top: `${-margin.y}px`, width: `${margin.w}px`, height: `${margin.h}px` });
+      if (tiltView.width !== Math.round(margin.w * dpr) || tiltView.height !== Math.round(margin.h * dpr)) {
+        tiltView.width = Math.round(margin.w * dpr);
+        tiltView.height = Math.round(margin.h * dpr);
+      }
+      tiltView.style.transformOrigin = `${ox + margin.x}px ${oy + margin.y}px`;
+      tiltView.style.transform = [
         d === Infinity || !deg ? '' : `perspective(${d}px)`,
         `rotateX(${deg}deg)`,
         `translate(${cx - ox}px, ${cy - oy}px) rotate(${turn}deg) translate(${ox - cx}px, ${oy - cy}px)`,
       ].join(' ');
     }
-    // A client point in the canvas's own, unturned and untilted pixels.
-    function canvasLocal(clientX, clientY) {
-      const rect = canvas.parentElement.getBoundingClientRect();
-      const X = clientX - rect.left;
-      const Y = clientY - rect.top;
-      if (!canvasTilt) return { x: X, y: Y };
+    // Paints onto #tilt-view when the map is turned or tilted, with the view
+    // shifted by the margin it reaches past the window.
+    function paintTilted(paint) {
+      if (!canvasTilt) {
+        paint();
+        return;
+      }
+      const { margin } = canvasTilt;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      tiltCtx.setTransform(1, 0, 0, 1, 0, 0);
+      tiltCtx.clearRect(0, 0, tiltView.width, tiltView.height);
+      const screenCtx = ctx;
+      ctx = tiltCtx;
+      view.x += margin.x;
+      view.y += margin.y;
+      try {
+        paint();
+      } finally {
+        view.x -= margin.x;
+        view.y -= margin.y;
+        ctx = screenCtx;
+      }
+    }
+    // A point in the window, in the flat map's canvas pixels. Points above a
+    // perspective horizon have none; they're held just below it.
+    function untilt(X, Y) {
       const { ox, oy, d, angle, spin } = canvasTilt;
-      const w = Y - oy;
+      const w = d === Infinity ? Y - oy : Math.max(Y - oy, (-0.9 * d) / Math.tan(angle || 1e-9));
       let p;
       if (d === Infinity) p = new DOMPoint(X, oy + w / Math.cos(angle));
       else {
@@ -12571,6 +12627,13 @@
       }
       const q = spin.inverse().transformPoint(p);
       return { x: q.x, y: q.y };
+    }
+    // A client point in the canvas's own, unturned and untilted pixels.
+    function canvasLocal(clientX, clientY) {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const X = clientX - rect.left;
+      const Y = clientY - rect.top;
+      return canvasTilt ? untilt(X, Y) : { x: X, y: Y };
     }
     // Over the background image where there is one, else as large as fits the box.
     function buildingsRect() {

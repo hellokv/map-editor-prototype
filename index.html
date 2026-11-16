@@ -2999,6 +2999,14 @@
           Tilt
           <span class="slider"><input id="map-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Tilt"></span>
         </label>
+        <div class="field">
+          Projection
+          <div id="map-projection" class="toggle-group">
+            <button type="button" data-isometric="false" aria-pressed="true">Perspective</button>
+            <button type="button" data-isometric="true" aria-pressed="false">Isometric</button>
+          </div>
+          <input id="map-isometric" type="checkbox" hidden>
+        </div>
         <div id="satellite-reference-field" class="field" hidden>
           Satellite Reference
           <span class="field-end">
@@ -12449,6 +12457,19 @@
     }
     const mapTiltInput = document.getElementById('map-tilt');
     linkSlider(mapTiltInput);
+    const mapIsometric = document.getElementById('map-isometric');
+    const projectionButtons = document.querySelectorAll('#map-projection button');
+    mapIsometric.addEventListener('change', () => {
+      for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.isometric === String(mapIsometric.checked)));
+      draw();
+    });
+    for (const button of projectionButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        mapIsometric.checked = button.dataset.isometric === 'true';
+        mapIsometric.dispatchEvent(new Event('change'));
+      });
+    }
     const buildingsLiftInput = document.getElementById('buildings-lift');
     linkSlider(buildingsLiftInput);
     function shadedBuildings() {
@@ -12463,8 +12484,9 @@
       return (buildingsShade = c.canvas);
     }
     // Over a tilted map, a layer raised h screen pixels off it shows exactly
-    // as the flat layer scaled about the point under the camera, so lifted
-    // buildings are stacked slices, each scaled a little further.
+    // as the flat layer scaled about the point under the camera, or, in
+    // isometric, shifted up by h tan(tilt). So lifted buildings are stacked
+    // slices, each moved a little further.
     function drawLiftedBuildings(c) {
       const lift = Math.max(0, Number(buildingsLiftInput.value) || 0) * view.scale;
       if (!canvasTilt || !lift) {
@@ -12482,10 +12504,13 @@
       const dpr = window.devicePixelRatio || 1;
       const base = c.getTransform();
       const { x, y, w, h } = buildingsRect();
-      const slices = Math.max(1, Math.ceil(top / 1.5));
+      const slices = Math.max(1, Math.ceil((top * Math.max(1, Math.tan(angle))) / 1.5));
       for (let i = 1; i <= slices; i++) {
-        const k = height / (height - (top * i) / slices);
-        c.setTransform(new DOMMatrix().scale(dpr).translate(fx, fy).scale(k).translate(-fx, -fy).scale(1 / dpr).multiply(base));
+        const raise = (top * i) / slices;
+        const lifted = d === Infinity
+          ? new DOMMatrix().translate(0, -raise * Math.tan(angle))
+          : new DOMMatrix().translate(fx, fy).scale(height / (height - raise)).translate(-fx, -fy);
+        c.setTransform(new DOMMatrix().scale(dpr).multiply(lifted).scale(1 / dpr).multiply(base));
         c.drawImage(i === slices ? buildingsImage : shadedBuildings(), x, y, w, h);
       }
       c.setTransform(base);
@@ -12504,11 +12529,12 @@
       const top = toScreen({ x: 0, y: 0 });
       const ox = (left.x + right.x) / 2;
       const oy = Math.max(left.y, right.y);
-      // The camera stands back twice the box's height on screen.
-      const d = Math.max(400, 2 * Math.abs(oy - top.y));
+      // The camera stands back twice the box's height on screen; isometric
+      // has it infinitely far away.
+      const d = mapIsometric.checked ? Infinity : Math.max(400, 2 * Math.abs(oy - top.y));
       canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180 };
       canvas.style.transformOrigin = `${ox}px ${oy}px`;
-      canvas.style.transform = `perspective(${d}px) rotateX(${deg}deg)`;
+      canvas.style.transform = `${mapIsometric.checked ? '' : `perspective(${d}px) `}rotateX(${deg}deg)`;
     }
     // A client point in the canvas's own, untilted pixels.
     function canvasLocal(clientX, clientY) {
@@ -12518,6 +12544,7 @@
       if (!canvasTilt) return { x: X, y: Y };
       const { ox, oy, d, angle } = canvasTilt;
       const w = Y - oy;
+      if (d === Infinity) return { x: X, y: oy + w / Math.cos(angle) };
       const v = (w * d) / (d * Math.cos(angle) + w * Math.sin(angle));
       const k = d / (d - v * Math.sin(angle));
       return { x: ox + (X - ox) / k, y: oy + v };
@@ -12539,7 +12566,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'buildings-lift',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-isometric', 'buildings-lift',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

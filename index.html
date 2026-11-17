@@ -13068,7 +13068,9 @@
     // or tilt: turned back against the turn, and stretched up the tipped map
     // so the tilt shortens it back to its height. Drawn in map units, foot at 0, 0.
     // Each shape is its parts, back to front, in map units with the foot
-    // at 0, 0; w and h bound it for picking.
+    // at 0, 0; w and h bound it for picking. Shapes are mirror-symmetric, as
+    // a tree's shadow takes its outline across the light's path whichever
+    // way the light comes from.
     const TRUNK = '#4a3a2e';
     function treeShapes() {
       const path = (draw) => {
@@ -13094,8 +13096,8 @@
         oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), '#3f6b35']] },
         cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), '#2c5a3c']] },
         palm: { w: 56, h: 66, parts: [
-          [path((p) => { p.moveTo(-3, 0); p.quadraticCurveTo(-6, -30, 2, -58); p.lineTo(6, -58); p.quadraticCurveTo(0, -30, 3, 0); p.closePath(); }), '#7a6043'],
-          [many(...[-2.6, -2, -1.2, -0.4, 0.4].map((a) => ellipse(4 + Math.cos(a) * 14, -58 + Math.sin(a) * 6, 16, 4, a))), '#4c8a43'],
+          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), '#7a6043'],
+          [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), '#4c8a43'],
         ] },
         bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), '#5a8445']] },
       };
@@ -13159,9 +13161,9 @@
     function drawTreeShadows(c) {
       const { dx, dy } = lightFall();
       const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
-      const turn = canvasTilt?.turn ?? 0;
-      const ux = Math.cos(-turn);
-      const uy = Math.sin(-turn);
+      // Across the light's path, so the shadow is the same from every side.
+      const ux = -dy;
+      const uy = dx;
       const shadows = new Path2D();
       for (const t of trees) {
         const ground = new DOMMatrix([ux, uy, -dx * stretch, -dy * stretch, t.x, t.y]);

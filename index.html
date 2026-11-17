@@ -3090,6 +3090,14 @@
           Sides
           <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
         </label>
+        <label id="buildings-shadows-field" class="field" hidden>
+          Shadows
+          <input id="buildings-shadows" class="switch" type="checkbox">
+        </label>
+        <label id="light-angle-field" class="field" hidden>
+          Light Angle
+          <span class="slider"><input id="light-angle" type="number" min="0" max="360" step="1" value="315"><input type="range" min="0" max="360" step="1" value="315" aria-label="Light angle"></span>
+        </label>
         <div class="field-pair">
           <label class="field">
             Inside
@@ -12511,6 +12519,7 @@
       document.getElementById('buildings-upload-field').hidden = !!img;
       document.getElementById('buildings-lift-field').hidden = !img;
       document.getElementById('buildings-side-field').hidden = !img;
+      showShadowFields();
       if (!img) buildingsUpload.value = '';
       draw();
     }
@@ -12549,6 +12558,18 @@
       for (const part of buildingParts) part.wall = null;
       draw();
     });
+    const buildingShadowsOn = document.getElementById('buildings-shadows');
+    const lightAngleInput = document.getElementById('light-angle');
+    function showShadowFields() {
+      document.getElementById('buildings-shadows-field').hidden = !buildingsImage;
+      document.getElementById('light-angle-field').hidden = !buildingsImage || !buildingShadowsOn.checked;
+    }
+    buildingShadowsOn.addEventListener('change', () => {
+      showShadowFields();
+      draw();
+    });
+    linkSlider(lightAngleInput);
+    lightAngleInput.addEventListener('input', draw);
     const buildingsLiftInput = document.getElementById('buildings-lift');
     linkSlider(buildingsLiftInput);
     buildingsLiftInput.addEventListener('input', draw);
@@ -12636,7 +12657,46 @@
     }
     // Lifted buildings are stacked slices, each raised a little further,
     // farthest part first so nearer ones stand in front.
+    // Shadows fall on the map, each part's outline swept away from the light
+    // as far as the part is tall: a sun 45° up. The light angle is measured
+    // on screen, clockwise from the top, so turning the map leaves it put.
+    let shadowLayer = null;
+    function drawBuildingShadows(c) {
+      if (!buildingShadowsOn.checked || !buildingParts.length) return;
+      const turn = canvasTilt?.turn ?? 0;
+      const light = ((Number(lightAngleInput.value) || 0) * Math.PI) / 180 - turn;
+      const dx = -Math.sin(light);
+      const dy = Math.cos(light);
+      const { width, height } = c.canvas;
+      if (shadowLayer?.width !== width || shadowLayer?.height !== height) shadowLayer = new OffscreenCanvas(width, height);
+      const s = shadowLayer.getContext('2d');
+      s.setTransform(1, 0, 0, 1, 0, 0);
+      s.clearRect(0, 0, width, height);
+      s.setTransform(c.getTransform());
+      for (const part of buildingParts) {
+        const length = partLift(part);
+        if (!length) continue;
+        const r = partRect(part);
+        const slices = Math.max(1, Math.ceil((length * view.scale) / 1.5));
+        for (let i = 0; i <= slices; i++) {
+          const along = (length * i) / slices;
+          s.drawImage(part.roof, r.x + dx * along, r.y + dy * along, r.w, r.h);
+        }
+      }
+      s.setTransform(1, 0, 0, 1, 0, 0);
+      s.globalCompositeOperation = 'source-in';
+      s.fillStyle = '#000';
+      s.fillRect(0, 0, width, height);
+      s.globalCompositeOperation = 'source-over';
+      c.save();
+      clipToImageRoom();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalAlpha = 0.3;
+      c.drawImage(shadowLayer, 0, 0);
+      c.restore();
+    }
     function drawLiftedBuildings(c) {
+      drawBuildingShadows(c);
       const tilted = !!canvasTilt?.angle;
       if (!tilted && !selectedBuilding) {
         c.save();
@@ -12877,7 +12937,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-side-color',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-side-color', 'buildings-shadows', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

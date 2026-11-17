@@ -3071,6 +3071,7 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
+        <button id="plants-pick" class="new-style" type="button" aria-pressed="false" hidden>Select Plants<span class="material-symbols-rounded">park</span></button>
         <label id="buildings-upload-field" class="field">
           Buildings
           <input id="buildings-upload" type="file" accept="image/*" hidden>
@@ -4966,6 +4967,11 @@
     const canvas = document.getElementById('canvas');
     // Swapped for an offscreen one while Download Template draws.
     let ctx = canvas.getContext('2d');
+    // The background SVG kept for its shapes, and those moved into plants (see readBackgroundSvg).
+    let backgroundSvg = null;
+    let plants = [];
+    let backgroundShown = null;
+    let pickingPlants = false;
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -7239,10 +7245,10 @@
         const { x, y, w, h } = backgroundRect();
         ctx.save();
         clipToImageRoom();
-        ctx.drawImage(backgroundImage, x, y, w, h);
+        ctx.drawImage(plants.length && backgroundShown ? backgroundShown : backgroundImage, x, y, w, h);
         ctx.restore();
       }
-      if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
+      if ((buildingsImage || plants.length) && !noBackground) drawLiftedBuildings(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
         ctx.save();
@@ -12439,7 +12445,8 @@
       const request = ++backgroundRequest;
       const img = new Image();
       return new Promise((resolve) => {
-        img.onload = () => {
+        img.onload = async () => {
+          if (request === backgroundRequest) await readBackgroundSvg(img);
           if (request === backgroundRequest) {
             backgroundImage = img;
             previewImg.src = img.src;
@@ -12512,6 +12519,9 @@
       if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundRequest++;
       backgroundImage = null;
+      backgroundSvg = null;
+      plants = [];
+      showPlantPick();
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
@@ -12627,12 +12637,13 @@
     const buildingLightOn = document.getElementById('buildings-light');
     const lightColor = document.getElementById('light-color');
     function showShadowFields() {
-      const shown = (id, on) => { document.getElementById(id).hidden = !buildingsImage || !on; };
-      shown('buildings-shadows-field', true);
-      shown('shadow-length-field', buildingShadowsOn.checked);
+      const shown = (id, on, any = buildingsImage) => { document.getElementById(id).hidden = !any || !on; };
+      const casters = buildingsImage || plants.length;
+      shown('buildings-shadows-field', true, casters);
+      shown('shadow-length-field', buildingShadowsOn.checked, casters);
       shown('buildings-light-field', true);
       shown('light-color-field', buildingLightOn.checked);
-      shown('light-angle-field', buildingShadowsOn.checked || buildingLightOn.checked);
+      shown('light-angle-field', buildingShadowsOn.checked || buildingLightOn.checked, casters);
     }
     for (const input of [buildingShadowsOn, buildingLightOn]) {
       input.addEventListener('change', () => {
@@ -12653,8 +12664,8 @@
     async function splitBuildings(src, img) {
       const W = img.naturalWidth;
       const H = img.naturalHeight;
-      const text = await fetch(src).then((r) => r.text()).catch(() => '');
-      const root = /<svg[\s>]/i.test(text.slice(0, 4096)) ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
+      const text = await svgTextOf(src);
+      const root = text ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
       if (!root || root.localName !== 'svg') return [cutPart(img, W, H)].filter(Boolean);
       const shared = [...root.children].filter((el) => ['defs', 'style'].includes(el.localName));
       const parts = [];
@@ -12832,7 +12843,7 @@
     // by its lift times the shadow length.
     let shadowLayer = null;
     function drawBuildingShadows(c) {
-      if (!buildingShadowsOn.checked || !buildingParts.length) return;
+      if (!buildingShadowsOn.checked || (!buildingParts.length && !plants.length)) return;
       const { dx, dy } = lightFall();
       const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       const { width, height } = c.canvas;
@@ -12850,6 +12861,12 @@
           const along = (length * i) / slices;
           s.drawImage(part.roof, r.x + dx * along, r.y + dy * along, r.w, r.h);
         }
+      }
+      const dpr = window.devicePixelRatio || 1;
+      const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
+      for (const plant of plants) {
+        s.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(plantShadowMatrix(plant, dx * stretch, dy * stretch)));
+        s.drawImage(plant.canvas, 0, 0);
       }
       s.setTransform(1, 0, 0, 1, 0, 0);
       s.globalCompositeOperation = 'source-in';
@@ -12897,8 +12914,13 @@
         const p = toScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
         return canvasTilt ? leanSpin().transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
       };
-      const order = [...buildingParts].sort((a, b) => depth(a) - depth(b));
-      for (const part of order) {
+      const items = [
+        ...buildingParts.map((part) => ({ depth: depth(part), draw: () => drawPart(part) })),
+        ...plants.map((plant) => ({ depth: plantDepth(plant), draw: () => drawPlant(c, plant) })),
+      ];
+      items.sort((a, b) => a.depth - b.depth).forEach((item) => item.draw());
+      c.setTransform(base);
+      function drawPart(part) {
         const r = partRect(part);
         const top = tilted ? partLift(part) * view.scale : 0;
         const slices = top ? Math.max(1, Math.ceil((top * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 1;
@@ -12919,7 +12941,6 @@
           c.setLineDash([]);
         }
       }
-      c.setTransform(base);
     }
     // The part under a canvas point, looking down through roofs and walls.
     function buildingAt(s) {
@@ -12986,7 +13007,7 @@
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage) return;
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || pickingPlants) return;
       const part = buildingAt(canvasPoint(e));
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
@@ -13003,6 +13024,198 @@
         draw();
       }
     });
+    // A background SVG's own shapes can be moved into the plants layer, where
+    // each stands upright at the foot of its bounds, so turning or tipping
+    // the map never lays it down, and casts a shadow like a building's.
+    const svgHolder = document.createElement('div');
+    Object.assign(svgHolder.style, { position: 'absolute', width: '0', height: '0', overflow: 'hidden', visibility: 'hidden' });
+    document.body.append(svgHolder);
+    const plantPick = document.getElementById('plants-pick');
+    // The published page may not fetch data: URLs, so those are decoded here.
+    async function svgTextOf(src) {
+      let text = '';
+      if (src.startsWith('data:')) {
+        const comma = src.indexOf(',');
+        const body = src.slice(comma + 1);
+        text = src.slice(0, comma).endsWith(';base64')
+          ? new TextDecoder().decode(Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0)))
+          : decodeURIComponent(body);
+      } else text = await fetch(src).then((r) => r.text()).catch(() => '');
+      return /<svg[\s>]/i.test(text.slice(0, 4096)) ? text : null;
+    }
+    // Kept in the page, hidden, so its shapes can be hit-tested and measured.
+    async function readBackgroundSvg(img) {
+      backgroundSvg = null;
+      plants = [];
+      backgroundShown = null;
+      svgHolder.replaceChildren();
+      const text = await svgTextOf(img.src);
+      const parsed = text && new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+      if (parsed?.localName === 'svg') {
+        const root = document.importNode(parsed, true);
+        root.setAttribute('width', img.naturalWidth);
+        root.setAttribute('height', img.naturalHeight);
+        svgHolder.append(root);
+        backgroundSvg = { root, drawn: [...root.children].filter((child) => !NOT_DRAWN.includes(child.localName)), W: img.naturalWidth, H: img.naturalHeight };
+      }
+      showPlantPick();
+    }
+    function showPlantPick() {
+      plantPick.hidden = !backgroundSvg;
+      if (!backgroundSvg) setPickingPlants(false);
+      showShadowFields();
+    }
+    function setPickingPlants(on) {
+      pickingPlants = on;
+      plantPick.setAttribute('aria-pressed', String(on));
+      draw();
+    }
+    plantPick.addEventListener('click', () => {
+      plantPick.blur();
+      setPickingPlants(!pickingPlants);
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && pickingPlants) setPickingPlants(false);
+    });
+    // A lone shape drawn into a canvas cropped to what it covers, in the
+    // background image's pixels times k.
+    async function makePlant(index) {
+      const { root, drawn, W, H } = backgroundSvg;
+      const shell = root.cloneNode(false);
+      shell.append(...[...root.children].filter((child) => ['defs', 'style'].includes(child.localName)).map((node) => node.cloneNode(true)), drawn[index].cloneNode(true));
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(shell)], { type: 'image/svg+xml' }));
+      const image = await loadImage(url).catch(() => null);
+      URL.revokeObjectURL(url);
+      if (!image) return null;
+      const part = cutPart(image, W, H);
+      return part && { index, canvas: part.roof, alpha: part.alpha, cw: part.aw, ch: part.ah, x: part.x, y: part.y, w: part.w, h: part.h };
+    }
+    async function setPlants(indices) {
+      if (!backgroundSvg) {
+        plants = [];
+        return;
+      }
+      plants = (await Promise.all(indices.filter((i) => i < backgroundSvg.drawn.length).map(makePlant))).filter(Boolean);
+      await showBackgroundWithoutPlants();
+    }
+    async function togglePlant(index) {
+      if (plants.some((plant) => plant.index === index)) plants = plants.filter((plant) => plant.index !== index);
+      else {
+        const plant = await makePlant(index);
+        if (plant) plants = [...plants, plant];
+      }
+      await showBackgroundWithoutPlants();
+    }
+    // The background as drawn: its SVG less the shapes moved into plants.
+    async function showBackgroundWithoutPlants() {
+      const moved = new Set(plants.map((plant) => plant.index));
+      const clone = backgroundSvg.root.cloneNode(true);
+      const drawn = [...clone.children].filter((child) => !NOT_DRAWN.includes(child.localName));
+      drawn.forEach((el, i) => { if (moved.has(i)) el.remove(); });
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
+      backgroundShown = await loadImage(url).catch(() => null);
+      URL.revokeObjectURL(url);
+      showShadowFields();
+      draw();
+    }
+    // The plant's foot and size, in canvas pixels, less any shift paintTilted
+    // has given the view.
+    let viewShift = { x: 0, y: 0 };
+    function plantPlace(plant) {
+      const r = backgroundRect();
+      const sx = r.w / backgroundSvg.W;
+      const sy = r.h / backgroundSvg.H;
+      const shifted = toScreen({ x: r.x + (plant.x + plant.w / 2) * sx, y: r.y + (plant.y + plant.h) * sy });
+      const foot = { x: shifted.x - viewShift.x, y: shifted.y - viewShift.y };
+      return { foot, w: plant.w * sx * view.scale, h: plant.h * sy * view.scale };
+    }
+    // From the plant's own pixels to canvas pixels, standing upright on the
+    // screen: turned back against the map's turn, and stretched up the tipped
+    // map so the tilt shortens it back to its height.
+    function plantMatrix(plant) {
+      const { foot, w, h } = plantPlace(plant);
+      const spin = canvasTilt?.spin ?? new DOMMatrix();
+      const stand = canvasTilt && !canvasTilt.flat ? 1 / Math.cos(canvasTilt.angle) : 1;
+      const at = spin.transformPoint(new DOMPoint(foot.x, foot.y));
+      return spin.inverse().translate(at.x, at.y).scale(1, stand).translate(-w / 2, -h).scale(w / plant.cw, h / plant.ch);
+    }
+    // Its shadow lies on the map, from the foot away from the light, as long
+    // as the plant is tall times (dx, dy).
+    function plantShadowMatrix(plant, dx, dy) {
+      const { foot, w, h } = plantPlace(plant);
+      const spin = canvasTilt?.spin ?? new DOMMatrix();
+      const o = spin.inverse().transformPoint(new DOMPoint(0, 0));
+      const one = spin.inverse().transformPoint(new DOMPoint(1, 0));
+      const ux = one.x - o.x;
+      const uy = one.y - o.y;
+      const kx = w / plant.cw;
+      const ky = h / plant.ch;
+      return new DOMMatrix([kx * ux, kx * uy, -ky * dx, -ky * dy, foot.x - (w / 2) * ux + h * dx, foot.y - (w / 2) * uy + h * dy]);
+    }
+    function plantDepth(plant) {
+      const { foot } = plantPlace(plant);
+      return canvasTilt ? canvasTilt.spin.transformPoint(new DOMPoint(foot.x, foot.y)).y : foot.y;
+    }
+    function drawPlant(c, plant) {
+      const dpr = window.devicePixelRatio || 1;
+      const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
+      c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(plantMatrix(plant)));
+      c.drawImage(plant.canvas, 0, 0);
+      if (pickingPlants) {
+        const m = c.getTransform();
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        const corners = [[0, 0], [plant.cw, 0], [plant.cw, plant.ch], [0, plant.ch]].map(([x, y]) => m.transformPoint(new DOMPoint(x, y)));
+        c.beginPath();
+        corners.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+        c.closePath();
+        c.strokeStyle = '#2f80ed';
+        c.lineWidth = 1.5 * dpr;
+        c.setLineDash([5 * dpr, 4 * dpr]);
+        c.stroke();
+        c.setLineDash([]);
+      }
+    }
+    function plantAt(s) {
+      for (const plant of [...plants].reverse()) {
+        const q = plantMatrix(plant).inverse().transformPoint(new DOMPoint(s.x, s.y));
+        const x = Math.floor(q.x);
+        const y = Math.floor(q.y);
+        if (x >= 0 && y >= 0 && x < plant.cw && y < plant.ch && plant.alpha[y * plant.cw + x] > 20) return plant;
+      }
+      return null;
+    }
+    // The topmost background shape under a canvas point, by its fill where
+    // it's filled and its stroke where it's stroked.
+    function backgroundShapeAt(s) {
+      const p = toBackground(s.x, s.y);
+      const r = backgroundRect();
+      const point = new DOMPoint(((p.x - r.x) * backgroundSvg.W) / r.w, ((p.y - r.y) * backgroundSvg.H) / r.h);
+      const moved = new Set(plants.map((plant) => plant.index));
+      const { drawn } = backgroundSvg;
+      for (let i = drawn.length - 1; i >= 0; i--) {
+        if (moved.has(i)) continue;
+        const shapes = drawn[i] instanceof SVGGeometryElement ? [drawn[i]] : drawn[i].querySelectorAll('path, circle, rect, ellipse, polygon, polyline, line');
+        for (const shape of shapes) {
+          const ctm = shape.getCTM();
+          if (!ctm) continue;
+          const { x, y } = DOMMatrix.fromMatrix(ctm).inverse().transformPoint(point);
+          const local = { x, y };
+          const style = getComputedStyle(shape);
+          if (style.fill !== 'none' && shape.isPointInFill(local)) return i;
+          if (style.stroke !== 'none' && shape.isPointInStroke(local)) return i;
+        }
+      }
+      return -1;
+    }
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!pickingPlants || e.button !== 0 || spaceHeld || backgroundTools.hidden || !backgroundSvg) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const s = canvasPoint(e);
+      const plant = plantAt(s);
+      const index = plant ? plant.index : backgroundShapeAt(s);
+      if (index >= 0) togglePlant(index);
+    }, { capture: true });
     let canvasTilt = null;
     // Turned or tilted, the map is painted on #tilt-view instead: a canvas
     // reaching past the window on every side, so what the turn brings into
@@ -13080,11 +13293,13 @@
       ctx = tiltCtx;
       view.x += margin.x;
       view.y += margin.y;
+      viewShift = margin;
       try {
         paint();
       } finally {
         view.x -= margin.x;
         view.y -= margin.y;
+        viewShift = { x: 0, y: 0 };
         ctx = screenCtx;
       }
     }
@@ -13202,6 +13417,7 @@
       file.background = backgroundImage && await imageData(backgroundImage);
       file.buildings = buildingsImage && await imageData(buildingsImage);
       file.buildingLifts = buildingParts.map((part) => part.lift);
+      file.plants = plants.map((plant) => plant.index);
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -13271,6 +13487,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
+      await setPlants(file.plants ?? []);
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? []);
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;

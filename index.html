@@ -3147,16 +3147,10 @@
           Size Variation
           <span class="slider"><span class="percent-field"><input id="rock-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock size variation"></span>
         </label>
-        <div class="field-pair">
-          <label class="field">
-            Light
-            <span class="color-field"><input id="rock-light-color" type="color" value="#b9b4aa"></span>
-          </label>
-          <label class="field">
-            Dark
-            <span class="color-field"><input id="rock-dark-color" type="color" value="#7d776d"></span>
-          </label>
-        </div>
+        <label class="field">
+          Rock Color
+          <span class="color-field"><input id="rock-color" type="color" value="#9a958b"></span>
+        </label>
         <label class="field">
           Color Variation
           <span class="slider"><span class="percent-field"><input id="rock-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock color variation"></span>
@@ -13545,7 +13539,7 @@
       input.addEventListener('input', draw);
     }
     const treeTrunkInput = document.getElementById('tree-trunk-color');
-    for (const input of [treeColorInput, treeTrunkInput, document.getElementById('rock-light-color'), document.getElementById('rock-dark-color')]) {
+    for (const input of [treeColorInput, treeTrunkInput, document.getElementById('rock-color')]) {
       input.addEventListener('input', () => {
         for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
         draw();
@@ -13577,34 +13571,35 @@
       const light = Math.min(0.95, Math.max(0.05, l + treeRandom(t, 3) * 0.15 * spread));
       return `hsl(${h.toFixed(1)} ${(sat * 100).toFixed(1)}% ${(light * 100).toFixed(1)}%)`;
     }
-    // Rocks are two-tone: a dark body under a light top facet, low on the ground.
-    const LIGHT = 'light';
-    const DARK = 'dark';
+    // Rocks are single-coloured rounded lumps sitting on a flat base, each
+    // outline a squared-off half oval, so they read as solid.
+    const ROCK = 'rock';
     function rockShapes() {
-      const poly = (...points) => {
+      const dome = (cx, w, h) => {
+        const points = [];
+        for (let i = 0; i <= 24; i++) {
+          const a = (Math.PI * i) / 24;
+          const c = Math.cos(a);
+          const s = Math.sin(a);
+          points.push([cx + (w / 2) * Math.sign(c) * Math.abs(c) ** 0.75, -h * s ** 0.75]);
+        }
         const p = new Path2D();
         points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
         p.closePath();
         p.points = points;
-        return p;
+        return [p, ROCK];
       };
       return {
-        boulder: { w: 34, h: 22, parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
-        slab: { w: 44, h: 14, parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
-        spire: { w: 22, h: 34, parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
-        pair: { w: 46, h: 24, parts: [
-          [poly([-23, 0], [-21, -11], [-12, -19], [-3, -17], [1, -8], [0, 0]), DARK],
-          [poly([-19, -10], [-12, -17], [-5, -15], [-9, -8]), LIGHT],
-          [poly([-2, 0], [1, -9], [10, -15], [20, -12], [23, 0]), DARK],
-          [poly([3, -8], [10, -13], [18, -11], [9, -6]), LIGHT],
-        ] },
+        boulder: { w: 34, h: 22, parts: [dome(0, 34, 22)] },
+        pebble: { w: 40, h: 12, parts: [dome(0, 40, 12)] },
+        tall: { w: 22, h: 30, parts: [dome(0, 22, 30)] },
+        pair: { w: 46, h: 20, parts: [dome(-9, 28, 20), dome(13, 20, 12)] },
       };
     }
     const ROCK_SHAPES = rockShapes();
     const rockSizeInput = document.getElementById('rock-size');
     const rockSizeVariation = document.getElementById('rock-size-variation');
-    const rockLight = document.getElementById('rock-light-color');
-    const rockDark = document.getElementById('rock-dark-color');
+    const rockColor = document.getElementById('rock-color');
     const rockColorVariation = document.getElementById('rock-color-variation');
     for (const input of [rockSizeInput, rockSizeVariation, rockColorVariation]) {
       linkSlider(input);
@@ -13613,10 +13608,7 @@
     // The fill for a stamp's part; without t, the base colour, for the panel's previews.
     function partColor(color, t) {
       if (color === LEAF) return t ? treeLeaf(t) : treeColorInput.value;
-      if (color === LIGHT || color === DARK) {
-        const base = color === LIGHT ? rockLight.value : rockDark.value;
-        return t ? varyColor(base, t, rockColorVariation) : base;
-      }
+      if (color === ROCK) return t ? varyColor(rockColor.value, t, rockColorVariation) : rockColor.value;
       return treeTrunkInput.value;
     }
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
@@ -13788,7 +13780,7 @@
       const [ux, uy] = [Math.cos(turn), Math.sin(turn)];
       const [bx, by] = [Math.sin(turn), -Math.cos(turn)];
       for (const [part, color] of ROCK_SHAPES[t.shape].parts) {
-        if (color !== DARK) continue;
+        if (color !== ROCK) continue;
         const xs = part.points.map(([x]) => x);
         const depth = (Math.max(...xs) - Math.min(...xs)) / 2;
         const cast = [];
@@ -13975,7 +13967,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

@@ -3050,6 +3050,22 @@
       <div id="tree-shapes" class="label-section" hidden>
         <div class="field">Tree Shape</div>
         <div class="tree-shape-grid"></div>
+        <label class="field">
+          Tree Size
+          <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
+        </label>
+        <label class="field">
+          Size Variation
+          <span class="slider"><span class="percent-field"><input id="tree-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Size variation"></span>
+        </label>
+        <label class="field">
+          Leaf Color
+          <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
+        </label>
+        <label class="field">
+          Color Variation
+          <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
+        </label>
       </div>
       <div class="label-section background-settings">
         <label id="background-show-labels-field" class="field">
@@ -13072,6 +13088,7 @@
     // a tree's shadow takes its outline across the light's path whichever
     // way the light comes from.
     const TRUNK = '#4a3a2e';
+    const LEAF = 'leaf';
     function treeShapes() {
       const path = (draw) => {
         const p = new Path2D();
@@ -13091,18 +13108,52 @@
         }
       });
       return {
-        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, '#2f4a3a']] },
-        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), '#4f7a3a']] },
-        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), '#3f6b35']] },
-        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), '#2c5a3c']] },
+        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, LEAF]] },
+        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), LEAF]] },
+        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]] },
+        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]] },
         palm: { w: 56, h: 66, parts: [
           [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), '#7a6043'],
-          [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), '#4c8a43'],
+          [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), LEAF],
         ] },
-        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), '#5a8445']] },
+        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]] },
       };
     }
     const TREE_SHAPES = treeShapes();
+    const treeSizeInput = document.getElementById('tree-size');
+    const treeSizeVariation = document.getElementById('tree-size-variation');
+    const treeColorInput = document.getElementById('tree-color');
+    const treeColorVariation = document.getElementById('tree-color-variation');
+    for (const input of [treeSizeInput, treeSizeVariation, treeColorVariation]) {
+      linkSlider(input);
+      input.addEventListener('input', draw);
+    }
+    treeColorInput.addEventListener('input', () => {
+      for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
+      draw();
+    });
+    // Steady per-tree randomness, from where the tree stands, in -1..1.
+    function treeRandom(t, salt) {
+      const v = Math.sin(t.x * 12.9898 + t.y * 78.233 + salt * 37.719) * 43758.5453;
+      return (v - Math.floor(v)) * 2 - 1;
+    }
+    // Size: the base times up to 2× either way at full variation.
+    const treeScale = (t) => ((Number(treeSizeInput.value) || 100) / 100) * 2 ** (treeRandom(t, 1) * (Number(treeSizeVariation.value) || 0) / 100);
+    // Leaf colour: the base, its hue moved up to 30° and lightness 15% either way at full variation.
+    function treeLeaf(t) {
+      const spread = (Number(treeColorVariation.value) || 0) / 100;
+      if (!spread) return treeColorInput.value;
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(treeColorInput.value.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const d = max - min;
+      const sat = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+      const hue = !d ? 0 : max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      const h = hue * 60 + treeRandom(t, 2) * 30 * spread;
+      const light = Math.min(0.95, Math.max(0.05, l + treeRandom(t, 3) * 0.15 * spread));
+      return `hsl(${h.toFixed(1)} ${(sat * 100).toFixed(1)}% ${(light * 100).toFixed(1)}%)`;
+    }
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     let treeShape = 'pine';
     // The panel's shape picker, each button showing its tree.
@@ -13117,13 +13168,18 @@
       const size = 44;
       const dpr = window.devicePixelRatio || 1;
       preview.width = preview.height = size * dpr;
-      const c = preview.getContext('2d');
-      const k = (size - 8) / Math.max(shape.w, shape.h);
-      c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
-      for (const [part, color] of shape.parts) {
-        c.fillStyle = color;
-        c.fill(part);
-      }
+      preview.paint = () => {
+        const c = preview.getContext('2d');
+        const k = (size - 8) / Math.max(shape.w, shape.h);
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.clearRect(0, 0, preview.width, preview.height);
+        c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
+        for (const [part, color] of shape.parts) {
+          c.fillStyle = color === LEAF ? treeColorInput.value : color;
+          c.fill(part);
+        }
+      };
+      preview.paint();
       button.append(preview);
       button.addEventListener('click', () => {
         button.blur();
@@ -13148,8 +13204,10 @@
       const depth = (t) => spin.transformPoint(base.transformPoint(new DOMPoint(t.x, t.y))).y;
       for (const t of [...trees].sort((a, b) => depth(a) - depth(b))) {
         c.setTransform(uprightAt(base.transformPoint(new DOMPoint(t.x, t.y)), spin, view.scale * dpr));
+        const scale = treeScale(t);
+        c.scale(scale, scale);
         for (const [part, color] of shapeOf(t).parts) {
-          c.fillStyle = color;
+          c.fillStyle = color === LEAF ? treeLeaf(t) : color;
           c.fill(part);
         }
       }
@@ -13166,7 +13224,7 @@
       const uy = dx;
       const shadows = new Path2D();
       for (const t of trees) {
-        const ground = new DOMMatrix([ux, uy, -dx * stretch, -dy * stretch, t.x, t.y]);
+        const ground = new DOMMatrix([ux, uy, -dx * stretch, -dy * stretch, t.x, t.y]).scale(treeScale(t));
         for (const [part] of shapeOf(t).parts) shadows.addPath(part, ground);
       }
       c.save();
@@ -13182,7 +13240,8 @@
         const foot = toScreen(t);
         const q = uprightAt(new DOMPoint(foot.x, foot.y), spin, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);
-        return Math.abs(q.x) <= w / 2 && q.y <= 0 && q.y >= -h;
+        const k = treeScale(t);
+        return Math.abs(q.x) <= (w * k) / 2 && q.y <= 0 && q.y >= -h * k;
       });
     }
     let canvasTilt = null;
@@ -13311,7 +13370,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

@@ -13546,14 +13546,6 @@
           volume: [['trunk', 6, 22], ['ball', 0, 38, 19, 19]] },
         oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]],
           volume: [['trunk', 8, 20], ['ball', -12, 30, 14, 14], ['ball', 12, 30, 14, 14], ['ball', 0, 42, 15, 15], ['ball', 0, 26, 13, 13]] },
-        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]],
-          volume: [['trunk', 5, 8], ['ball', 0, 38, 10, 32]] },
-        palm: { w: 56, h: 66, volume: [['trunk', 5, 58], ['ball', 0, 60, 26, 5]], parts: [
-          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.ellipse(0, 0, 3.5, 7 * TRUNK_FOOT, 0, 0, Math.PI); p.closePath(); }), TRUNK],
-          [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), LEAF],
-        ] },
-        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]],
-          volume: [['ball', -11, 10, 10, 10], ['ball', 11, 10, 10, 10], ['ball', 0, 15, 11, 11]] },
       };
     }
     const TREE_SHAPES = treeShapes();
@@ -13638,8 +13630,8 @@
       if (color === ROCK) return t ? varyColor(rockColor.value, t, rockColorVariation) : rockColor.value;
       return treeTrunkInput.value;
     }
-    // Rocks stamped before the rounded set take its nearest shapes.
-    const OLD_ROCKS = { slab: 'pebble', spire: 'tall' };
+    // Stamps from shapes since dropped take the nearest ones still offered.
+    const OLD_STAMPS = { slab: 'pebble', spire: 'tall', cypress: 'pine', palm: 'round', bush: 'oak' };
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     let treeShape = 'pine';
     // The panel's pickers, each button showing its tree or rock; one stamp is chosen across both.
@@ -13685,7 +13677,7 @@
     // With Depth above 0, trees are drawn from their volumes, lit from the
     // light angle: a trunk shaded across, crowns as balls with a highlight
     // toward the light, cones lighter on the light's side; Depth sets how
-    // strong the shading is. The palm, all fronds, stays flat.
+    // strong the shading is.
     const treeDepth = document.getElementById('tree-depth');
     linkSlider(treeDepth);
     treeDepth.addEventListener('input', draw);
@@ -13759,7 +13751,7 @@
         const scale = treeScale(t);
         c.scale(scale, scale);
         const depth = Math.min(100, Math.max(0, Number(treeDepth.value) || 0)) / 100;
-        if (depth && TREE_SHAPES[t.shape] && t.shape !== 'palm') {
+        if (depth && TREE_SHAPES[t.shape]) {
           drawSolidTree(c, shapeOf(t), t, depth);
           continue;
         }
@@ -14221,7 +14213,7 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
-      trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_ROCKS[t.shape] ?? t.shape }));
+      trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;

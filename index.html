@@ -13325,10 +13325,10 @@
         return p;
       };
       return {
-        boulder: { w: 34, h: 22, volume: [['ball', 0, 11, 17, 11]], parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
-        slab: { w: 44, h: 14, volume: [['ball', 0, 7, 22, 7]], parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
-        spire: { w: 22, h: 34, volume: [['cone', 34, 0, 11]], parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
-        pair: { w: 46, h: 24, volume: [['ball', -11, 9, 11, 9], ['ball', 11, 7, 11, 7]], parts: [
+        boulder: { w: 34, h: 22, parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
+        slab: { w: 44, h: 14, parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
+        spire: { w: 22, h: 34, parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
+        pair: { w: 46, h: 24, parts: [
           [poly([-23, 0], [-21, -11], [-12, -19], [-3, -17], [1, -8], [0, 0]), DARK],
           [poly([-19, -10], [-12, -17], [-5, -15], [-9, -8]), LIGHT],
           [poly([-2, 0], [1, -9], [10, -15], [20, -12], [23, 0]), DARK],
@@ -13450,16 +13450,41 @@
       return p;
     }
     // Filled as one path, so where shadows overlap they don't darken.
+    // A rock sits low and wide, so its shadow hugs it: the oval it rests
+    // on, as wide as the rock and set square to the screen, swept away from
+    // the light as far as the rock is tall.
+    function rockShadow(shadows, t, reach, dx, dy) {
+      const shape = ROCK_SHAPES[t.shape];
+      const k = treeScale(t);
+      const turn = -(canvasTilt?.turn ?? 0);
+      const rx = (shape.w * k) / 2;
+      const ry = rx / 2;
+      const length = shape.h * k * reach;
+      const steps = Math.max(2, Math.ceil(length / 2));
+      // The oval's front edge meets the rock's base: its centre sits back up the screen.
+      const cx = t.x + ry * Math.sin(turn);
+      const cy = t.y - ry * Math.cos(turn);
+      for (let i = 0; i <= steps; i++) {
+        const x = cx + (dx * length * i) / steps;
+        const y = cy + (dy * length * i) / steps;
+        shadows.moveTo(x + rx * Math.cos(turn), y + rx * Math.sin(turn));
+        shadows.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
+      }
+    }
     // shapes: the stamps whose shadows to draw, trees' or rocks'.
     function drawStampShadows(c, shapes, color) {
       const { dx, dy } = lightFall();
       const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       if (!reach) return;
-      const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
       const shadows = new Path2D();
-      for (const t of trees.filter((one) => cast[one.shape] || (shapes === TREE_SHAPES && !ROCK_SHAPES[one.shape]))) {
-        const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
-        shadows.addPath(cast[t.shape] ?? cast.pine, ground);
+      if (shapes === ROCK_SHAPES) {
+        for (const t of trees.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
+      } else {
+        const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
+        for (const t of trees.filter((one) => !ROCK_SHAPES[one.shape])) {
+          const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
+          shadows.addPath(cast[t.shape] ?? cast.pine, ground);
+        }
       }
       c.save();
       clipToImageRoom();

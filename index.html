@@ -1295,6 +1295,30 @@
     :is(#panel, #style-panel, #settings-panel).label-look #panel-close {
       margin-left: 0;
     }
+    .tree-shape-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .tree-shape-grid button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      padding: 0;
+      background: #fff;
+      border: 1px solid #e3e1dc;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .tree-shape-grid button[aria-pressed="true"] {
+      border-color: #000;
+      box-shadow: inset 0 0 0 1px #000;
+    }
+    .tree-shape-grid canvas {
+      width: 44px;
+      height: 44px;
+    }
     .label-section {
       display: flex;
       flex-direction: column;
@@ -3023,6 +3047,10 @@
       </div>
     </div>
     <div id="background-panel" hidden>
+      <div id="tree-shapes" class="label-section" hidden>
+        <div class="field">Tree Shape</div>
+        <div class="tree-shape-grid"></div>
+      </div>
       <div class="label-section background-settings">
         <label id="background-show-labels-field" class="field">
           Show Labels
@@ -3644,6 +3672,7 @@
       for (const button of backgroundToolButtons) {
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
+      document.getElementById('tree-shapes').hidden = name !== 'tree';
       shapeMenu.hidden = name !== 'shapes';
       if (!shapeMenu.hidden) {
         const modeMenu = document.getElementById('mode-menu');
@@ -10596,7 +10625,7 @@
       if (!inLabels && backgroundTool === 'tree') {
         // A click on a tree takes it away; anywhere else plants one.
         const tree = treeAt(s);
-        trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y }];
+        trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
       }
       if (!inLabels && backgroundTool === 'compass') {
@@ -13038,22 +13067,69 @@
     // A tree stands upright on screen at its point, whatever the map's turn
     // or tilt: turned back against the turn, and stretched up the tipped map
     // so the tilt shortens it back to its height. Drawn in map units, foot at 0, 0.
-    const TREE_HEIGHT = 60;
-    const TREE_WIDTH = 36;
-    function treeShape() {
-      const crown = new Path2D();
-      const w = TREE_WIDTH / 2;
-      for (const [top, bottom, half] of [[-60, -30, w * 0.62], [-48, -20, w * 0.82], [-36, -10, w]]) {
-        crown.moveTo(0, top);
-        crown.lineTo(half, bottom);
-        crown.lineTo(-half, bottom);
-        crown.closePath();
-      }
-      const trunk = new Path2D();
-      trunk.rect(-3, -12, 6, 12);
-      return { crown, trunk };
+    // Each shape is its parts, back to front, in map units with the foot
+    // at 0, 0; w and h bound it for picking.
+    const TRUNK = '#4a3a2e';
+    function treeShapes() {
+      const path = (draw) => {
+        const p = new Path2D();
+        draw(p);
+        return p;
+      };
+      const trunk = (w, h) => path((p) => p.rect(-w / 2, -h, w, h));
+      const circle = (x, y, r) => (p) => p.arc(x, y, r, 0, Math.PI * 2);
+      const ellipse = (x, y, rx, ry, turn = 0) => (p) => p.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
+      const many = (...shapes) => path((p) => shapes.forEach((shape) => { p.moveTo(0, 0); shape(p); }));
+      const tiers = path((p) => {
+        for (const [top, bottom, half] of [[-60, -30, 11], [-48, -20, 15], [-36, -10, 18]]) {
+          p.moveTo(0, top);
+          p.lineTo(half, bottom);
+          p.lineTo(-half, bottom);
+          p.closePath();
+        }
+      });
+      return {
+        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, '#2f4a3a']] },
+        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), '#4f7a3a']] },
+        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), '#3f6b35']] },
+        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), '#2c5a3c']] },
+        palm: { w: 56, h: 66, parts: [
+          [path((p) => { p.moveTo(-3, 0); p.quadraticCurveTo(-6, -30, 2, -58); p.lineTo(6, -58); p.quadraticCurveTo(0, -30, 3, 0); p.closePath(); }), '#7a6043'],
+          [many(...[-2.6, -2, -1.2, -0.4, 0.4].map((a) => ellipse(4 + Math.cos(a) * 14, -58 + Math.sin(a) * 6, 16, 4, a))), '#4c8a43'],
+        ] },
+        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), '#5a8445']] },
+      };
     }
-    const treePaths = treeShape();
+    const TREE_SHAPES = treeShapes();
+    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
+    let treeShape = 'pine';
+    // The panel's shape picker, each button showing its tree.
+    const treeShapesField = document.getElementById('tree-shapes');
+    for (const [name, shape] of Object.entries(TREE_SHAPES)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.tree = name;
+      button.setAttribute('aria-label', name[0].toUpperCase() + name.slice(1));
+      button.setAttribute('aria-pressed', String(name === treeShape));
+      const preview = document.createElement('canvas');
+      const size = 44;
+      const dpr = window.devicePixelRatio || 1;
+      preview.width = preview.height = size * dpr;
+      const c = preview.getContext('2d');
+      const k = (size - 8) / Math.max(shape.w, shape.h);
+      c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
+      for (const [part, color] of shape.parts) {
+        c.fillStyle = color;
+        c.fill(part);
+      }
+      button.append(preview);
+      button.addEventListener('click', () => {
+        button.blur();
+        treeShape = name;
+        for (const other of treeShapesField.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      });
+      treeShapesField.querySelector('.tree-shape-grid').append(button);
+    }
     // spin and foot in the same pixels; k is pixels per map unit.
     function uprightAt(foot, spin, k) {
       const stand = canvasTilt && !canvasTilt.flat ? 1 / Math.cos(canvasTilt.angle) : 1;
@@ -13070,10 +13146,10 @@
       const depth = (t) => spin.transformPoint(base.transformPoint(new DOMPoint(t.x, t.y))).y;
       for (const t of [...trees].sort((a, b) => depth(a) - depth(b))) {
         c.setTransform(uprightAt(base.transformPoint(new DOMPoint(t.x, t.y)), spin, view.scale * dpr));
-        c.fillStyle = '#4a3a2e';
-        c.fill(treePaths.trunk);
-        c.fillStyle = '#2f4a3a';
-        c.fill(treePaths.crown);
+        for (const [part, color] of shapeOf(t).parts) {
+          c.fillStyle = color;
+          c.fill(part);
+        }
       }
       c.setTransform(base);
     }
@@ -13089,8 +13165,7 @@
       const shadows = new Path2D();
       for (const t of trees) {
         const ground = new DOMMatrix([ux, uy, -dx * stretch, -dy * stretch, t.x, t.y]);
-        shadows.addPath(treePaths.crown, ground);
-        shadows.addPath(treePaths.trunk, ground);
+        for (const [part] of shapeOf(t).parts) shadows.addPath(part, ground);
       }
       c.save();
       clipToImageRoom();
@@ -13104,7 +13179,8 @@
       return [...trees].reverse().find((t) => {
         const foot = toScreen(t);
         const q = uprightAt(new DOMPoint(foot.x, foot.y), spin, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
-        return Math.abs(q.x) <= TREE_WIDTH / 2 && q.y <= 0 && q.y >= -TREE_HEIGHT;
+        const { w, h } = shapeOf(t);
+        return Math.abs(q.x) <= w / 2 && q.y <= 0 && q.y >= -h;
       });
     }
     let canvasTilt = null;
@@ -13306,7 +13382,7 @@
       file.background = backgroundImage && await imageData(backgroundImage);
       file.buildings = buildingsImage && await imageData(buildingsImage);
       file.buildingLifts = buildingParts.map((part) => part.lift);
-      file.trees = trees.map(({ x, y }) => ({ x, y }));
+      file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }

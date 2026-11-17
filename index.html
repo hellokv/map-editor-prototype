@@ -57,6 +57,21 @@
     #building-lift-pop output {
       min-width: 64px;
     }
+    :is(#panel, #style-panel, #settings-panel) #buildings-rotation-reset {
+      display: flex;
+      flex: none;
+      margin-left: 6px;
+      padding: 0;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    #buildings-rotation-reset[hidden] {
+      display: none;
+    }
+    #buildings-rotation-reset .material-symbols-rounded {
+      font-size: 18px;
+    }
     #building-lift-pop button {
       display: flex;
       padding: 0;
@@ -3189,13 +3204,11 @@
           Building Color
           <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
         </label>
-        <label id="buildings-rotate-field" class="field" hidden>
-          Building Rotation
-          <input id="buildings-rotate" class="switch" type="checkbox">
-        </label>
         <label id="buildings-rotation-field" class="field" hidden>
-          Rotation
+          Building Rotation
           <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
+          <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
+          <input id="buildings-rotate" type="checkbox" hidden>
         </label>
         <label id="buildings-side-field" class="field" hidden>
           Building Sides
@@ -12704,16 +12717,39 @@
     }
     const buildingsRotate = document.getElementById('buildings-rotate');
     const buildingsRotationInput = document.getElementById('buildings-rotation');
+    // Building Rotation follows the map's until it's moved; buildings-rotate
+    // records that it was, and the reset button goes back to following.
+    const buildingsRotationReset = document.getElementById('buildings-rotation-reset');
     function showBuildingRotation() {
-      document.getElementById('buildings-rotate-field').hidden = !buildingsImage;
-      document.getElementById('buildings-rotation-field').hidden = !buildingsImage || !buildingsRotate.checked;
+      document.getElementById('buildings-rotation-field').hidden = !buildingsImage;
+      buildingsRotationReset.hidden = !buildingsRotate.checked;
+      if (!buildingsRotate.checked) {
+        buildingsRotationInput.value = Number(mapRotationInput.value) || 0;
+        buildingsRotationInput.closest('.slider').querySelector('input[type="range"]').value = buildingsRotationInput.value;
+      }
     }
     buildingsRotate.addEventListener('change', () => {
       showBuildingRotation();
       draw();
     });
+    mapRotationInput.addEventListener('input', showBuildingRotation);
     linkSlider(buildingsRotationInput);
-    buildingsRotationInput.addEventListener('input', draw);
+    for (const input of [buildingsRotationInput, buildingsRotationInput.closest('.slider').querySelector('input[type="range"]')]) {
+      input.addEventListener('input', (e) => {
+        if (e.isTrusted && !buildingsRotate.checked) {
+          buildingsRotate.checked = true;
+          showBuildingRotation();
+        }
+        draw();
+      });
+    }
+    buildingsRotationReset.addEventListener('click', (e) => {
+      e.preventDefault();
+      buildingsRotationReset.blur();
+      buildingsRotate.checked = false;
+      showBuildingRotation();
+      draw();
+    });
     // The turn buildings are seen from, which sets the way they lean: the
     // map's, unless Building Rotation overrides it.
     function leanSpin() {

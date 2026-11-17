@@ -3110,6 +3110,14 @@
           Color Variation
           <span class="slider"><span class="percent-field"><input id="rock-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock color variation"></span>
         </label>
+        <label class="field">
+          Rock Shadows
+          <input id="rock-shadows" class="switch" type="checkbox">
+        </label>
+        <label id="rock-shadow-color-field" class="field" hidden>
+          Rock Shadow Color
+          <span class="color-field"><input id="rock-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Rock shadow opacity">%</span>
+        </label>
       </div>
       <div class="label-section background-settings">
         <label id="background-show-labels-field" class="field">
@@ -7341,7 +7349,8 @@
         ctx.drawImage(backgroundImage, x, y, w, h);
         ctx.restore();
       }
-      if (trees.length && treeShadowsOn.checked && !noBackground) drawTreeShadows(ctx);
+      if (trees.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, TREE_SHAPES, treeShadowColor);
+      if (trees.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor);
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (trees.length && !noBackground) drawTrees(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
@@ -12743,16 +12752,20 @@
       const buildings = !!buildingsImage;
       const buildingShadows = buildings && buildingShadowsOn.checked;
       shown('buildings-shadows-field', buildings);
-      shown('shadow-length-field', buildingShadows || treeShadowsOn.checked);
+      const stampShadows = treeShadowsOn.checked || rockShadowsOn.checked;
+      shown('shadow-length-field', buildingShadows || stampShadows);
       shown('tree-shadow-color-field', treeShadowsOn.checked);
+      shown('rock-shadow-color-field', rockShadowsOn.checked);
       shown('buildings-light-field', buildings);
       shown('light-color-field', buildings && buildingLightOn.checked);
-      shown('light-angle-field', buildingShadows || (buildings && buildingLightOn.checked) || treeShadowsOn.checked);
+      shown('light-angle-field', buildingShadows || (buildings && buildingLightOn.checked) || stampShadows);
     }
     const treeShadowsOn = document.getElementById('tree-shadows');
     const treeShadowColor = document.getElementById('tree-shadow-color');
-    treeShadowColor.addEventListener('input', draw);
-    for (const input of [buildingShadowsOn, buildingLightOn, treeShadowsOn]) {
+    const rockShadowsOn = document.getElementById('rock-shadows');
+    const rockShadowColor = document.getElementById('rock-shadow-color');
+    for (const input of [treeShadowColor, rockShadowColor]) input.addEventListener('input', draw);
+    for (const input of [buildingShadowsOn, buildingLightOn, treeShadowsOn, rockShadowsOn]) {
       input.addEventListener('change', () => {
         showShadowFields();
         draw();
@@ -13276,10 +13289,10 @@
         return p;
       };
       return {
-        boulder: { w: 34, h: 22, parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
-        slab: { w: 44, h: 14, parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
-        spire: { w: 22, h: 34, parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
-        pair: { w: 46, h: 24, parts: [
+        boulder: { w: 34, h: 22, volume: [['ball', 0, 11, 17, 11]], parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
+        slab: { w: 44, h: 14, volume: [['ball', 0, 7, 22, 7]], parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
+        spire: { w: 22, h: 34, volume: [['cone', 34, 0, 11]], parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
+        pair: { w: 46, h: 24, volume: [['ball', -11, 9, 11, 9], ['ball', 11, 7, 11, 7]], parts: [
           [poly([-23, 0], [-21, -11], [-12, -19], [-3, -17], [1, -8], [0, 0]), DARK],
           [poly([-19, -10], [-12, -17], [-5, -15], [-9, -8]), LIGHT],
           [poly([-2, 0], [1, -9], [10, -15], [20, -12], [23, 0]), DARK],
@@ -13401,19 +13414,20 @@
       return p;
     }
     // Filled as one path, so where shadows overlap they don't darken.
-    function drawTreeShadows(c) {
+    // shapes: the stamps whose shadows to draw, trees' or rocks'.
+    function drawStampShadows(c, shapes, color) {
       const { dx, dy } = lightFall();
       const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       if (!reach) return;
-      const cast = Object.fromEntries(Object.entries(TREE_SHAPES).map(([name, shape]) => [name, treeShadow(shape, reach)]));
+      const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
       const shadows = new Path2D();
-      for (const t of trees.filter((one) => !ROCK_SHAPES[one.shape])) {
+      for (const t of trees.filter((one) => cast[one.shape] || (shapes === TREE_SHAPES && !ROCK_SHAPES[one.shape]))) {
         const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
         shadows.addPath(cast[t.shape] ?? cast.pine, ground);
       }
       c.save();
       clipToImageRoom();
-      c.fillStyle = colorOf(treeShadowColor);
+      c.fillStyle = colorOf(color);
       c.fill(shadows);
       c.restore();
     }
@@ -13554,7 +13568,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

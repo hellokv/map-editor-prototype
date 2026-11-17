@@ -13084,9 +13084,10 @@
     // or tilt: turned back against the turn, and stretched up the tipped map
     // so the tilt shortens it back to its height. Drawn in map units, foot at 0, 0.
     // Each shape is its parts, back to front, in map units with the foot
-    // at 0, 0; w and h bound it for picking. Shapes are mirror-symmetric, as
-    // a tree's shadow takes its outline across the light's path whichever
-    // way the light comes from.
+    // at 0, 0; w and h bound it for picking. Its volume is the solid that
+    // casts its shadow: a trunk [width, height], cones [apex, base height,
+    // base radius] and ellipsoids [offset, centre height, radius, half height],
+    // each offset taken across the light so the shadow looks alike from all sides.
     const TRUNK = '#4a3a2e';
     const LEAF = 'leaf';
     function treeShapes() {
@@ -13108,15 +13109,20 @@
         }
       });
       return {
-        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, LEAF]] },
-        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), LEAF]] },
-        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]] },
-        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]] },
-        palm: { w: 56, h: 66, parts: [
+        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, LEAF]],
+          volume: [['trunk', 6, 12], ['cone', 60, 30, 11], ['cone', 48, 20, 15], ['cone', 36, 10, 18]] },
+        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), LEAF]],
+          volume: [['trunk', 6, 22], ['ball', 0, 38, 19, 19]] },
+        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]],
+          volume: [['trunk', 8, 20], ['ball', -12, 30, 14, 14], ['ball', 12, 30, 14, 14], ['ball', 0, 42, 15, 15], ['ball', 0, 26, 13, 13]] },
+        cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]],
+          volume: [['trunk', 5, 8], ['ball', 0, 38, 10, 32]] },
+        palm: { w: 56, h: 66, volume: [['trunk', 5, 58], ['ball', 0, 60, 26, 5]], parts: [
           [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), '#7a6043'],
           [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), LEAF],
         ] },
-        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]] },
+        bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]],
+          volume: [['ball', -11, 10, 10, 10], ['ball', 11, 10, 10, 10], ['ball', 0, 15, 11, 11]] },
       };
     }
     const TREE_SHAPES = treeShapes();
@@ -13213,19 +13219,49 @@
       }
       c.setTransform(base);
     }
-    // Each tree's outline laid on the map from its foot, away from the light
-    // and as long as the tree is tall times the shadow length; filled as one
-    // path so overlaps don't darken.
+    // A tree's shadow on the map, from its volume, under a sun as high as
+    // the shadow length puts it: at 100%, 45°, as long as the tree is tall.
+    // Drawn along the light (x) and across it (y), foot at 0, 0.
+    function treeShadow(shape, reach) {
+      const p = new Path2D();
+      for (const [kind, ...v] of shape.volume) {
+        if (kind === 'trunk') {
+          const [w, h] = v;
+          p.rect(0, -w / 2, h * reach, w);
+        } else if (kind === 'ball') {
+          const [across, z, r, half] = v;
+          p.moveTo(z * reach + Math.hypot(r, half * reach), across);
+          p.ellipse(z * reach, across, Math.hypot(r, half * reach), r, 0, 0, Math.PI * 2);
+        } else {
+          const [apex, base, r] = v;
+          const centre = base * reach;
+          const tip = apex * reach;
+          const d = tip - centre;
+          p.moveTo(centre + r, 0);
+          if (d <= r) {
+            p.arc(centre, 0, r, 0, Math.PI * 2);
+            continue;
+          }
+          // The base's shadow joined to the tip's by the lines that touch it.
+          const t = Math.acos(r / d);
+          p.moveTo(tip, 0);
+          p.lineTo(centre + r * Math.cos(t), r * Math.sin(t));
+          p.arc(centre, 0, r, t, 2 * Math.PI - t);
+          p.closePath();
+        }
+      }
+      return p;
+    }
+    // Filled as one path, so where shadows overlap they don't darken.
     function drawTreeShadows(c) {
       const { dx, dy } = lightFall();
-      const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
-      // Across the light's path, so the shadow is the same from every side.
-      const ux = -dy;
-      const uy = dx;
+      const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
+      if (!reach) return;
+      const cast = Object.fromEntries(Object.entries(TREE_SHAPES).map(([name, shape]) => [name, treeShadow(shape, reach)]));
       const shadows = new Path2D();
       for (const t of trees) {
-        const ground = new DOMMatrix([ux, uy, -dx * stretch, -dy * stretch, t.x, t.y]).scale(treeScale(t));
-        for (const [part] of shapeOf(t).parts) shadows.addPath(part, ground);
+        const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
+        shadows.addPath(cast[t.shape] ?? cast.pine, ground);
       }
       c.save();
       clipToImageRoom();

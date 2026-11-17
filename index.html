@@ -3098,7 +3098,14 @@
     </div>
     <div id="background-panel" hidden>
       <div id="tree-shapes" class="label-section" hidden>
-        <div class="field">Trees</div>
+        <div class="field">
+          Trees
+          <div id="tree-style-buttons" class="toggle-group">
+            <button type="button" data-style="2d" aria-pressed="true">2D</button>
+            <button type="button" data-style="3d" aria-pressed="false">3D</button>
+          </div>
+          <input id="tree-style" type="text" value="2d" hidden>
+        </div>
         <div class="tree-shape-grid"></div>
         <label class="field">
           Tree Size
@@ -13655,6 +13662,73 @@
       const at = spin.transformPoint(foot);
       return spin.inverse().translate(at.x, at.y).scale(k, k * stand);
     }
+    // 3D trees are drawn from their volumes, lit from the light angle: a
+    // trunk shaded across, crowns as balls with a highlight toward the light,
+    // cones lighter on the light's side. The palm, all fronds, stays flat.
+    const treeStyle = document.getElementById('tree-style');
+    const treeStyleButtons = document.querySelectorAll('#tree-style-buttons button');
+    treeStyle.addEventListener('change', () => {
+      for (const button of treeStyleButtons) button.setAttribute('aria-pressed', String(button.dataset.style === treeStyle.value));
+      draw();
+    });
+    for (const button of treeStyleButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        treeStyle.value = button.dataset.style;
+        treeStyle.dispatchEvent(new Event('change'));
+      });
+    }
+    const colorProbe = document.createElement('canvas').getContext('2d');
+    // A colour moved toward white (amount > 0) or black (amount < 0).
+    function tint(color, amount) {
+      colorProbe.fillStyle = '#000';
+      colorProbe.fillStyle = color;
+      const hex = colorProbe.fillStyle;
+      const target = amount > 0 ? 255 : 0;
+      const a = Math.abs(amount);
+      return `rgb(${[1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - a) + target * a)).join(', ')})`;
+    }
+    function drawSolidTree(c, shape, t) {
+      const light = ((Number(lightAngleInput.value) || 0) * Math.PI) / 180;
+      // Where the light comes from on screen, as a unit step.
+      const lx = Math.sin(light);
+      const ly = -Math.cos(light);
+      const leaf = treeLeaf(t);
+      const trunk = treeTrunkInput.value;
+      for (const [kind, ...v] of shape.volume) {
+        if (kind === 'trunk') {
+          const [w, h] = v;
+          const g = c.createLinearGradient(-w / 2, 0, w / 2, 0);
+          g.addColorStop(0, tint(trunk, lx < 0 ? 0.25 : -0.35));
+          g.addColorStop(1, tint(trunk, lx < 0 ? -0.35 : 0.25));
+          c.fillStyle = g;
+          c.fillRect(-w / 2, -h, w, h);
+        } else if (kind === 'ball') {
+          const [across, z, r, half] = v;
+          const g = c.createRadialGradient(across + lx * r * 0.4, -z + ly * half * 0.4, 0, across, -z, Math.max(r, half) * 1.1);
+          g.addColorStop(0, tint(leaf, 0.3));
+          g.addColorStop(0.55, leaf);
+          g.addColorStop(1, tint(leaf, -0.4));
+          c.fillStyle = g;
+          c.beginPath();
+          c.ellipse(across, -z, r, half, 0, 0, Math.PI * 2);
+          c.fill();
+        } else {
+          const [apex, base, r] = v;
+          const g = c.createLinearGradient(-r, 0, r, 0);
+          g.addColorStop(0, tint(leaf, lx < 0 ? 0.25 : -0.35));
+          g.addColorStop(0.5, leaf);
+          g.addColorStop(1, tint(leaf, lx < 0 ? -0.35 : 0.25));
+          c.fillStyle = g;
+          c.beginPath();
+          c.moveTo(0, -apex);
+          c.lineTo(r, -base);
+          c.ellipse(0, -base, r, r * 0.3, 0, 0, Math.PI);
+          c.closePath();
+          c.fill();
+        }
+      }
+    }
     function drawTrees(c) {
       const base = c.getTransform();
       const dpr = window.devicePixelRatio || 1;
@@ -13667,6 +13741,10 @@
         c.setTransform(uprightAt(base.transformPoint(new DOMPoint(t.x, t.y)), spin, view.scale * dpr));
         const scale = treeScale(t);
         c.scale(scale, scale);
+        if (treeStyle.value === '3d' && TREE_SHAPES[t.shape] && t.shape !== 'palm') {
+          drawSolidTree(c, shapeOf(t), t);
+          continue;
+        }
         for (const [part, color] of shapeOf(t).parts) {
           c.fillStyle = partColor(color, t);
           c.fill(part);
@@ -13906,7 +13984,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-style', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

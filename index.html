@@ -10824,12 +10824,14 @@
         return;
       }
       if (!inLabels && backgroundTool === 'tree') {
-        // A click in a filled area selects it; on a tree takes it away; anywhere else plants one.
+        // A click in a filled area selects it and a click off one lets it go; otherwise,
+        // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
         const area = fillAreaAt(p);
+        const hadArea = selectedArea;
         selectedArea = area;
-        stampChoice = new Set(area ? area.shapes : [treeShape]);
+        stampChoice = area ? new Set(area.shapes) : soloStamp();
         showStampChoice();
-        if (area) return;
+        if (area || hadArea || !treeShape) return draw();
         const tree = treeAt(s);
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
@@ -13705,8 +13707,10 @@
     // Stamps from shapes since dropped take the nearest ones still offered.
     const OLD_STAMPS = { slab: 'pebble', spire: 'tall', cypress: 'pine', palm: 'round', bush: 'oak' };
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
-    let treeShape = 'pine';
-    let stampChoice = new Set([treeShape]);
+    // Null when no stamp is chosen: clicks then only select fill areas.
+    let treeShape = null;
+    let stampChoice = new Set();
+    const soloStamp = () => new Set(treeShape ? [treeShape] : []);
     function showStampChoice() {
       for (const button of stampButtons) button.setAttribute('aria-pressed', String(stampChoice.has(button.dataset.tree)));
     }
@@ -13738,13 +13742,15 @@
       button.append(preview);
       button.addEventListener('click', () => {
         button.blur();
-        treeShape = name;
         // Filling an area, or with one selected, stamps toggle so it can mix several;
-        // otherwise one is chosen at a time.
+        // otherwise one is chosen at a time, and clicking it again lets it go.
         if (fillingArea || selectedArea) {
-          if (stampChoice.has(name) && stampChoice.size > 1) stampChoice.delete(name);
+          if (stampChoice.has(name)) stampChoice.delete(name);
           else stampChoice.add(name);
-        } else stampChoice = new Set([name]);
+        } else {
+          treeShape = treeShape === name ? null : name;
+          stampChoice = soloStamp();
+        }
         showStampChoice();
         if (selectedArea) {
           selectedArea.shapes = [...stampChoice];
@@ -13989,7 +13995,7 @@
       fillingArea = on;
       fillDraft = [];
       if (!on && !selectedArea) {
-        stampChoice = new Set([treeShape]);
+        stampChoice = soloStamp();
         showStampChoice();
       }
       fillButton.setAttribute('aria-pressed', String(on));
@@ -14022,6 +14028,7 @@
     }
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
+      if (!area.shapes.length) return [];
       const key = JSON.stringify([area.points, area.density, area.shapes, area.seed]);
       if (area.stampsKey === key) return area.stamps;
       let state = area.seed;
@@ -14090,7 +14097,7 @@
     });
     function deselectArea() {
       selectedArea = null;
-      if (!fillingArea) stampChoice = new Set([treeShape]);
+      if (!fillingArea) stampChoice = soloStamp();
       showStampChoice();
       draw();
     }

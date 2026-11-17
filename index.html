@@ -2180,9 +2180,6 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
-        <button type="button" data-background-tool="plants" data-shortcut="T" aria-label="Select plants" aria-pressed="false" hidden>
-          <span class="material-symbols-rounded">park</span>
-        </button>
 
       </div>
       <div id="path-tools">
@@ -3641,7 +3638,6 @@
       for (const button of backgroundToolButtons) {
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
-      document.getElementById('plants-pick').setAttribute('aria-pressed', String(name === 'plants'));
       shapeMenu.hidden = name !== 'shapes';
       if (!shapeMenu.hidden) {
         const modeMenu = document.getElementById('mode-menu');
@@ -3652,10 +3648,7 @@
       updateCursor();
     }
     for (const button of backgroundToolButtons) {
-      button.addEventListener('click', () => {
-        setBackgroundTool(button.dataset.backgroundTool);
-        draw();
-      });
+      button.addEventListener('click', () => setBackgroundTool(button.dataset.backgroundTool));
     }
     for (const button of shapeButtons) {
       button.addEventListener('click', () => {
@@ -4978,7 +4971,7 @@
     let backgroundSvg = null;
     let plants = [];
     let backgroundShown = null;
-    const pickingPlants = () => backgroundTool === 'plants';
+    let pickingPlants = false;
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -13014,7 +13007,7 @@
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || pickingPlants()) return;
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || pickingPlants) return;
       const part = buildingAt(canvasPoint(e));
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
@@ -13067,24 +13060,22 @@
       }
       showPlantPick();
     }
-    // Picking plants is a background tool (T), also reached from the panel.
-    const plantTool = document.querySelector('[data-background-tool="plants"]');
     function showPlantPick() {
       plantPick.hidden = !backgroundSvg;
-      plantTool.hidden = !backgroundSvg;
-      if (!backgroundSvg && pickingPlants()) setBackgroundTool('select');
+      if (!backgroundSvg) setPickingPlants(false);
       showShadowFields();
+    }
+    function setPickingPlants(on) {
+      pickingPlants = on;
+      plantPick.setAttribute('aria-pressed', String(on));
+      draw();
     }
     plantPick.addEventListener('click', () => {
       plantPick.blur();
-      setBackgroundTool(pickingPlants() ? 'select' : 'plants');
-      draw();
+      setPickingPlants(!pickingPlants);
     });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && pickingPlants()) {
-        setBackgroundTool('select');
-        draw();
-      }
+      if (e.key === 'Escape' && pickingPlants) setPickingPlants(false);
     });
     // A lone shape drawn into a canvas cropped to what it covers, in the
     // background image's pixels times k.
@@ -13170,7 +13161,7 @@
       const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
       c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(plantMatrix(plant)));
       c.drawImage(plant.canvas, 0, 0);
-      if (pickingPlants()) {
+      if (pickingPlants) {
         const m = c.getTransform();
         c.setTransform(1, 0, 0, 1, 0, 0);
         const corners = [[0, 0], [plant.cw, 0], [plant.cw, plant.ch], [0, plant.ch]].map(([x, y]) => m.transformPoint(new DOMPoint(x, y)));
@@ -13217,7 +13208,7 @@
       return -1;
     }
     canvas.addEventListener('pointerdown', (e) => {
-      if (!pickingPlants() || e.button !== 0 || spaceHeld || backgroundTools.hidden || !backgroundSvg) return;
+      if (!pickingPlants || e.button !== 0 || spaceHeld || backgroundTools.hidden || !backgroundSvg) return;
       e.stopImmediatePropagation();
       e.preventDefault();
       const s = canvasPoint(e);

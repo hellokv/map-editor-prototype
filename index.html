@@ -15358,11 +15358,11 @@
     }
     new ResizeObserver(resize).observe(canvas);
     setMode('background');
-    // The editor opens on Demo Buildings. The demo is kept as it's left, so
-    // its background must be in first.
+    // The editor opens on Bronx Zoo Buildings. The demo is kept as it's left,
+    // so its background must be in first.
     (async () => {
       await startImageLoaded;
-      mapExample.value = 'demo-buildings';
+      mapExample.value = 'bronx-zoo-buildings';
       mapExample.dispatchEvent(new Event('change'));
     })();
   </script>

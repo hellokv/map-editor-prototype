@@ -14047,12 +14047,12 @@
     }
     const allStamps = () => [...trees, ...fillAreas.flatMap(areaStamps)];
     const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
-    // Outlines show only in the Landscape tool; the selected one in blue with handles to drag its corners.
+    // Outlines show only in the Landscape tool; the selected one bolder, with handles to drag its corners.
     function drawFillAreas(c) {
       c.save();
       for (const area of fillAreas) {
         const selected = area === selectedArea;
-        c.strokeStyle = selected ? '#2f80ed' : 'rgba(0, 0, 0, 0.45)';
+        c.strokeStyle = treeColorInput.value;
         c.lineWidth = (selected ? 2 : 1.5) / view.scale;
         c.setLineDash([6 / view.scale, 4 / view.scale]);
         c.stroke(areaPath(area));
@@ -14138,12 +14138,12 @@
       c.save();
       c.beginPath();
       fillDraft.forEach(({ x, y }, i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-      c.strokeStyle = '#2f80ed';
+      c.strokeStyle = treeColorInput.value;
       c.lineWidth = 2 / view.scale;
       c.setLineDash([6 / view.scale, 4 / view.scale]);
       c.stroke();
       c.setLineDash([]);
-      c.fillStyle = '#2f80ed';
+      c.fillStyle = treeColorInput.value;
       for (const { x, y } of fillDraft) {
         c.beginPath();
         c.arc(x, y, 4 / view.scale, 0, Math.PI * 2);

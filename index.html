@@ -3195,7 +3195,7 @@
           Density
           <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
         </label>
-        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Click an area later to change it.</p>
+        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.</p>
         <label class="field">
           Tree Size
           <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
@@ -10827,6 +10827,8 @@
         // A click in a filled area selects it; on a tree takes it away; anywhere else plants one.
         const area = fillAreaAt(p);
         selectedArea = area;
+        stampChoice = new Set(area ? area.shapes : [treeShape]);
+        showStampChoice();
         if (area) return;
         const tree = treeAt(s);
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
@@ -13614,6 +13616,8 @@
           volume: [['trunk', 6, 22], ['ball', 0, 38, 19, 19]] },
         oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]],
           volume: [['trunk', 8, 20], ['ball', -12, 30, 14, 14], ['ball', 12, 30, 14, 14], ['ball', 0, 42, 15, 15], ['ball', 0, 26, 13, 13]] },
+        cone: { w: 30, h: 62, parts: [[trunk(6, 12), TRUNK], [path((p) => { p.moveTo(0, -62); p.lineTo(15, -10); p.lineTo(-15, -10); p.closePath(); }), LEAF]],
+          volume: [['trunk', 6, 12], ['cone', 62, 10, 15]] },
       };
     }
     const TREE_SHAPES = treeShapes();
@@ -13702,6 +13706,10 @@
     const OLD_STAMPS = { slab: 'pebble', spire: 'tall', cypress: 'pine', palm: 'round', bush: 'oak' };
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     let treeShape = 'pine';
+    let stampChoice = new Set([treeShape]);
+    function showStampChoice() {
+      for (const button of stampButtons) button.setAttribute('aria-pressed', String(stampChoice.has(button.dataset.tree)));
+    }
     // The panel's pickers, each button showing its tree or rock; one stamp is chosen across both.
     const stampButtons = [];
     for (const [name, shape] of [...Object.entries(TREE_SHAPES), ...Object.entries(ROCK_SHAPES)]) {
@@ -13731,17 +13739,21 @@
       button.addEventListener('click', () => {
         button.blur();
         treeShape = name;
-        for (const other of stampButtons) other.setAttribute('aria-pressed', String(other === button));
-        // With an area selected, the choice changes what fills it.
+        // Filling an area, or with one selected, stamps toggle so it can mix several;
+        // otherwise one is chosen at a time.
+        if (fillingArea || selectedArea) {
+          if (stampChoice.has(name) && stampChoice.size > 1) stampChoice.delete(name);
+          else stampChoice.add(name);
+        } else stampChoice = new Set([name]);
+        showStampChoice();
         if (selectedArea) {
-          selectedArea.shape = name;
+          selectedArea.shapes = [...stampChoice];
           draw();
         }
       });
       stampButtons.push(button);
       grid.append(button);
     }
-    // spin and foot in the same pixels; k is pixels per map unit.
     // Where a canvas point shows in the window, under the turn and tilt.
     function tiltForward(p) {
       if (!canvasTilt) return { x: p.x, y: p.y };
@@ -13976,6 +13988,10 @@
     function setFilling(on) {
       fillingArea = on;
       fillDraft = [];
+      if (!on && !selectedArea) {
+        stampChoice = new Set([treeShape]);
+        showStampChoice();
+      }
       fillButton.setAttribute('aria-pressed', String(on));
       document.getElementById('landscape-fill-spacing-field').hidden = !on;
       document.getElementById('landscape-fill-hint').hidden = !on;
@@ -13991,11 +14007,10 @@
       if (e.key === 'Enter' && fillDraft.length >= 3) fillArea();
     });
     function fillArea() {
-      const area = { points: fillDraft, shape: treeShape, density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
+      const area = { points: fillDraft, shapes: [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
       fillAreas = [...fillAreas, area];
-      setFilling(false);
       selectedArea = area;
-      draw();
+      setFilling(false);
     }
     // Density 1–100 sets the gap between stamps: about 145 map units at 1, 15 at 100.
     const areaGap = (density) => 160 / (1 + Math.min(100, Math.max(1, density)) / 10);
@@ -14007,7 +14022,7 @@
     }
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
-      const key = JSON.stringify([area.points, area.density, area.shape, area.seed]);
+      const key = JSON.stringify([area.points, area.density, area.shapes, area.seed]);
       if (area.stampsKey === key) return area.stamps;
       let state = area.seed;
       const random = () => {
@@ -14023,7 +14038,7 @@
       const stamps = [];
       for (let y = Math.min(...ys); y <= Math.max(...ys); y += gap) {
         for (let x = Math.min(...xs); x <= Math.max(...xs); x += gap) {
-          const at = { x: x + (random() - 0.5) * 0.8 * gap, y: y + (random() - 0.5) * 0.8 * gap, shape: area.shape };
+          const at = { x: x + (random() - 0.5) * 0.8 * gap, y: y + (random() - 0.5) * 0.8 * gap, shape: area.shapes[Math.floor(random() * area.shapes.length)] };
           if (areaProbe.isPointInPath(outline, at.x, at.y)) stamps.push(at);
         }
       }
@@ -14073,10 +14088,15 @@
       selectedArea.density = Number(areaPopSlider.value);
       draw();
     });
+    function deselectArea() {
+      selectedArea = null;
+      if (!fillingArea) stampChoice = new Set([treeShape]);
+      showStampChoice();
+      draw();
+    }
     function deleteArea() {
       fillAreas = fillAreas.filter((area) => area !== selectedArea);
-      selectedArea = null;
-      draw();
+      deselectArea();
     }
     document.getElementById('area-delete').addEventListener('click', deleteArea);
     // A new seed lays the area's stamps out afresh.
@@ -14087,10 +14107,7 @@
     });
     window.addEventListener('keydown', (e) => {
       if (!selectedArea || e.target.closest('input, textarea, select')) return;
-      if (e.key === 'Escape') {
-        selectedArea = null;
-        draw();
-      }
+      if (e.key === 'Escape') deselectArea();
       if (e.key === 'Delete' || e.key === 'Backspace') deleteArea();
     });
     // Dragging a corner handle of the selected area reshapes it.
@@ -14346,7 +14363,7 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
-      file.fillAreas = fillAreas.map(({ points, shape, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shape, density, seed }));
+      file.fillAreas = fillAreas.map(({ points, shapes, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -14418,7 +14435,7 @@
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
       trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
-      fillAreas = (file.fillAreas ?? []).map((area) => ({ ...area, shape: OLD_STAMPS[area.shape] ?? area.shape }));
+      fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.map((name) => OLD_STAMPS[name] ?? name) }));
       selectedArea = null;
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;

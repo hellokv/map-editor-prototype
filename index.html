@@ -12558,7 +12558,7 @@
     linkSlider(mapRotationInput);
     mapRotationInput.addEventListener('input', draw);
     // Perspective and Isometric tilt the whole map; Buildings Only leaves
-    // the map flat and leans just the buildings, by the same tilt.
+    // the map flat and leans just the buildings, isometrically, by the tilt.
     const mapView = document.getElementById('map-view');
     const projectionButtons = document.querySelectorAll('#map-projection button');
     mapView.addEventListener('change', () => {
@@ -13004,7 +13004,7 @@
       const oy = Math.max(...ys);
       // The camera stands back twice the box's height on screen; isometric
       // has it infinitely far away.
-      const d = mapView.value === 'isometric' ? Infinity : Math.max(400, 2 * (oy - Math.min(...ys)));
+      const d = mapView.value === 'perspective' ? Math.max(400, 2 * (oy - Math.min(...ys))) : Infinity;
       // flat: the map itself isn't tipped, and angle is only for the buildings' lean.
       const flat = mapView.value === 'buildings';
       canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat };

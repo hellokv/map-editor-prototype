@@ -1296,7 +1296,7 @@
       margin-left: 0;
     }
     /* The Tree tool's panel is its options alone. */
-    #background-panel.tree-mode > :not(#tree-shapes) {
+    #background-panel.tree-mode > :not(#tree-shapes, #rock-shapes) {
       display: none !important;
     }
     .tree-shape-grid {
@@ -2208,7 +2208,7 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
-        <button type="button" data-background-tool="tree" data-shortcut="T" aria-label="Tree" aria-pressed="false">
+        <button type="button" data-background-tool="tree" data-shortcut="T" aria-label="Landscape" aria-pressed="false">
           <span class="material-symbols-rounded">nature</span>
         </button>
 
@@ -3052,7 +3052,7 @@
     </div>
     <div id="background-panel" hidden>
       <div id="tree-shapes" class="label-section" hidden>
-        <div class="field">Tree Shape</div>
+        <div class="field">Trees</div>
         <div class="tree-shape-grid"></div>
         <label class="field">
           Tree Size
@@ -3083,6 +3083,32 @@
         <label id="tree-shadow-color-field" class="field" hidden>
           Tree Shadow Color
           <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
+        </label>
+      </div>
+      <div id="rock-shapes" class="label-section" hidden>
+        <div class="field">Rocks</div>
+        <div class="tree-shape-grid"></div>
+        <label class="field">
+          Rock Size
+          <span class="slider"><span class="percent-field"><input id="rock-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Rock size"></span>
+        </label>
+        <label class="field">
+          Size Variation
+          <span class="slider"><span class="percent-field"><input id="rock-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock size variation"></span>
+        </label>
+        <div class="field-pair">
+          <label class="field">
+            Light
+            <span class="color-field"><input id="rock-light-color" type="color" value="#b9b4aa"></span>
+          </label>
+          <label class="field">
+            Dark
+            <span class="color-field"><input id="rock-dark-color" type="color" value="#7d776d"></span>
+          </label>
+        </div>
+        <label class="field">
+          Color Variation
+          <span class="slider"><span class="percent-field"><input id="rock-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock color variation"></span>
         </label>
       </div>
       <div class="label-section background-settings">
@@ -3703,6 +3729,7 @@
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
+      document.getElementById('rock-shapes').hidden = name !== 'tree';
       document.getElementById('background-panel').classList.toggle('tree-mode', name === 'tree');
       shapeMenu.hidden = name !== 'shapes';
       if (!shapeMenu.hidden) {
@@ -13206,7 +13233,7 @@
       input.addEventListener('input', draw);
     }
     const treeTrunkInput = document.getElementById('tree-trunk-color');
-    for (const input of [treeColorInput, treeTrunkInput]) {
+    for (const input of [treeColorInput, treeTrunkInput, document.getElementById('rock-light-color'), document.getElementById('rock-dark-color')]) {
       input.addEventListener('input', () => {
         for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
         draw();
@@ -13218,12 +13245,16 @@
       return (v - Math.floor(v)) * 2 - 1;
     }
     // Size: the base times up to 2× either way at full variation.
-    const treeScale = (t) => ((Number(treeSizeInput.value) || 100) / 100) * 2 ** (treeRandom(t, 1) * (Number(treeSizeVariation.value) || 0) / 100);
-    // Leaf colour: the base, its hue moved up to 30° and lightness 15% either way at full variation.
-    function treeLeaf(t) {
-      const spread = (Number(treeColorVariation.value) || 0) / 100;
-      if (!spread) return treeColorInput.value;
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(treeColorInput.value.slice(i, i + 2), 16) / 255);
+    const treeScale = (t) => {
+      const [size, variation] = ROCK_SHAPES[t.shape] ? [rockSizeInput, rockSizeVariation] : [treeSizeInput, treeSizeVariation];
+      return ((Number(size.value) || 100) / 100) * 2 ** (treeRandom(t, 1) * (Number(variation.value) || 0) / 100);
+    };
+    // A colour moved by a stamp's variation: hue up to 30° and lightness 15% either way at full.
+    const treeLeaf = (t) => varyColor(treeColorInput.value, t, treeColorVariation);
+    function varyColor(base, t, variation) {
+      const spread = (Number(variation.value) || 0) / 100;
+      if (!spread) return base;
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(base.slice(i, i + 2), 16) / 255);
       const max = Math.max(r, g, b);
       const min = Math.min(r, g, b);
       const l = (max + min) / 2;
@@ -13234,11 +13265,53 @@
       const light = Math.min(0.95, Math.max(0.05, l + treeRandom(t, 3) * 0.15 * spread));
       return `hsl(${h.toFixed(1)} ${(sat * 100).toFixed(1)}% ${(light * 100).toFixed(1)}%)`;
     }
-    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
+    // Rocks are two-tone: a dark body under a light top facet, low on the ground.
+    const LIGHT = 'light';
+    const DARK = 'dark';
+    function rockShapes() {
+      const poly = (...points) => {
+        const p = new Path2D();
+        points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
+        p.closePath();
+        return p;
+      };
+      return {
+        boulder: { w: 34, h: 22, parts: [[poly([-17, 0], [-15, -12], [-6, -21], [7, -22], [16, -13], [17, 0]), DARK], [poly([-14, -11], [-6, -19], [6, -20], [13, -12], [2, -9]), LIGHT]] },
+        slab: { w: 44, h: 14, parts: [[poly([-22, 0], [-19, -9], [-6, -14], [14, -13], [22, -6], [21, 0]), DARK], [poly([-18, -8], [-6, -12], [13, -11], [19, -6], [0, -5]), LIGHT]] },
+        spire: { w: 22, h: 34, parts: [[poly([-11, 0], [-9, -16], [-3, -34], [4, -28], [10, -12], [11, 0]), DARK], [poly([-8, -15], [-3, -31], [0, -24], [-1, -12]), LIGHT]] },
+        pair: { w: 46, h: 24, parts: [
+          [poly([-23, 0], [-21, -11], [-12, -19], [-3, -17], [1, -8], [0, 0]), DARK],
+          [poly([-19, -10], [-12, -17], [-5, -15], [-9, -8]), LIGHT],
+          [poly([-2, 0], [1, -9], [10, -15], [20, -12], [23, 0]), DARK],
+          [poly([3, -8], [10, -13], [18, -11], [9, -6]), LIGHT],
+        ] },
+      };
+    }
+    const ROCK_SHAPES = rockShapes();
+    const rockSizeInput = document.getElementById('rock-size');
+    const rockSizeVariation = document.getElementById('rock-size-variation');
+    const rockLight = document.getElementById('rock-light-color');
+    const rockDark = document.getElementById('rock-dark-color');
+    const rockColorVariation = document.getElementById('rock-color-variation');
+    for (const input of [rockSizeInput, rockSizeVariation, rockColorVariation]) {
+      linkSlider(input);
+      input.addEventListener('input', draw);
+    }
+    // The fill for a stamp's part; without t, the base colour, for the panel's previews.
+    function partColor(color, t) {
+      if (color === LEAF) return t ? treeLeaf(t) : treeColorInput.value;
+      if (color === LIGHT || color === DARK) {
+        const base = color === LIGHT ? rockLight.value : rockDark.value;
+        return t ? varyColor(base, t, rockColorVariation) : base;
+      }
+      return treeTrunkInput.value;
+    }
+    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     let treeShape = 'pine';
-    // The panel's shape picker, each button showing its tree.
-    const treeShapesField = document.getElementById('tree-shapes');
-    for (const [name, shape] of Object.entries(TREE_SHAPES)) {
+    // The panel's pickers, each button showing its tree or rock; one stamp is chosen across both.
+    const stampButtons = [];
+    for (const [name, shape] of [...Object.entries(TREE_SHAPES), ...Object.entries(ROCK_SHAPES)]) {
+      const grid = document.querySelector(`#${TREE_SHAPES[name] ? 'tree' : 'rock'}-shapes .tree-shape-grid`);
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.tree = name;
@@ -13255,7 +13328,7 @@
         c.clearRect(0, 0, preview.width, preview.height);
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
-          c.fillStyle = color === LEAF ? treeColorInput.value : treeTrunkInput.value;
+          c.fillStyle = partColor(color);
           c.fill(part);
         }
       };
@@ -13264,9 +13337,10 @@
       button.addEventListener('click', () => {
         button.blur();
         treeShape = name;
-        for (const other of treeShapesField.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+        for (const other of stampButtons) other.setAttribute('aria-pressed', String(other === button));
       });
-      treeShapesField.querySelector('.tree-shape-grid').append(button);
+      stampButtons.push(button);
+      grid.append(button);
     }
     // spin and foot in the same pixels; k is pixels per map unit.
     function uprightAt(foot, spin, k) {
@@ -13287,7 +13361,7 @@
         const scale = treeScale(t);
         c.scale(scale, scale);
         for (const [part, color] of shapeOf(t).parts) {
-          c.fillStyle = color === LEAF ? treeLeaf(t) : treeTrunkInput.value;
+          c.fillStyle = partColor(color, t);
           c.fill(part);
         }
       }
@@ -13333,7 +13407,7 @@
       if (!reach) return;
       const cast = Object.fromEntries(Object.entries(TREE_SHAPES).map(([name, shape]) => [name, treeShadow(shape, reach)]));
       const shadows = new Path2D();
-      for (const t of trees) {
+      for (const t of trees.filter((one) => !ROCK_SHAPES[one.shape])) {
         const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
         shadows.addPath(cast[t.shape] ?? cast.pine, ground);
       }
@@ -13480,7 +13554,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-light-color', 'rock-dark-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -14846,7 +14920,7 @@
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
         if (frameEditing) return 'Inner Frame';
-        if (backgroundTool === 'tree') return 'Trees';
+        if (backgroundTool === 'tree') return 'Landscape';
         return 'Background';
       }
       if (selected?.area) return 'Area';

@@ -12650,11 +12650,23 @@
     buildingsLiftInput.addEventListener('input', draw);
     const PART_SCALE_LIMIT = 4096;
     const NOT_DRAWN = ['defs', 'style', 'title', 'desc', 'metadata'];
+    // The published page may not fetch data: URLs, so those are decoded here.
+    async function svgTextOf(src) {
+      let text = '';
+      if (src.startsWith('data:')) {
+        const comma = src.indexOf(',');
+        const body = src.slice(comma + 1);
+        text = src.slice(0, comma).endsWith(';base64')
+          ? new TextDecoder().decode(Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0)))
+          : decodeURIComponent(body);
+      } else text = await fetch(src).then((r) => r.text()).catch(() => '');
+      return /<svg[\s>]/i.test(text.slice(0, 4096)) ? text : null;
+    }
     async function splitBuildings(src, img) {
       const W = img.naturalWidth;
       const H = img.naturalHeight;
-      const text = await fetch(src).then((r) => r.text()).catch(() => '');
-      const root = /<svg[\s>]/i.test(text.slice(0, 4096)) ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
+      const text = await svgTextOf(src);
+      const root = text ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
       if (!root || root.localName !== 'svg') return [cutPart(img, W, H)].filter(Boolean);
       const shared = [...root.children].filter((el) => ['defs', 'style'].includes(el.localName));
       const parts = [];

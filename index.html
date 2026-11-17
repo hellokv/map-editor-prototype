@@ -51,6 +51,35 @@
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     }
+    #area-pop {
+      position: absolute;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      transform: translate(-50%, calc(-100% - 12px));
+      font: 12px system-ui, sans-serif;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    }
+    #area-pop[hidden] {
+      display: none;
+    }
+    #area-pop output {
+      min-width: 28px;
+    }
+    #area-pop button {
+      display: flex;
+      padding: 0;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    #area-pop .material-symbols-rounded {
+      font-size: 18px;
+    }
     #building-lift-pop[hidden] {
       display: none;
     }
@@ -2118,6 +2147,12 @@
     </div>
     <canvas id="canvas"></canvas>
     <canvas id="tilt-view" hidden></canvas>
+    <div id="area-pop" hidden>
+      <span>Density</span>
+      <input type="range" min="1" max="100" step="1" aria-label="Area density">
+      <output></output>
+      <button type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
+    </div>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
         <span>Lift</span>
@@ -3107,10 +3142,10 @@
         </label>
         <button id="landscape-fill" class="new-style" type="button" aria-pressed="false">Fill Area<span class="material-symbols-rounded">pentagon</span></button>
         <label id="landscape-fill-spacing-field" class="field" hidden>
-          Spacing
-          <span class="slider"><input id="landscape-fill-spacing" type="number" min="15" max="200" step="1" value="45"><input type="range" min="15" max="200" step="1" value="45" aria-label="Fill spacing"></span>
+          Density
+          <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
         </label>
-        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels.</p>
+        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Click an area later to change it.</p>
         <label class="field">
           Tree Size
           <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
@@ -5126,6 +5161,9 @@
     // Fill Area: the outline being clicked out, in map units.
     let fillingArea = false;
     let fillDraft = [];
+    // Filled areas, kept so they can be changed: { points, shape, density, seed }.
+    let fillAreas = [];
+    let selectedArea = null;
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -5284,6 +5322,7 @@
       });
       stackView.hidden = !stackOn();
       showBuildingPop();
+      showAreaPop();
       updatePanel();
     }
 
@@ -7403,10 +7442,12 @@
         ctx.drawImage(backgroundImage, x, y, w, h);
         ctx.restore();
       }
-      if (trees.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, TREE_SHAPES, treeShadowColor);
-      if (trees.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor);
+      const stamps = allStamps();
+      if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, TREE_SHAPES, treeShadowColor, stamps);
+      if (stamps.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor, stamps);
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
-      if (trees.length && !noBackground) drawTrees(ctx);
+      if (stamps.length && !noBackground) drawTrees(ctx, stamps);
+      if (!backgroundTools.hidden && backgroundTool === 'tree') drawFillAreas(ctx);
       if (fillDraft.length) drawFillDraft(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
@@ -10759,7 +10800,10 @@
         return;
       }
       if (!inLabels && backgroundTool === 'tree') {
-        // A click on a tree takes it away; anywhere else plants one.
+        // A click in a filled area selects it; on a tree takes it away; anywhere else plants one.
+        const area = fillAreaAt(p);
+        selectedArea = area;
+        if (area) return;
         const tree = treeAt(s);
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
@@ -13664,6 +13708,11 @@
         button.blur();
         treeShape = name;
         for (const other of stampButtons) other.setAttribute('aria-pressed', String(other === button));
+        // With an area selected, the choice changes what fills it.
+        if (selectedArea) {
+          selectedArea.shape = name;
+          draw();
+        }
       });
       stampButtons.push(button);
       grid.append(button);
@@ -13738,7 +13787,7 @@
         }
       }
     }
-    function drawTrees(c) {
+    function drawTrees(c, stamps) {
       const base = c.getTransform();
       const dpr = window.devicePixelRatio || 1;
       const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
@@ -13746,7 +13795,7 @@
         ? new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(canvasTilt.spin).translate(-margin.x, -margin.y).scale(1 / dpr)
         : new DOMMatrix();
       const depth = (t) => spin.transformPoint(base.transformPoint(new DOMPoint(t.x, t.y))).y;
-      for (const t of [...trees].sort((a, b) => depth(a) - depth(b))) {
+      for (const t of [...stamps].sort((a, b) => depth(a) - depth(b))) {
         c.setTransform(uprightAt(base.transformPoint(new DOMPoint(t.x, t.y)), spin, view.scale * dpr));
         const scale = treeScale(t);
         c.scale(scale, scale);
@@ -13836,17 +13885,17 @@
       return [...half(sorted), ...half([...sorted].reverse())];
     }
     // shapes: the stamps whose shadows to draw, trees' or rocks'.
-    function drawStampShadows(c, shapes, color) {
+    function drawStampShadows(c, shapes, color, stamps) {
       const { dx, dy } = lightFall();
       const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       if (!reach) return;
       const shadows = new Path2D();
       if (shapes === ROCK_SHAPES) {
-        for (const t of trees.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
+        for (const t of stamps.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
       } else {
         const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
         const turn = -(canvasTilt?.turn ?? 0);
-        for (const t of trees.filter((one) => !ROCK_SHAPES[one.shape])) {
+        for (const t of stamps.filter((one) => !ROCK_SHAPES[one.shape])) {
           const k = treeScale(t);
           const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(k);
           shadows.addPath(cast[t.shape] ?? cast.pine, ground);
@@ -13872,9 +13921,10 @@
       c.fill(shadows);
       c.restore();
     }
-    // Fill Area scatters the chosen stamp over a clicked-out outline: a grid
-    // at the spacing, each point nudged up to 40% of it at random, so the
-    // stamps fall evenly without lining up.
+    // Fill Area keeps a clicked-out outline, scattered with the chosen stamp:
+    // a grid at the spacing its density gives, each point nudged up to 40% of
+    // it. The nudges come from the area's own seed, so its stamps stay put
+    // while it's redrawn, and move only when it's reshaped.
     const fillButton = document.getElementById('landscape-fill');
     const fillSpacing = document.getElementById('landscape-fill-spacing');
     linkSlider(fillSpacing);
@@ -13896,23 +13946,126 @@
       if (e.key === 'Enter' && fillDraft.length >= 3) fillArea();
     });
     function fillArea() {
+      const area = { points: fillDraft, shape: treeShape, density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
+      fillAreas = [...fillAreas, area];
+      setFilling(false);
+      selectedArea = area;
+      draw();
+    }
+    // Density 1–100 sets the gap between stamps: about 145 map units at 1, 15 at 100.
+    const areaGap = (density) => 160 / (1 + Math.min(100, Math.max(1, density)) / 10);
+    function areaPath(area) {
       const outline = new Path2D();
-      fillDraft.forEach(({ x, y }, i) => (i ? outline.lineTo(x, y) : outline.moveTo(x, y)));
+      area.points.forEach(({ x, y }, i) => (i ? outline.lineTo(x, y) : outline.moveTo(x, y)));
       outline.closePath();
-      const probe = new OffscreenCanvas(1, 1).getContext('2d');
-      const xs = fillDraft.map((q) => q.x);
-      const ys = fillDraft.map((q) => q.y);
-      const gap = Math.max(5, Number(fillSpacing.value) || 45);
-      const added = [];
+      return outline;
+    }
+    const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
+    function areaStamps(area) {
+      const key = JSON.stringify([area.points, area.density, area.shape]);
+      if (area.stampsKey === key) return area.stamps;
+      let state = area.seed;
+      const random = () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let r = Math.imul(state ^ (state >>> 15), 1 | state);
+        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+      };
+      const outline = areaPath(area);
+      const xs = area.points.map((q) => q.x);
+      const ys = area.points.map((q) => q.y);
+      const gap = areaGap(area.density);
+      const stamps = [];
       for (let y = Math.min(...ys); y <= Math.max(...ys); y += gap) {
         for (let x = Math.min(...xs); x <= Math.max(...xs); x += gap) {
-          const at = { x: x + (Math.random() - 0.5) * 0.8 * gap, y: y + (Math.random() - 0.5) * 0.8 * gap };
-          if (probe.isPointInPath(outline, at.x, at.y)) added.push({ ...at, shape: treeShape });
+          const at = { x: x + (random() - 0.5) * 0.8 * gap, y: y + (random() - 0.5) * 0.8 * gap, shape: area.shape };
+          if (areaProbe.isPointInPath(outline, at.x, at.y)) stamps.push(at);
         }
       }
-      trees = [...trees, ...added];
-      setFilling(false);
+      area.stampsKey = key;
+      return (area.stamps = stamps);
     }
+    const allStamps = () => [...trees, ...fillAreas.flatMap(areaStamps)];
+    const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
+    // Outlines show only in the Landscape tool; the selected one in blue with handles to drag its corners.
+    function drawFillAreas(c) {
+      c.save();
+      for (const area of fillAreas) {
+        const selected = area === selectedArea;
+        c.strokeStyle = selected ? '#2f80ed' : 'rgba(0, 0, 0, 0.45)';
+        c.lineWidth = (selected ? 2 : 1.5) / view.scale;
+        c.setLineDash([6 / view.scale, 4 / view.scale]);
+        c.stroke(areaPath(area));
+        c.setLineDash([]);
+        if (!selected) continue;
+        for (const { x, y } of area.points) {
+          c.beginPath();
+          c.arc(x, y, 5 / view.scale, 0, Math.PI * 2);
+          c.fillStyle = '#fff';
+          c.fill();
+          c.lineWidth = 1.5 / view.scale;
+          c.stroke();
+        }
+      }
+      c.restore();
+    }
+    const areaPop = document.getElementById('area-pop');
+    const areaPopSlider = areaPop.querySelector('input');
+    // The selected area's density slider sits over its topmost corner.
+    function showAreaPop() {
+      areaPop.hidden = !selectedArea || backgroundTools.hidden || backgroundTool !== 'tree';
+      if (areaPop.hidden) return;
+      areaPopSlider.value = selectedArea.density;
+      areaPop.querySelector('output').value = selectedArea.density;
+      const top = selectedArea.points.reduce((a, b) => (toScreen(b).y < toScreen(a).y ? b : a));
+      const s = toScreen(top);
+      const at = windowPoint(s.x, s.y);
+      areaPop.style.left = `${at.x}px`;
+      areaPop.style.top = `${at.y}px`;
+    }
+    areaPopSlider.addEventListener('input', () => {
+      if (!selectedArea) return;
+      selectedArea.density = Number(areaPopSlider.value);
+      draw();
+    });
+    function deleteArea() {
+      fillAreas = fillAreas.filter((area) => area !== selectedArea);
+      selectedArea = null;
+      draw();
+    }
+    areaPop.querySelector('button').addEventListener('click', deleteArea);
+    window.addEventListener('keydown', (e) => {
+      if (!selectedArea || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Escape') {
+        selectedArea = null;
+        draw();
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') deleteArea();
+    });
+    // Dragging a corner handle of the selected area reshapes it.
+    let areaDrag = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!selectedArea || backgroundTool !== 'tree' || backgroundTools.hidden || fillingArea || e.button !== 0 || spaceHeld) return;
+      const s = canvasPoint(e);
+      const point = selectedArea.points.find((q) => {
+        const at = toScreen(q);
+        return Math.hypot(at.x - s.x, at.y - s.y) < 8;
+      });
+      if (!point) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
+      areaDrag = point;
+    }, { capture: true });
+    window.addEventListener('pointermove', (e) => {
+      if (!areaDrag) return;
+      const s = canvasPoint(e);
+      Object.assign(areaDrag, toBackground(s.x, s.y));
+      draw();
+    });
+    window.addEventListener('pointerup', () => {
+      areaDrag = null;
+    });
     function drawFillDraft(c) {
       c.save();
       c.beginPath();
@@ -14143,6 +14296,7 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
+      file.fillAreas = fillAreas.map(({ points, shape, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shape, density, seed }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -14214,6 +14368,8 @@
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
       trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
+      fillAreas = (file.fillAreas ?? []).map((area) => ({ ...area, shape: OLD_STAMPS[area.shape] ?? area.shape }));
+      selectedArea = null;
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;
@@ -15089,7 +15245,7 @@
           settings: { ...file.settings, ...mapStarts[next]?.settings },
           background: mapStarts[next]?.background ?? null,
           buildings: mapStarts[next]?.buildings ?? null,
-          points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null, trees: [],
+          points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null, trees: [], fillAreas: [],
           zoomBase: 1, frameCentre: null, satelliteReference: null, backgroundPlace: null, satellitePlace: null,
           ...mapStarts[next]?.paths,
         },

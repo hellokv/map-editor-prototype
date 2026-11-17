@@ -4812,6 +4812,22 @@
     // The box: the inner frame, grown by the padding all round.
     const boardBox = () => ({ x: -board.padding, y: -board.padding, w: board.w + 2 * board.padding, h: board.h + 2 * board.padding });
     const boardShape = () => boxPath(boardBox(), board.radius, board.corners);
+    // Turned, the box stays square to the screen, grown to hold the turned
+    // map: c is turned back, and the box returned is the one to draw in it.
+    function turnUpright(c, turn) {
+      const box = boardBox();
+      if (!turn) return box;
+      const cx = board.w / 2;
+      const cy = board.h / 2;
+      c.translate(cx, cy);
+      c.rotate(-turn);
+      c.translate(-cx, -cy);
+      const cos = Math.abs(Math.cos(turn));
+      const sin = Math.abs(Math.sin(turn));
+      const w = box.w * cos + box.h * sin;
+      const h = box.w * sin + box.h * cos;
+      return { x: cx - w / 2, y: cy - h / 2, w, h };
+    }
     // A box as a path, its corners rounded, or cut off when corners is
     // 'chamfer', reaching radius along each side.
     function boxPath(box, radius, corners) {
@@ -7138,14 +7154,18 @@
       // pixels, so they're scaled with the map.
       ctx.save();
       const noBackground = stackPart === 'level' || locationPart === 'paths';
+      const turn = canvasTilt?.turn ?? 0;
       if (board.shadow && !noBackground) {
+        // Unturned, so the shadow falls the same way on screen however the map is turned.
+        const offset = new DOMMatrix().rotate((-turn * 180) / Math.PI).transformPoint(new DOMPoint(board.shadowX, board.shadowY));
         ctx.shadowColor = board.shadow;
-        ctx.shadowOffsetX = board.shadowX * view.scale * dpr;
-        ctx.shadowOffsetY = board.shadowY * view.scale * dpr;
+        ctx.shadowOffsetX = offset.x * view.scale * dpr;
+        ctx.shadowOffsetY = offset.y * view.scale * dpr;
         ctx.shadowBlur = board.shadowBlur * view.scale * dpr;
       }
       ctx.fillStyle = colorOf(boardColor);
-      if (!noBackground) ctx.fill(boardShape());
+      const uprightBox = turnUpright(ctx, turn);
+      if (!noBackground) ctx.fill(boxPath(uprightBox, board.radius, board.corners));
       ctx.restore();
       if (backgroundImage && !noBackground) {
         const { x, y, w, h } = backgroundRect();
@@ -7166,7 +7186,12 @@
         drawShapes();
         drawSketchFills();
       }
-      if (board.outline && !noBackground) strokeOutside(ctx, boardShape(), boardBox(), board.outline, board.outlineWidth);
+      if (board.outline && !noBackground) {
+        ctx.save();
+        turnUpright(ctx, turn);
+        strokeOutside(ctx, boxPath(uprightBox, board.radius, board.corners), uprightBox, board.outline, board.outlineWidth);
+        ctx.restore();
+      }
       if (stackPart) {
         if (stackPart === 'background') drawPaths();
         else drawLabels();
@@ -12561,7 +12586,7 @@
       // The camera stands back twice the box's height on screen; isometric
       // has it infinitely far away.
       const d = mapIsometric.checked ? Infinity : Math.max(400, 2 * (oy - Math.min(...ys)));
-      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, spin };
+      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin };
       // The window's corners, taken back onto the flat map, bound what shows.
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;

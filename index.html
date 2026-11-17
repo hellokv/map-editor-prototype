@@ -12862,8 +12862,9 @@
       const root = text ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
       if (!root || root.localName !== 'svg') return [cutPart(img, W, H)].filter(Boolean);
       const shared = [...root.children].filter((el) => ['defs', 'style'].includes(el.localName));
+      const outlines = svgOutlines(root, W, H);
       const parts = [];
-      for (const el of [...root.children].filter((child) => !NOT_DRAWN.includes(child.localName))) {
+      for (const [index, el] of [...root.children].filter((child) => !NOT_DRAWN.includes(child.localName)).entries()) {
         const shell = root.cloneNode(false);
         shell.setAttribute('width', W);
         shell.setAttribute('height', H);
@@ -12872,9 +12873,71 @@
         const piece = await loadImage(url).catch(() => null);
         URL.revokeObjectURL(url);
         const part = piece && cutPart(piece, W, H);
-        if (part) parts.push(part);
+        if (part) parts.push(Object.assign(part, { outline: outlines[index] }));
       }
       return parts;
+    }
+    // Each drawn shape's outline, in the image's pixels, as the convex hull
+    // of points along its edges, pushed out by half its stroke. The SVG is put
+    // in the page, hidden, for as long as it takes to measure.
+    function svgOutlines(root, W, H) {
+      const holder = document.createElement('div');
+      Object.assign(holder.style, { position: 'absolute', width: '0', height: '0', overflow: 'hidden', visibility: 'hidden' });
+      const svg = document.importNode(root, true);
+      svg.setAttribute('width', W);
+      svg.setAttribute('height', H);
+      holder.append(svg);
+      document.body.append(holder);
+      const outlines = [...svg.children].filter((child) => !NOT_DRAWN.includes(child.localName)).map((el) => {
+        const shapes = el instanceof SVGGeometryElement ? [el] : [...el.querySelectorAll('path, circle, rect, ellipse, polygon, polyline, line')];
+        const points = [];
+        let stroke = 0;
+        for (const shape of shapes) {
+          const ctm = shape.getCTM();
+          if (!ctm) continue;
+          const m = DOMMatrix.fromMatrix(ctm);
+          const style = getComputedStyle(shape);
+          if (style.stroke !== 'none') stroke = Math.max(stroke, (parseFloat(style.strokeWidth) || 0) * Math.hypot(m.a, m.b));
+          const length = shape.getTotalLength();
+          for (let i = 0; i < 400; i++) {
+            const q = m.transformPoint(shape.getPointAtLength((length * i) / 400));
+            points.push([q.x, q.y]);
+          }
+        }
+        const hull = simplifyHull(convexHull(points));
+        return hull.length >= 3 ? growHull(hull, stroke / 2) : null;
+      });
+      holder.remove();
+      return outlines;
+    }
+    // Drops hull points that barely turn the outline, left over from sampling.
+    function simplifyHull(hull) {
+      const out = [];
+      for (let i = 0; i < hull.length; i++) {
+        const a = out.length ? out[out.length - 1] : hull[hull.length - 1];
+        const b = hull[i];
+        const c = hull[(i + 1) % hull.length];
+        const turn = Math.abs(Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0]));
+        if (Math.min(turn, 2 * Math.PI - turn) > 0.03) out.push(b);
+      }
+      return out;
+    }
+    // Each point moved out from the centre by d along its corner's bisector.
+    function growHull(hull, d) {
+      if (!d) return hull;
+      const n = hull.length;
+      return hull.map((b, i) => {
+        const a = hull[(i + n - 1) % n];
+        const c = hull[(i + 1) % n];
+        const out = (p, q) => {
+          const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          return [(q[1] - p[1]) / len, -(q[0] - p[0]) / len];
+        };
+        const [n1, n2] = [out(a, b), out(b, c)];
+        const bis = [n1[0] + n2[0], n1[1] + n2[1]];
+        const k = d / (1 + n1[0] * n2[0] + n1[1] * n2[1]);
+        return [b[0] + bis[0] * k, b[1] + bis[1] * k];
+      });
     }
     function cutPart(image, W, H) {
       const k = Math.min(2, PART_SCALE_LIMIT / Math.max(W, H));
@@ -13009,58 +13072,70 @@
     // side, so an angled top's faces slope at 45°; flat tops don't.
     function roofRise(part) {
       if (!part.roofStyle || part.roofStyle === 'flat') return 0;
+      if (part.roofStyle === 'angled') return Math.max(...hipFaces(part).flatMap((face) => face.heights));
       const r = partRect(part);
       return Math.min(r.w, r.h) * 0.5;
     }
-    // The roof's outline at height t (0..1) up the top, within its rect r:
-    // a dome shrinks it evenly; an angled top draws each side in by the same
-    // distance, so a long building closes to a ridge.
-    function roofBox(part, r, t) {
-      let w;
-      let h;
-      if (part.roofStyle === 'dome') {
-        const f = Math.sqrt(1 - t * t);
-        [w, h] = [r.w * f, r.h * f];
-      } else {
-        const inset = Math.min(r.w, r.h) * t;
-        [w, h] = [r.w - inset, r.h - inset];
-      }
-      return [r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h];
+    // An angled top as a hip roof on the part's outline, in map units: every
+    // edge rises inward at 45°, so a point's height is its distance to the
+    // nearest edge, and each edge's face is where that edge is nearest. The
+    // ridges fall wherever faces meet, at whatever angle the outline makes them.
+    function hipFaces(part) {
+      const r = partRect(part);
+      const key = `${r.x},${r.y},${r.w},${r.h}`;
+      if (part.facesKey === key) return part.faces;
+      const W = buildingsImage.naturalWidth;
+      const H = buildingsImage.naturalHeight;
+      const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
+      const b = buildingsRect();
+      const poly = outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
+      const n = poly.length;
+      const edges = poly.map((a, i) => {
+        const q = poly[(i + 1) % n];
+        const len = Math.hypot(q[0] - a[0], q[1] - a[1]) || 1;
+        const nx = -(q[1] - a[1]) / len;
+        const ny = (q[0] - a[0]) / len;
+        return { nx, ny, c: nx * a[0] + ny * a[1] };
+      });
+      const dist = (e, p) => e.nx * p[0] + e.ny * p[1] - e.c;
+      const faces = edges.map((e) => {
+        let face = poly;
+        for (const other of edges) {
+          if (other === e || face.length < 3) continue;
+          face = clipPolygon(face, (p) => dist(e, p) - dist(other, p));
+        }
+        return { points: face, heights: face.map((p) => Math.max(0, dist(e, p))), outward: [-e.nx, -e.ny] };
+      }).filter((face) => face.points.length >= 3);
+      part.facesKey = key;
+      return (part.faces = faces);
     }
-    // An angled top seen from above, in the part's pixels: a hip roof over
-    // its bounds, each side sloping in at 45° to a ridge along the long way.
-    // Each face is one flat colour, from the building's toward the sides' the
-    // more it faces away from the light.
-    function hipRoof(part) {
+    // The polygon's part where f(p) <= 0, f being linear.
+    function clipPolygon(poly, f) {
+      const out = [];
+      poly.forEach((p, i) => {
+        const q = poly[(i + 1) % poly.length];
+        const fp = f(p);
+        const fq = f(q);
+        if (fp <= 0) out.push(p);
+        if ((fp < 0) !== (fq < 0) && fp !== fq) {
+          const t = fp / (fp - fq);
+          out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+        }
+      });
+      return out;
+    }
+    // A face's flat colour: from the building's toward the sides' the more it faces away from the light.
+    function hipColor([ox, oy]) {
       const { dx, dy } = lightFall();
-      const key = `${colorOf(buildingsColor)},${colorOf(buildingsSideColor)},${dx.toFixed(2)},${dy.toFixed(2)}`;
-      if (part.hipKey === key) return part.hip;
-      const { aw: w, ah: h } = part;
-      const hip = new OffscreenCanvas(w, h);
-      const c = hip.getContext('2d');
-      const half = Math.min(w, h) / 2;
-      const [a, b] = w >= h ? [[half, h / 2], [w - half, h / 2]] : [[w / 2, half], [w / 2, h - half]];
-      const faces = [
-        [[[0, 0], [w, 0], ...(w >= h ? [b, a] : [a])], [0, -1]],
-        [[[w, 0], [w, h], ...(w >= h ? [b] : [b, a])], [1, 0]],
-        [[[w, h], [0, h], ...(w >= h ? [a, b] : [b])], [0, 1]],
-        [[[0, h], [0, 0], ...(w >= h ? [a] : [a, b])], [-1, 0]],
-      ];
-      const mix = (from, to, t) => {
-        const ch = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
-        return `rgb(${[1, 3, 5].map((i) => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t)).join(', ')})`;
-      };
-      for (const [points, [nx, ny]] of faces) {
-        c.beginPath();
-        points.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-        c.closePath();
-        c.fillStyle = mix(buildingsColor.value, buildingsSideColor.value, 0.15 + 0.6 * ((1 + nx * dx + ny * dy) / 2));
-        c.fill();
-      }
-      c.globalCompositeOperation = 'destination-in';
-      c.drawImage(part.roof, 0, 0);
-      part.hipKey = key;
-      return (part.hip = hip);
+      const t = 0.15 + 0.6 * ((1 + ox * dx + oy * dy) / 2);
+      const ch = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
+      const [from, to] = [buildingsColor.value, buildingsSideColor.value];
+      return `rgb(${[1, 3, 5].map((i) => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t)).join(', ')})`;
+    }
+    // A dome's outline at height t (0..1) up it, within the part's rect r.
+    function roofBox(part, r, t) {
+      const f = Math.sqrt(1 - t * t);
+      return [r.x + (r.w * (1 - f)) / 2, r.y + (r.h * (1 - f)) / 2, r.w * f, r.h * f];
     }
     // A part's outline in black, for shading its top.
     function partDark(part) {
@@ -13123,7 +13198,18 @@
           const along = (length * i) / slices;
           s.drawImage(part.roof, r.x + dx * along, r.y + dy * along, r.w, r.h);
         }
-        const rise = roofRise(part);
+        if (part.roofStyle === 'angled') {
+          for (const face of hipFaces(part)) {
+            s.beginPath();
+            face.points.forEach(([x, y], i) => {
+              const along = length + face.heights[i] * stretch;
+              if (i) s.lineTo(x + dx * along, y + dy * along);
+              else s.moveTo(x + dx * along, y + dy * along);
+            });
+            s.fill();
+          }
+        }
+        const rise = part.roofStyle === 'dome' ? roofRise(part) : 0;
         const steps = Math.ceil((rise * stretch * view.scale) / 1.5);
         for (let i = 1; i < steps; i++) {
           const t = i / steps;
@@ -13243,17 +13329,31 @@
           // darker the lower they sit; an angled top's show its faceted roof,
           // each layer the part of it that lies at that height.
           const layers = Math.max(16, Math.ceil((rise * view.scale) / 1.5));
-          const hip = part.roofStyle === 'angled' && hipRoof(part);
-          for (let i = 1; i < layers; i++) {
+          if (part.roofStyle === 'angled') {
+            // Faces turned away from the viewer first, so nearer ones cover them.
+            const spin = canvasTilt ? leanSpin() : new DOMMatrix();
+            const away = ([ox, oy]) => spin.b * ox + spin.d * oy;
+            const lift = partLift(part);
+            c.setTransform(1, 0, 0, 1, 0, 0);
+            for (const face of [...hipFaces(part)].sort((f, g) => away(f.outward) - away(g.outward))) {
+              c.beginPath();
+              face.points.forEach(([x, y], i) => {
+                const q = inCanvas(liftMatrix(tilted ? (lift + face.heights[i]) * view.scale : 0)).transformPoint(new DOMPoint(x, y));
+                if (i) c.lineTo(q.x, q.y);
+                else c.moveTo(q.x, q.y);
+              });
+              c.closePath();
+              c.fillStyle = hipColor(face.outward);
+              c.fill();
+              c.strokeStyle = c.fillStyle;
+              c.lineWidth = 0.75;
+              c.stroke();
+            }
+          }
+          for (let i = 1; i < layers && part.roofStyle === 'dome'; i++) {
             const t = i / layers;
             c.setTransform(inCanvas(liftMatrix(tilted ? (partLift(part) + rise * t) * view.scale : 0)));
             const box = roofBox(part, r, t);
-            if (hip) {
-              const kx = part.aw / r.w;
-              const ky = part.ah / r.h;
-              c.drawImage(hip, (box[0] - r.x) * kx, (box[1] - r.y) * ky, box[2] * kx, box[3] * ky, ...box);
-              continue;
-            }
             c.drawImage(partTop(part), ...box);
             c.globalAlpha = (1 - t) * 0.4;
             c.drawImage(partDark(part), ...box);

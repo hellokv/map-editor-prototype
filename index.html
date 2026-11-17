@@ -64,8 +64,21 @@
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     }
-    #area-pop[hidden] {
+    #area-pop[hidden], #water-pop[hidden] {
       display: none;
+    }
+    #water-pop {
+      position: absolute;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      transform: translate(-50%, calc(-100% - 12px));
+      font: 12px system-ui, sans-serif;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     }
     #area-pop output {
       min-width: 28px;
@@ -2156,6 +2169,10 @@
       <button id="area-shuffle" type="button" aria-label="Shuffle placement"><span class="material-symbols-rounded">shuffle</span></button>
       <button id="area-delete" type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
     </div>
+    <label id="water-pop" hidden>
+      Water
+      <input class="switch" type="checkbox">
+    </label>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
         <span>Lift</span>
@@ -3255,6 +3272,14 @@
           <span class="color-field"><input id="rock-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Rock shadow opacity">%</span>
         </label>
       </div>
+      <div id="water-settings" class="label-section tab-landscape" hidden>
+        <div class="field">Water</div>
+        <label class="field">
+          Water Color
+          <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"></span>
+        </label>
+        <p class="panel-note">With no stamp chosen, click a shape in the base layer to mark it as water.</p>
+      </div>
       <div class="label-section background-settings tab-base">
         <label id="background-show-labels-field" class="field">
           Show Labels
@@ -3847,6 +3872,7 @@
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
       document.getElementById('rock-shapes').hidden = name !== 'tree';
+      document.getElementById('water-settings').hidden = name !== 'tree';
       const panel = document.getElementById('background-panel');
       panel.classList.toggle('tree-mode', name === 'tree');
       // The Landscape tab is the Landscape tool; leaving one leaves the other.
@@ -5193,6 +5219,11 @@
     // Filled areas, kept so they can be changed: { points, shape, density, seed }.
     let fillAreas = [];
     let selectedArea = null;
+    // Base-layer shapes marked as water, by their order among the base SVG's shapes.
+    let water = [];
+    let selectedWater = null;
+    let baseShapes = null;
+    let waterImage = null;
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -5352,6 +5383,7 @@
       stackView.hidden = !stackOn();
       showBuildingPop();
       showAreaPop();
+      showWaterPop();
       updatePanel();
     }
 
@@ -7468,7 +7500,7 @@
         const { x, y, w, h } = backgroundRect();
         ctx.save();
         clipToImageRoom();
-        ctx.drawImage(backgroundImage, x, y, w, h);
+        ctx.drawImage(baseImage(), x, y, w, h);
         ctx.restore();
       }
       const stamps = allStamps();
@@ -7476,7 +7508,10 @@
       if (stamps.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor, stamps);
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
-      if (!backgroundTools.hidden && backgroundTool === 'tree') drawFillAreas(ctx);
+      if (!backgroundTools.hidden && backgroundTool === 'tree') {
+        drawWaterSelection(ctx);
+        drawFillAreas(ctx);
+      }
       if (fillDraft.length) drawFillDraft(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
@@ -10827,11 +10862,12 @@
         // A click in a filled area selects it and a click off one lets it go; otherwise,
         // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
         const area = fillAreaAt(p);
-        const hadArea = selectedArea;
+        const hadSelection = selectedArea || selectedWater !== null;
         selectedArea = area;
+        selectedWater = area || treeShape ? null : baseShapeAt(p);
         stampChoice = area ? new Set(area.shapes) : soloStamp();
         showStampChoice();
-        if (area || hadArea || !treeShape) return draw();
+        if (area || hadSelection || !treeShape) return draw();
         const tree = treeAt(s);
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
@@ -12701,6 +12737,7 @@
             preview.hidden = false;
             locationBackgroundField.hidden = false;
             resolutionField.lastChild.textContent = backgroundIsSvg() ? 'NA' : `${img.naturalWidth} × ${img.naturalHeight}`;
+            loadBaseShapes();
             showModeLocks();
             draw();
           }
@@ -12719,6 +12756,7 @@
       if (!file) return;
       const url = URL.createObjectURL(file);
       if (file.type === 'image/svg+xml') svgUploads.add(url);
+      water = [];
       setBackgroundImage(url).then(() => {
         if (!backgroundImage || backgroundImage.src !== url) return;
         backgroundPlace = null;
@@ -12766,6 +12804,10 @@
       if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundRequest++;
       backgroundImage = null;
+      water = [];
+      selectedWater = null;
+      baseShapes = null;
+      waterImage = null;
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
@@ -13750,6 +13792,8 @@
         } else {
           treeShape = treeShape === name ? null : name;
           stampChoice = soloStamp();
+          selectedWater = null;
+          draw();
         }
         showStampChoice();
         if (selectedArea) {
@@ -14158,6 +14202,153 @@
       }
       c.restore();
     }
+    const waterColorInput = document.getElementById('water-color');
+    const waterPop = document.getElementById('water-pop');
+    const waterPopSwitch = waterPop.querySelector('input');
+    const BASE_SHAPES = 'path, circle, rect, ellipse, polygon, polyline';
+    function baseImage() {
+      return (water.length && waterImage) || backgroundImage;
+    }
+    function svgShapeData(el) {
+      const n = (name) => parseFloat(el.getAttribute(name)) || 0;
+      switch (el.localName) {
+        case 'path': return el.getAttribute('d') ?? '';
+        case 'rect': return `M${n('x')} ${n('y')}h${n('width')}v${n('height')}h${-n('width')}Z`;
+        case 'circle':
+        case 'ellipse': {
+          const rx = el.localName === 'circle' ? n('r') : n('rx');
+          const ry = el.localName === 'circle' ? n('r') : n('ry');
+          return `M${n('cx') - rx} ${n('cy')}a${rx} ${ry} 0 1 0 ${2 * rx} 0a${rx} ${ry} 0 1 0 ${-2 * rx} 0Z`;
+        }
+        default: return `M${el.getAttribute('points') ?? ''}${el.localName === 'polygon' ? 'Z' : ''}`;
+      }
+    }
+    // Each base shape as a canvas path in the image's pixels, measured with the SVG
+    // in the page only as long as that takes, so its styles don't reach the editor.
+    async function loadBaseShapes() {
+      const img = backgroundImage;
+      baseShapes = null;
+      waterImage = null;
+      const text = img && backgroundIsSvg() ? await svgTextOf(img.src) : null;
+      if (!text || img !== backgroundImage) return;
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+      if (root.localName !== 'svg') return;
+      const holder = document.createElement('div');
+      Object.assign(holder.style, { position: 'absolute', width: '0', height: '0', overflow: 'hidden', visibility: 'hidden' });
+      const svg = document.importNode(root, true);
+      svg.setAttribute('width', img.naturalWidth);
+      svg.setAttribute('height', img.naturalHeight);
+      holder.append(svg);
+      document.body.append(holder);
+      const shapes = [...svg.querySelectorAll(BASE_SHAPES)].map((el) => {
+        const ctm = el.getCTM();
+        const path = new Path2D();
+        if (ctm && !el.closest('defs, clipPath, mask, pattern, symbol')) path.addPath(new Path2D(svgShapeData(el)), DOMMatrix.fromMatrix(ctm));
+        return { path, filled: !!ctm && getComputedStyle(el).fill !== 'none' };
+      });
+      holder.remove();
+      baseShapes = { img, text, shapes };
+      paintWater();
+    }
+    // Loads finish out of order, so only the latest asked for is kept.
+    let waterRequest = 0;
+    async function paintWater() {
+      const request = ++waterRequest;
+      if (!baseShapes || !water.length) {
+        waterImage = null;
+        return draw();
+      }
+      const doc = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml');
+      const els = doc.documentElement.querySelectorAll(BASE_SHAPES);
+      for (const i of water) els[i]?.style.setProperty('fill', waterColorInput.value);
+      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' }));
+      const img = await loadImage(url).catch(() => null);
+      URL.revokeObjectURL(url);
+      if (request !== waterRequest) return;
+      waterImage = img;
+      draw();
+    }
+    waterColorInput.addEventListener('input', paintWater);
+    // Map units to the base image's pixels.
+    function baseScale() {
+      const r = backgroundRect();
+      return { r, kx: r.w / backgroundImage.naturalWidth, ky: r.h / backgroundImage.naturalHeight };
+    }
+    // The topmost filled base shape under a map point.
+    function baseShapeAt(p) {
+      if (!baseShapes || baseShapes.img !== backgroundImage) return null;
+      const { r, kx, ky } = baseScale();
+      const x = (p.x - r.x) / kx;
+      const y = (p.y - r.y) / ky;
+      for (let i = baseShapes.shapes.length - 1; i >= 0; i--) {
+        const { path, filled } = baseShapes.shapes[i];
+        if (filled && areaProbe.isPointInPath(path, x, y)) return i;
+      }
+      return null;
+    }
+    function drawWaterSelection(c) {
+      const shape = selectedWater !== null && baseShapes?.shapes[selectedWater];
+      if (!shape) return;
+      const { r, kx, ky } = baseScale();
+      c.save();
+      c.translate(r.x, r.y);
+      c.scale(kx, ky);
+      const width = 2 / (view.scale * kx);
+      c.lineWidth = width * 2;
+      c.strokeStyle = '#fff';
+      c.stroke(shape.path);
+      c.lineWidth = width;
+      c.strokeStyle = '#2f80ed';
+      c.stroke(shape.path);
+      c.restore();
+    }
+    // The switch sits over the top of the selected shape.
+    function showWaterPop() {
+      const shape = selectedWater !== null && baseShapes?.shapes[selectedWater];
+      waterPop.hidden = !shape || backgroundTools.hidden || backgroundTool !== 'tree';
+      if (waterPop.hidden) return;
+      waterPopSwitch.checked = water.includes(selectedWater);
+      const { r, kx, ky } = baseScale();
+      const box = baseBounds(shape.path);
+      const s = toScreen({ x: r.x + (box.x0 + box.x1) / 2 * kx, y: r.y + box.y0 * ky });
+      const at = windowPoint(s.x, s.y);
+      waterPop.style.left = `${at.x}px`;
+      waterPop.style.top = `${at.y}px`;
+    }
+    // A path's bounds in image pixels, from where it paints on a small canvas.
+    const boundsCache = new WeakMap();
+    function baseBounds(path) {
+      if (boundsCache.has(path)) return boundsCache.get(path);
+      const W = backgroundImage.naturalWidth;
+      const H = backgroundImage.naturalHeight;
+      const k = Math.min(1, 1024 / Math.max(W, H));
+      const cw = Math.ceil(W * k);
+      const ch = Math.ceil(H * k);
+      const c = new OffscreenCanvas(cw, ch).getContext('2d', { willReadFrequently: true });
+      c.scale(k, k);
+      c.fill(path);
+      c.lineWidth = 1 / k;
+      c.stroke(path);
+      const data = c.getImageData(0, 0, cw, ch).data;
+      let x0 = cw, y0 = ch, x1 = 0, y1 = 0;
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        if (!data[(y * cw + x) * 4 + 3]) continue;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x + 1); y0 = Math.min(y0, y); y1 = Math.max(y1, y + 1);
+      }
+      const box = { x0: x0 / k, x1: x1 / k, y0: y0 / k, y1: y1 / k };
+      boundsCache.set(path, box);
+      return box;
+    }
+    waterPopSwitch.addEventListener('change', () => {
+      if (selectedWater === null) return;
+      water = waterPopSwitch.checked ? [...water, selectedWater] : water.filter((i) => i !== selectedWater);
+      paintWater();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (selectedWater === null || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
+      selectedWater = null;
+      draw();
+    });
     // The nearest tree drawn under a canvas point.
     function treeAt(s) {
       return [...trees].reverse().find((t) => {
@@ -14294,7 +14485,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -14370,6 +14561,7 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
+      file.water = water;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
@@ -14438,6 +14630,8 @@
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new Event('change'));
       }
+      water = file.water ?? [];
+      selectedWater = null;
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
@@ -14530,7 +14724,7 @@
         ctx.fill(boardShape());
         ctx.save();
         clipToImageRoom();
-        if (backgroundImage) ctx.drawImage(backgroundImage, g.x, g.y, g.w, g.h);
+        if (backgroundImage) ctx.drawImage(baseImage(), g.x, g.y, g.w, g.h);
         if (buildingsImage) drawBuildings(ctx);
         if (showsSatelliteReference()) {
           const r = satelliteRect();
@@ -14551,7 +14745,7 @@
     async function templateSvg(g) {
       const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
       const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
-      if (backgroundImage) layers.push(image(await imageData(backgroundImage), g.x, g.y, g.w, g.h));
+      if (backgroundImage) layers.push(image(await imageData(baseImage()), g.x, g.y, g.w, g.h));
       if (buildingsImage) {
         const r = buildingsRect();
         layers.push(image(await imageData(buildingsImage), r.x, r.y, r.w, r.h));

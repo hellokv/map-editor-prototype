@@ -14940,8 +14940,13 @@
         fitSatellite: true,
       },
     };
-    // A copy of the Bronx Zoo to add buildings to.
-    mapStarts['bronx-zoo-buildings'] = { ...mapStarts['bronx-zoo'] };
+    // The Bronx Zoo with its buildings split out into their own layer.
+    mapStarts['bronx-zoo-buildings'] = {
+      ...mapStarts['bronx-zoo'],
+      background: 'bronx-zoo-no-buildings.svg',
+      buildings: 'bronx-zoo-buildings.svg',
+      settings: { ...mapStarts['bronx-zoo'].settings, 'buildings-color': '#b1b4b6', 'buildings-side-color': '#8f9295' },
+    };
     const locationFields = () => [...document.querySelectorAll('#location-panel input')];
     const locationState = () => locationFields().map((input) => (input.type === 'checkbox' ? input.checked : input.value));
     function setLocationState(values) {

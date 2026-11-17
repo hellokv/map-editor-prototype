@@ -2176,6 +2176,7 @@
         <option value="national-zoo">National Zoo</option>
         <option value="wildlife-safari">Wildlife Safari</option>
         <option value="bronx-zoo">Bronx Zoo</option>
+        <option value="bronx-zoo-buildings">Bronx Zoo Buildings</option>
       </select>
     </div>
     <div id="mode-menu">
@@ -5660,6 +5661,7 @@
       'national-zoo': { src: 'national-zoo-satellite.jpg', reach: 1 },
       'wildlife-safari': { src: 'wildlife-safari-satellite.jpg', reach: 1 },
       'bronx-zoo': { src: 'bronx-zoo-satellite.jpg', reach: 1 },
+      'bronx-zoo-buildings': { src: 'bronx-zoo-satellite.jpg', reach: 1 },
     };
     let satelliteReach = mapSatellites.demo.reach;
     const satellite = Object.assign(new Image(), { src: mapSatellites.demo.src });
@@ -14938,6 +14940,8 @@
         fitSatellite: true,
       },
     };
+    // A copy of the Bronx Zoo to add buildings to.
+    mapStarts['bronx-zoo-buildings'] = { ...mapStarts['bronx-zoo'] };
     const locationFields = () => [...document.querySelectorAll('#location-panel input')];
     const locationState = () => locationFields().map((input) => (input.type === 'checkbox' ? input.checked : input.value));
     function setLocationState(values) {

@@ -3062,10 +3062,16 @@
           Size Variation
           <span class="slider"><span class="percent-field"><input id="tree-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Size variation"></span>
         </label>
-        <label class="field">
-          Leaf Color
-          <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
-        </label>
+        <div class="field-pair">
+          <label class="field">
+            Leaf
+            <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
+          </label>
+          <label class="field">
+            Trunk
+            <span class="color-field"><input id="tree-trunk-color" type="color" value="#4a3a2e"></span>
+          </label>
+        </div>
         <label class="field">
           Color Variation
           <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
@@ -13153,7 +13159,7 @@
     // casts its shadow: a trunk [width, height], cones [apex, base height,
     // base radius] and ellipsoids [offset, centre height, radius, half height],
     // each offset taken across the light so the shadow looks alike from all sides.
-    const TRUNK = '#4a3a2e';
+    const TRUNK = 'trunk';
     const LEAF = 'leaf';
     function treeShapes() {
       const path = (draw) => {
@@ -13183,7 +13189,7 @@
         cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]],
           volume: [['trunk', 5, 8], ['ball', 0, 38, 10, 32]] },
         palm: { w: 56, h: 66, volume: [['trunk', 5, 58], ['ball', 0, 60, 26, 5]], parts: [
-          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), '#7a6043'],
+          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), TRUNK],
           [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), LEAF],
         ] },
         bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]],
@@ -13199,10 +13205,13 @@
       linkSlider(input);
       input.addEventListener('input', draw);
     }
-    treeColorInput.addEventListener('input', () => {
-      for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
-      draw();
-    });
+    const treeTrunkInput = document.getElementById('tree-trunk-color');
+    for (const input of [treeColorInput, treeTrunkInput]) {
+      input.addEventListener('input', () => {
+        for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
+        draw();
+      });
+    }
     // Steady per-tree randomness, from where the tree stands, in -1..1.
     function treeRandom(t, salt) {
       const v = Math.sin(t.x * 12.9898 + t.y * 78.233 + salt * 37.719) * 43758.5453;
@@ -13246,7 +13255,7 @@
         c.clearRect(0, 0, preview.width, preview.height);
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
-          c.fillStyle = color === LEAF ? treeColorInput.value : color;
+          c.fillStyle = color === LEAF ? treeColorInput.value : treeTrunkInput.value;
           c.fill(part);
         }
       };
@@ -13278,7 +13287,7 @@
         const scale = treeScale(t);
         c.scale(scale, scale);
         for (const [part, color] of shapeOf(t).parts) {
-          c.fillStyle = color === LEAF ? treeLeaf(t) : color;
+          c.fillStyle = color === LEAF ? treeLeaf(t) : treeTrunkInput.value;
           c.fill(part);
         }
       }
@@ -13471,7 +13480,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

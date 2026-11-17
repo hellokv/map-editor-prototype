@@ -13719,10 +13719,29 @@
       grid.append(button);
     }
     // spin and foot in the same pixels; k is pixels per map unit.
-    function uprightAt(foot, spin, k) {
-      const stand = canvasTilt && !canvasTilt.flat ? 1 / Math.cos(canvasTilt.angle) : 1;
-      const at = spin.transformPoint(foot);
-      return spin.inverse().translate(at.x, at.y).scale(k, k * stand);
+    // Where a canvas point shows in the window, under the turn and tilt.
+    function tiltForward(p) {
+      if (!canvasTilt) return { x: p.x, y: p.y };
+      const { ox, oy, d, angle, spin, flat } = canvasTilt;
+      const q = spin.transformPoint(new DOMPoint(p.x, p.y));
+      if (flat) return { x: q.x, y: q.y };
+      const v = q.y - oy;
+      const s = d === Infinity ? 1 : d / (d - v * Math.sin(angle));
+      return { x: ox + (q.x - ox) * s, y: oy + v * Math.cos(angle) * s };
+    }
+    // From a stamp's own units to canvas pixels, standing straight up in the
+    // window from its foot at the size the map has there: its axes are the
+    // window's, taken back onto the tilted map, so perspective doesn't lean it.
+    // foot is in canvas pixels; k is canvas pixels per map unit.
+    function uprightAt(foot, k) {
+      if (!canvasTilt) return new DOMMatrix().translate(foot.x, foot.y).scale(k);
+      const at = tiltForward(foot);
+      const across = new DOMMatrix().rotate(-((canvasTilt.turn * 180) / Math.PI)).transformPoint(new DOMPoint(1, 0));
+      const side = tiltForward({ x: foot.x + across.x, y: foot.y + across.y });
+      const step = 10 * k * Math.hypot(side.x - at.x, side.y - at.y);
+      const right = untilt(at.x + step, at.y);
+      const down = untilt(at.x, at.y + step);
+      return new DOMMatrix([(right.x - foot.x) / 10, (right.y - foot.y) / 10, (down.x - foot.x) / 10, (down.y - foot.y) / 10, foot.x, foot.y]);
     }
     // With Depth above 0, trees are drawn from their volumes, lit from the
     // light angle: a trunk shaded across, crowns as balls with a highlight
@@ -13792,12 +13811,14 @@
       const base = c.getTransform();
       const dpr = window.devicePixelRatio || 1;
       const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
-      const spin = canvasTilt
-        ? new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(canvasTilt.spin).translate(-margin.x, -margin.y).scale(1 / dpr)
-        : new DOMMatrix();
-      const depth = (t) => spin.transformPoint(base.transformPoint(new DOMPoint(t.x, t.y))).y;
+      // Feet in canvas pixels, without the shift paintTilted gives the view.
+      const footOf = (t) => {
+        const q = base.transformPoint(new DOMPoint(t.x, t.y));
+        return { x: q.x / dpr - margin.x, y: q.y / dpr - margin.y };
+      };
+      const depth = (t) => tiltForward(footOf(t)).y;
       for (const t of [...stamps].sort((a, b) => depth(a) - depth(b))) {
-        c.setTransform(uprightAt(base.transformPoint(new DOMPoint(t.x, t.y)), spin, view.scale * dpr));
+        c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(uprightAt(footOf(t), view.scale)));
         const scale = treeScale(t);
         c.scale(scale, scale);
         const depth = Math.min(100, Math.max(0, Number(treeDepth.value) || 0)) / 100;
@@ -14092,10 +14113,9 @@
     }
     // The nearest tree drawn under a canvas point.
     function treeAt(s) {
-      const spin = canvasTilt?.spin ?? new DOMMatrix();
       return [...trees].reverse().find((t) => {
         const foot = toScreen(t);
-        const q = uprightAt(new DOMPoint(foot.x, foot.y), spin, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
+        const q = uprightAt(foot, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);
         const k = treeScale(t);
         return Math.abs(q.x) <= (w * k) / 2 && q.y <= 0 && q.y >= -h * k;
@@ -15168,7 +15188,7 @@
       'demo-buildings': {
         background: 'demo-park-no-buildings.svg',
         buildings: 'demo-park-buildings.svg',
-        settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#626d4b', 'board-color': '#7b8365' },
+        settings: { 'board-width': '1500', 'board-height': '1500', 'canvas-color': '#626d4b', 'board-color': '#7b8365', 'buildings-color': '#615348', 'buildings-side-color': '#3f362f' },
         paths: JSON.parse(document.getElementById('starter-paths').textContent),
       },
       'national-zoo': {

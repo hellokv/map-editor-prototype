@@ -2151,7 +2151,8 @@
       <span>Density</span>
       <input type="range" min="1" max="100" step="1" aria-label="Area density">
       <output></output>
-      <button type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
+      <button id="area-shuffle" type="button" aria-label="Shuffle placement"><span class="material-symbols-rounded">shuffle</span></button>
+      <button id="area-delete" type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
     </div>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
@@ -13962,7 +13963,7 @@
     }
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
-      const key = JSON.stringify([area.points, area.density, area.shape]);
+      const key = JSON.stringify([area.points, area.density, area.shape, area.seed]);
       if (area.stampsKey === key) return area.stamps;
       let state = area.seed;
       const random = () => {
@@ -14033,7 +14034,13 @@
       selectedArea = null;
       draw();
     }
-    areaPop.querySelector('button').addEventListener('click', deleteArea);
+    document.getElementById('area-delete').addEventListener('click', deleteArea);
+    // A new seed lays the area's stamps out afresh.
+    document.getElementById('area-shuffle').addEventListener('click', () => {
+      if (!selectedArea) return;
+      selectedArea.seed = Math.floor(Math.random() * 2 ** 31);
+      draw();
+    });
     window.addEventListener('keydown', (e) => {
       if (!selectedArea || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') {

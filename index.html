@@ -3157,6 +3157,10 @@
           Tree Shadows
           <input id="tree-shadows" class="switch" type="checkbox">
         </label>
+        <label id="tree-shadow-color-field" class="field" hidden>
+          Tree Shadow Color
+          <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
+        </label>
         <label id="shadow-length-field" class="field" hidden>
           Shadow Length
           <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
@@ -12694,11 +12698,14 @@
       const buildingShadows = buildings && buildingShadowsOn.checked;
       shown('buildings-shadows-field', buildings);
       shown('shadow-length-field', buildingShadows || treeShadowsOn.checked);
+      shown('tree-shadow-color-field', treeShadowsOn.checked);
       shown('buildings-light-field', buildings);
       shown('light-color-field', buildings && buildingLightOn.checked);
       shown('light-angle-field', buildingShadows || (buildings && buildingLightOn.checked) || treeShadowsOn.checked);
     }
     const treeShadowsOn = document.getElementById('tree-shadows');
+    const treeShadowColor = document.getElementById('tree-shadow-color');
+    treeShadowColor.addEventListener('input', draw);
     for (const input of [buildingShadowsOn, buildingLightOn, treeShadowsOn]) {
       input.addEventListener('change', () => {
         showShadowFields();
@@ -13310,7 +13317,7 @@
       }
       c.save();
       clipToImageRoom();
-      c.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      c.fillStyle = colorOf(treeShadowColor);
       c.fill(shadows);
       c.restore();
     }
@@ -13451,7 +13458,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-color', 'tree-color-variation', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

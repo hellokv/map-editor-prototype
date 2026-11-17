@@ -13005,12 +13005,12 @@
       part.wallKey = key;
       return (part.wall = wall);
     }
-    // Dome and angled tops rise above the roof, half the part's narrower
-    // side for a dome and 0.4 of it for an angled top; flat tops don't.
+    // Dome and angled tops rise above the roof by half the part's narrower
+    // side, so an angled top's faces slope at 45°; flat tops don't.
     function roofRise(part) {
       if (!part.roofStyle || part.roofStyle === 'flat') return 0;
       const r = partRect(part);
-      return Math.min(r.w, r.h) * (part.roofStyle === 'dome' ? 0.5 : 0.4);
+      return Math.min(r.w, r.h) * 0.5;
     }
     // The roof's outline at height t (0..1) up the top, within its rect r:
     // a dome shrinks it evenly; an angled top draws each side in by the same
@@ -13026,6 +13026,41 @@
         [w, h] = [r.w - inset, r.h - inset];
       }
       return [r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h];
+    }
+    // An angled top seen from above, in the part's pixels: a hip roof over
+    // its bounds, each side sloping in at 45° to a ridge along the long way.
+    // Each face is one flat colour, from the building's toward the sides' the
+    // more it faces away from the light.
+    function hipRoof(part) {
+      const { dx, dy } = lightFall();
+      const key = `${colorOf(buildingsColor)},${colorOf(buildingsSideColor)},${dx.toFixed(2)},${dy.toFixed(2)}`;
+      if (part.hipKey === key) return part.hip;
+      const { aw: w, ah: h } = part;
+      const hip = new OffscreenCanvas(w, h);
+      const c = hip.getContext('2d');
+      const half = Math.min(w, h) / 2;
+      const [a, b] = w >= h ? [[half, h / 2], [w - half, h / 2]] : [[w / 2, half], [w / 2, h - half]];
+      const faces = [
+        [[[0, 0], [w, 0], ...(w >= h ? [b, a] : [a])], [0, -1]],
+        [[[w, 0], [w, h], ...(w >= h ? [b] : [b, a])], [1, 0]],
+        [[[w, h], [0, h], ...(w >= h ? [a, b] : [b])], [0, 1]],
+        [[[0, h], [0, 0], ...(w >= h ? [a] : [a, b])], [-1, 0]],
+      ];
+      const mix = (from, to, t) => {
+        const ch = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
+        return `rgb(${[1, 3, 5].map((i) => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t)).join(', ')})`;
+      };
+      for (const [points, [nx, ny]] of faces) {
+        c.beginPath();
+        points.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+        c.closePath();
+        c.fillStyle = mix(buildingsColor.value, buildingsSideColor.value, 0.15 + 0.6 * ((1 + nx * dx + ny * dy) / 2));
+        c.fill();
+      }
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(part.roof, 0, 0);
+      part.hipKey = key;
+      return (part.hip = hip);
     }
     // A part's outline in black, for shading its top.
     function partDark(part) {
@@ -13204,12 +13239,21 @@
         }
         const rise = roofRise(part);
         if (rise) {
-          // The top as stacked layers shrinking to its peak, each darker the lower it sits.
+          // The top as stacked layers shrinking to its peak. A dome's are each
+          // darker the lower they sit; an angled top's show its faceted roof,
+          // each layer the part of it that lies at that height.
           const layers = Math.max(16, Math.ceil((rise * view.scale) / 1.5));
+          const hip = part.roofStyle === 'angled' && hipRoof(part);
           for (let i = 1; i < layers; i++) {
             const t = i / layers;
             c.setTransform(inCanvas(liftMatrix(tilted ? (partLift(part) + rise * t) * view.scale : 0)));
             const box = roofBox(part, r, t);
+            if (hip) {
+              const kx = part.aw / r.w;
+              const ky = part.ah / r.h;
+              c.drawImage(hip, (box[0] - r.x) * kx, (box[1] - r.y) * ky, box[2] * kx, box[3] * ky, ...box);
+              continue;
+            }
             c.drawImage(partTop(part), ...box);
             c.globalAlpha = (1 - t) * 0.4;
             c.drawImage(partDark(part), ...box);

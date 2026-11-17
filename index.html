@@ -12940,6 +12940,45 @@
       c.drawImage(shadowLayer, 0, 0);
       c.restore();
     }
+    // Where taller parts shade this part's roof: each one's outline swept
+    // along the light from the roof's height to its own top, as its ground
+    // shadow is from the ground, kept to the roof. Null when nothing falls on it.
+    function roofShadow(part) {
+      if (!buildingShadowsOn.checked) return null;
+      const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
+      const height = partLift(part);
+      const taller = buildingParts.filter((other) => other !== part && partLift(other) > height);
+      if (!stretch || !taller.length) return null;
+      const { dx, dy } = lightFall();
+      const r = partRect(part);
+      const kx = part.aw / r.w;
+      const ky = part.ah / r.h;
+      const shade = new OffscreenCanvas(part.aw, part.ah);
+      const c = shade.getContext('2d');
+      let any = false;
+      for (const other of taller) {
+        const o = partRect(other);
+        const from = height * stretch;
+        const to = partLift(other) * stretch;
+        const reach = (along) => [o.x + dx * along, o.y + dy * along];
+        const xs = [reach(from)[0], reach(to)[0]];
+        const ys = [reach(from)[1], reach(to)[1]];
+        if (Math.max(...xs) + o.w < r.x || Math.min(...xs) > r.x + r.w || Math.max(...ys) + o.h < r.y || Math.min(...ys) > r.y + r.h) continue;
+        any = true;
+        const slices = Math.max(1, Math.ceil(((to - from) * Math.max(kx, ky)) / 1.5));
+        for (let i = 0; i <= slices; i++) {
+          const [x, y] = reach(from + ((to - from) * i) / slices);
+          c.drawImage(other.roof, (x - r.x) * kx, (y - r.y) * ky, o.w * kx, o.h * ky);
+        }
+      }
+      if (!any) return null;
+      c.globalCompositeOperation = 'source-in';
+      c.fillStyle = '#000';
+      c.fillRect(0, 0, part.aw, part.ah);
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(part.roof, 0, 0);
+      return shade;
+    }
     // The edge of a part that faces the light: the part, less itself moved
     // away from the light, in the light colour. Cached until the light changes.
     const EDGE_WIDTH = 5;
@@ -12987,6 +13026,12 @@
             c.drawImage(partEdge(part), r.x, r.y, r.w, r.h);
             c.globalAlpha = 1;
           }
+        }
+        const shade = roofShadow(part);
+        if (shade) {
+          c.globalAlpha = 0.3;
+          c.drawImage(shade, r.x, r.y, r.w, r.h);
+          c.globalAlpha = 1;
         }
         if (part === selectedBuilding) {
           c.strokeStyle = '#2f80ed';

@@ -38,6 +38,35 @@
       position: absolute;
       pointer-events: none;
     }
+    #building-lift-pop {
+      position: absolute;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      transform: translate(-50%, calc(-100% - 12px));
+      font: 12px system-ui, sans-serif;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    }
+    #building-lift-pop[hidden] {
+      display: none;
+    }
+    #building-lift-pop output {
+      min-width: 64px;
+    }
+    #building-lift-pop button {
+      display: flex;
+      padding: 0;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    #building-lift-pop .material-symbols-rounded {
+      font-size: 18px;
+    }
     #place-suggestions {
       position: absolute;
       z-index: 5;
@@ -2027,6 +2056,12 @@
     </div>
     <canvas id="canvas"></canvas>
     <canvas id="tilt-view" hidden></canvas>
+    <div id="building-lift-pop" hidden>
+      <span>Lift</span>
+      <input type="range" min="0" max="300" step="1" aria-label="Building lift">
+      <output></output>
+      <button type="button" aria-label="Use the panel's lift"><span class="material-symbols-rounded">restart_alt</span></button>
+    </div>
     <div id="capture-box" hidden>
       <span data-handle="nw"></span><span data-handle="n"></span><span data-handle="ne"></span><span data-handle="e"></span>
       <span data-handle="se"></span><span data-handle="s"></span><span data-handle="sw"></span><span data-handle="w"></span>
@@ -5056,6 +5091,7 @@
         else paintView();
       });
       stackView.hidden = !stackOn();
+      showBuildingPop();
       updatePanel();
     }
 
@@ -12457,19 +12493,24 @@
     // Buildings: an image laid over the background, in the same place, so
     // the park and its buildings can be drawn and swapped apart.
     let buildingsImage = null;
-    // The buildings' silhouette in the side colour, for the walls under their lifted roofs.
-    let buildingsShade = null;
+    // Each shape at the top level of a buildings SVG, cut out so it can be
+    // lifted on its own; any other image is one part. Parts are cropped to
+    // what they cover, in the image's own pixels times PART_SCALE.
+    let buildingParts = [];
+    let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src) {
+    async function setBuildingsImage(src, lifts = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
+      buildingParts = img ? await splitBuildings(src, img) : [];
+      buildingParts.forEach((part, i) => { part.lift = lifts[i] ?? null; });
+      selectBuilding(null);
       buildingsImage = img;
       buildingsPreview.querySelector('img').src = img ? img.src : '';
       buildingsPreview.hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
       document.getElementById('buildings-lift-field').hidden = !img;
       document.getElementById('buildings-side-field').hidden = !img;
-      buildingsShade = null;
       if (!img) buildingsUpload.value = '';
       draw();
     }
@@ -12505,56 +12546,215 @@
     }
     const buildingsSideColor = document.getElementById('buildings-side-color');
     buildingsSideColor.addEventListener('input', () => {
-      buildingsShade = null;
+      for (const part of buildingParts) part.wall = null;
       draw();
     });
     const buildingsLiftInput = document.getElementById('buildings-lift');
     linkSlider(buildingsLiftInput);
     buildingsLiftInput.addEventListener('input', draw);
-    function shadedBuildings() {
-      if (buildingsShade) return buildingsShade;
-      const W = buildingsImage.naturalWidth;
-      const H = buildingsImage.naturalHeight;
-      const c = new OffscreenCanvas(W, H).getContext('2d');
-      c.drawImage(buildingsImage, 0, 0, W, H);
+    const PART_SCALE_LIMIT = 4096;
+    const NOT_DRAWN = ['defs', 'style', 'title', 'desc', 'metadata'];
+    async function splitBuildings(src, img) {
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const text = await fetch(src).then((r) => r.text()).catch(() => '');
+      const root = /<svg[\s>]/i.test(text.slice(0, 4096)) ? new DOMParser().parseFromString(text, 'image/svg+xml').documentElement : null;
+      if (!root || root.localName !== 'svg') return [cutPart(img, W, H)].filter(Boolean);
+      const shared = [...root.children].filter((el) => ['defs', 'style'].includes(el.localName));
+      const parts = [];
+      for (const el of [...root.children].filter((child) => !NOT_DRAWN.includes(child.localName))) {
+        const shell = root.cloneNode(false);
+        shell.setAttribute('width', W);
+        shell.setAttribute('height', H);
+        shell.append(...shared.map((node) => node.cloneNode(true)), el.cloneNode(true));
+        const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(shell)], { type: 'image/svg+xml' }));
+        const piece = await loadImage(url).catch(() => null);
+        URL.revokeObjectURL(url);
+        const part = piece && cutPart(piece, W, H);
+        if (part) parts.push(part);
+      }
+      return parts;
+    }
+    function cutPart(image, W, H) {
+      const k = Math.min(2, PART_SCALE_LIMIT / Math.max(W, H));
+      const cw = Math.round(W * k);
+      const ch = Math.round(H * k);
+      const full = new OffscreenCanvas(cw, ch).getContext('2d', { willReadFrequently: true });
+      full.drawImage(image, 0, 0, cw, ch);
+      const data = full.getImageData(0, 0, cw, ch).data;
+      let x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+      for (let y = 0; y < ch; y++) {
+        for (let x = 0; x < cw; x++) {
+          if (data[(y * cw + x) * 4 + 3] < 8) continue;
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+      if (x1 < 0) return null;
+      const aw = x1 - x0 + 1;
+      const ah = y1 - y0 + 1;
+      const roof = new OffscreenCanvas(aw, ah);
+      const rc = roof.getContext('2d');
+      rc.drawImage(full.canvas, x0, y0, aw, ah, 0, 0, aw, ah);
+      const alpha = new Uint8Array(aw * ah);
+      for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++) alpha[y * aw + x] = data[((y + y0) * cw + x + x0) * 4 + 3];
+      return { x: x0 / k, y: y0 / k, w: aw / k, h: ah / k, k, aw, ah, roof, alpha, wall: null, lift: null };
+    }
+    // A part's outline in the side colour, for the walls under its lifted roof.
+    function partWall(part) {
+      if (part.wall) return part.wall;
+      const wall = new OffscreenCanvas(part.aw, part.ah);
+      const c = wall.getContext('2d');
+      c.drawImage(part.roof, 0, 0);
       c.globalCompositeOperation = 'source-atop';
       c.fillStyle = colorOf(buildingsSideColor);
-      c.fillRect(0, 0, W, H);
-      return (buildingsShade = c.canvas);
+      c.fillRect(0, 0, part.aw, part.ah);
+      return (part.wall = wall);
     }
-    // Over a tilted map, a layer raised h screen pixels off it shows exactly
-    // as the flat layer scaled about the point under the camera, or, in
-    // isometric, shifted up by h tan(tilt). So lifted buildings are stacked
-    // slices, each moved a little further.
+    // A part's place on the map.
+    function partRect(part) {
+      const r = buildingsRect();
+      const sx = r.w / buildingsImage.naturalWidth;
+      const sy = r.h / buildingsImage.naturalHeight;
+      return { x: r.x + part.x * sx, y: r.y + part.y * sy, w: part.w * sx, h: part.h * sy };
+    }
+    const partLift = (part) => Math.max(0, part.lift ?? (Number(buildingsLiftInput.value) || 0));
+    // In canvas pixels, how a layer raised by raise screen pixels shows over
+    // the tilted map: scaled about the point under the camera, or, in
+    // isometric, shifted up by raise × tan(tilt).
+    function liftMatrix(raise) {
+      if (!canvasTilt?.angle || !raise) return new DOMMatrix();
+      const { ox, oy, d, angle, spin } = canvasTilt;
+      const height = d * Math.cos(angle);
+      const top = Math.min(raise, height * 0.9);
+      const lifted = d === Infinity
+        ? new DOMMatrix().translate(0, -top * Math.tan(angle))
+        : new DOMMatrix().translate(ox, oy + d * Math.sin(angle)).scale(height / (height - top)).translate(-ox, -oy - d * Math.sin(angle));
+      return spin.inverse().multiply(lifted).multiply(spin);
+    }
+    // Lifted buildings are stacked slices, each raised a little further,
+    // farthest part first so nearer ones stand in front.
     function drawLiftedBuildings(c) {
-      const lift = Math.max(0, Number(buildingsLiftInput.value) || 0) * view.scale;
-      if (!canvasTilt?.angle || !lift) {
+      const tilted = !!canvasTilt?.angle;
+      if (!tilted && !selectedBuilding) {
         c.save();
         clipToImageRoom();
         drawBuildings(c);
         c.restore();
         return;
       }
-      const { ox, oy, d, angle, spin } = canvasTilt;
-      const height = d * Math.cos(angle);
-      const fx = ox;
-      const fy = oy + d * Math.sin(angle);
-      const top = Math.min(lift, height * 0.9);
       const dpr = window.devicePixelRatio || 1;
       const base = c.getTransform();
-      const { x, y, w, h } = buildingsRect();
-      const slices = Math.max(1, Math.ceil((top * Math.max(1, Math.tan(angle))) / 1.5));
-      for (let i = 1; i <= slices; i++) {
-        const raise = (top * i) / slices;
-        const lifted = d === Infinity
-          ? new DOMMatrix().translate(0, -raise * Math.tan(angle))
-          : new DOMMatrix().translate(fx, fy).scale(height / (height - raise)).translate(-fx, -fy);
-        const { margin } = canvasTilt;
-        c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(spin.inverse()).multiply(lifted).multiply(spin).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(base));
-        c.drawImage(i === slices ? buildingsImage : shadedBuildings(), x, y, w, h);
+      const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
+      const inCanvas = (m) => new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(m).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(base);
+      const depth = (part) => {
+        const r = partRect(part);
+        const p = toScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+        return canvasTilt ? canvasTilt.spin.transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
+      };
+      const order = [...buildingParts].sort((a, b) => depth(a) - depth(b));
+      for (const part of order) {
+        const r = partRect(part);
+        const top = tilted ? partLift(part) * view.scale : 0;
+        const slices = top ? Math.max(1, Math.ceil((top * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 1;
+        for (let i = 1; i <= slices; i++) {
+          c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
+          c.drawImage(i === slices ? part.roof : partWall(part), r.x, r.y, r.w, r.h);
+        }
+        if (part === selectedBuilding) {
+          c.strokeStyle = '#2f80ed';
+          c.lineWidth = 2 / view.scale;
+          c.setLineDash([6 / view.scale, 4 / view.scale]);
+          c.strokeRect(r.x, r.y, r.w, r.h);
+          c.setLineDash([]);
+        }
       }
       c.setTransform(base);
     }
+    // The part under a canvas point, looking down through roofs and walls.
+    function buildingAt(s) {
+      if (!buildingsImage) return null;
+      const W = buildingsImage.naturalWidth;
+      const H = buildingsImage.naturalHeight;
+      const r = buildingsRect();
+      const hit = (part, p) => {
+        const u = ((p.x - r.x) * W) / r.w - part.x;
+        const v = ((p.y - r.y) * H) / r.h - part.y;
+        const x = Math.floor(u * part.k);
+        const y = Math.floor(v * part.k);
+        return x >= 0 && y >= 0 && x < part.aw && y < part.ah && part.alpha[y * part.aw + x] > 20;
+      };
+      const tilted = !!canvasTilt?.angle;
+      const near = [...buildingParts].reverse();
+      for (const t of tilted ? [1, 0.75, 0.5, 0.25, 0] : [0]) {
+        for (const part of near) {
+          const q = liftMatrix(partLift(part) * view.scale * t).inverse().transformPoint(new DOMPoint(s.x, s.y));
+          if (hit(part, toBackground(q.x, q.y))) return part;
+        }
+      }
+      return null;
+    }
+    const buildingPop = document.getElementById('building-lift-pop');
+    const buildingPopSlider = buildingPop.querySelector('input');
+    const buildingPopValue = buildingPop.querySelector('output');
+    function selectBuilding(part) {
+      selectedBuilding = part;
+      showBuildingPop();
+    }
+    // The selected part's lift slider sits over its roof, where it shows in the window.
+    function showBuildingPop() {
+      buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !buildingsImage;
+      if (buildingPop.hidden) return;
+      const lift = partLift(selectedBuilding);
+      buildingPopSlider.value = lift;
+      buildingPopValue.value = selectedBuilding.lift === null ? `${lift} (panel)` : lift;
+      const r = partRect(selectedBuilding);
+      const s = toScreen({ x: r.x + r.w / 2, y: r.y });
+      const roof = liftMatrix(canvasTilt?.angle ? lift * view.scale : 0).transformPoint(new DOMPoint(s.x, s.y));
+      const at = windowPoint(roof.x, roof.y);
+      buildingPop.style.left = `${at.x}px`;
+      buildingPop.style.top = `${at.y}px`;
+    }
+    // A canvas point where it shows in the window, after any turn and tilt.
+    function windowPoint(x, y) {
+      if (!canvasTilt) return { x, y };
+      const { margin } = canvasTilt;
+      const cs = getComputedStyle(tiltView);
+      const [ox, oy] = cs.transformOrigin.split(' ').map(parseFloat);
+      const M = new DOMMatrix().translate(ox, oy).multiply(new DOMMatrix(cs.transform)).translate(-ox, -oy);
+      const q = M.transformPoint(new DOMPoint(x + margin.x, y + margin.y, 0, 1));
+      return { x: q.x / q.w - margin.x, y: q.y / q.w - margin.y };
+    }
+    buildingPopSlider.addEventListener('input', () => {
+      if (!selectedBuilding) return;
+      selectedBuilding.lift = Number(buildingPopSlider.value);
+      draw();
+    });
+    buildingPop.querySelector('button').addEventListener('click', () => {
+      if (!selectedBuilding) return;
+      selectedBuilding.lift = null;
+      draw();
+    });
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage) return;
+      const part = buildingAt(canvasPoint(e));
+      if (!part) {
+        if (selectedBuilding) selectBuilding(null);
+        return;
+      }
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      selectBuilding(part);
+      draw();
+    }, { capture: true });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && selectedBuilding) {
+        selectBuilding(null);
+        draw();
+      }
+    });
     let canvasTilt = null;
     // Turned or tilted, the map is painted on #tilt-view instead: a canvas
     // reaching past the window on every side, so what the turn brings into
@@ -12749,6 +12949,7 @@
       file.images = await Promise.all(images.map(imageData));
       file.background = backgroundImage && await imageData(backgroundImage);
       file.buildings = buildingsImage && await imageData(buildingsImage);
+      file.buildingLifts = buildingParts.map((part) => part.lift);
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -12818,7 +13019,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null);
+      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? []);
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;

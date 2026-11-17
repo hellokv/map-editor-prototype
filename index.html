@@ -42,8 +42,8 @@
       position: absolute;
       z-index: 6;
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       padding: 6px 10px;
       transform: translate(-50%, calc(-100% - 12px));
       font: 12px system-ui, sans-serif;
@@ -53,6 +53,22 @@
     }
     #building-lift-pop[hidden] {
       display: none;
+    }
+    #building-lift-pop .pop-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #building-tops button {
+      padding: 3px 8px;
+      font: inherit;
+      border: 1px solid #e3e1dc;
+      border-radius: 6px;
+    }
+    #building-tops button[aria-pressed="true"] {
+      color: #fff;
+      background: #000;
+      border-color: #000;
     }
     #building-lift-pop output {
       min-width: 64px;
@@ -2100,10 +2116,17 @@
     <canvas id="canvas"></canvas>
     <canvas id="tilt-view" hidden></canvas>
     <div id="building-lift-pop" hidden>
-      <span>Lift</span>
-      <input type="range" min="0" max="300" step="1" aria-label="Building lift">
-      <output></output>
-      <button type="button" aria-label="Use the panel's lift"><span class="material-symbols-rounded">restart_alt</span></button>
+      <div class="pop-row">
+        <span>Lift</span>
+        <input type="range" min="0" max="300" step="1" aria-label="Building lift">
+        <output></output>
+        <button id="building-lift-reset" type="button" aria-label="Use the panel's lift"><span class="material-symbols-rounded">restart_alt</span></button>
+      </div>
+      <div id="building-tops" class="pop-row">
+        <button type="button" data-top="flat" aria-pressed="true">Flat Top</button>
+        <button type="button" data-top="dome" aria-pressed="false">Dome Top</button>
+        <button type="button" data-top="angled" aria-pressed="false">Angled Top</button>
+      </div>
     </div>
     <div id="capture-box" hidden>
       <span data-handle="nw"></span><span data-handle="n"></span><span data-handle="ne"></span><span data-handle="e"></span>
@@ -12666,10 +12689,13 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, lifts = []) {
+    async function setBuildingsImage(src, lifts = [], tops = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
-      buildingParts.forEach((part, i) => { part.lift = lifts[i] ?? null; });
+      buildingParts.forEach((part, i) => {
+        part.lift = lifts[i] ?? null;
+        part.roofStyle = tops[i] ?? 'flat';
+      });
       selectBuilding(null);
       buildingsImage = img;
       buildingsPreview.querySelector('img').src = img ? img.src : '';
@@ -12979,6 +13005,39 @@
       part.wallKey = key;
       return (part.wall = wall);
     }
+    // Dome and angled tops rise above the roof, half the part's narrower
+    // side for a dome and 0.4 of it for an angled top; flat tops don't.
+    function roofRise(part) {
+      if (!part.roofStyle || part.roofStyle === 'flat') return 0;
+      const r = partRect(part);
+      return Math.min(r.w, r.h) * (part.roofStyle === 'dome' ? 0.5 : 0.4);
+    }
+    // The roof's outline at height t (0..1) up the top, within its rect r:
+    // a dome shrinks it evenly; an angled top draws each side in by the same
+    // distance, so a long building closes to a ridge.
+    function roofBox(part, r, t) {
+      let w;
+      let h;
+      if (part.roofStyle === 'dome') {
+        const f = Math.sqrt(1 - t * t);
+        [w, h] = [r.w * f, r.h * f];
+      } else {
+        const inset = Math.min(r.w, r.h) * t;
+        [w, h] = [r.w - inset, r.h - inset];
+      }
+      return [r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h];
+    }
+    // A part's outline in black, for shading its top.
+    function partDark(part) {
+      if (part.dark) return part.dark;
+      const dark = new OffscreenCanvas(part.aw, part.ah);
+      const c = dark.getContext('2d');
+      c.drawImage(part.roof, 0, 0);
+      c.globalCompositeOperation = 'source-in';
+      c.fillStyle = '#000';
+      c.fillRect(0, 0, part.aw, part.ah);
+      return (part.dark = dark);
+    }
     // A part's place on the map.
     function partRect(part) {
       const r = buildingsRect();
@@ -13028,6 +13087,14 @@
         for (let i = 0; i <= slices; i++) {
           const along = (length * i) / slices;
           s.drawImage(part.roof, r.x + dx * along, r.y + dy * along, r.w, r.h);
+        }
+        const rise = roofRise(part);
+        const steps = Math.ceil((rise * stretch * view.scale) / 1.5);
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps;
+          const along = length + rise * t * stretch;
+          const [x, y, w, h] = roofBox(part, r, t);
+          s.drawImage(part.roof, x + dx * along, y + dy * along, w, h);
         }
       }
       s.setTransform(1, 0, 0, 1, 0, 0);
@@ -13135,6 +13202,20 @@
           c.drawImage(shade, r.x, r.y, r.w, r.h);
           c.globalAlpha = 1;
         }
+        const rise = roofRise(part);
+        if (rise) {
+          // The top as stacked layers shrinking to its peak, each darker the lower it sits.
+          const layers = Math.max(16, Math.ceil((rise * view.scale) / 1.5));
+          for (let i = 1; i < layers; i++) {
+            const t = i / layers;
+            c.setTransform(inCanvas(liftMatrix(tilted ? (partLift(part) + rise * t) * view.scale : 0)));
+            const box = roofBox(part, r, t);
+            c.drawImage(partTop(part), ...box);
+            c.globalAlpha = (1 - t) * 0.4;
+            c.drawImage(partDark(part), ...box);
+            c.globalAlpha = 1;
+          }
+        }
         if (part === selectedBuilding) {
           c.strokeStyle = '#2f80ed';
           c.lineWidth = 2 / view.scale;
@@ -13182,9 +13263,12 @@
       const lift = partLift(selectedBuilding);
       buildingPopSlider.value = lift;
       buildingPopValue.value = selectedBuilding.lift === null ? `${lift} (panel)` : lift;
+      for (const button of document.querySelectorAll('#building-tops button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.top === (selectedBuilding.roofStyle ?? 'flat')));
+      }
       const r = partRect(selectedBuilding);
       const s = toScreen({ x: r.x + r.w / 2, y: r.y });
-      const roof = liftMatrix(canvasTilt?.angle ? lift * view.scale : 0).transformPoint(new DOMPoint(s.x, s.y));
+      const roof = liftMatrix(canvasTilt?.angle ? (lift + roofRise(selectedBuilding)) * view.scale : 0).transformPoint(new DOMPoint(s.x, s.y));
       const at = windowPoint(roof.x, roof.y);
       buildingPop.style.left = `${at.x}px`;
       buildingPop.style.top = `${at.y}px`;
@@ -13204,7 +13288,14 @@
       selectedBuilding.lift = Number(buildingPopSlider.value);
       draw();
     });
-    buildingPop.querySelector('button').addEventListener('click', () => {
+    for (const button of document.querySelectorAll('#building-tops button')) {
+      button.addEventListener('click', () => {
+        if (!selectedBuilding) return;
+        selectedBuilding.roofStyle = button.dataset.top;
+        draw();
+      });
+    }
+    document.getElementById('building-lift-reset').addEventListener('click', () => {
       if (!selectedBuilding) return;
       selectedBuilding.lift = null;
       draw();
@@ -13702,6 +13793,7 @@
       file.background = backgroundImage && await imageData(backgroundImage);
       file.buildings = buildingsImage && await imageData(buildingsImage);
       file.buildingLifts = buildingParts.map((part) => part.lift);
+      file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
@@ -13772,7 +13864,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? []);
       trees = file.trees ?? [];
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;

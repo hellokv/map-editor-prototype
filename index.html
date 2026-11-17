@@ -1295,6 +1295,10 @@
     :is(#panel, #style-panel, #settings-panel).label-look #panel-close {
       margin-left: 0;
     }
+    /* The Tree tool's panel is its options alone. */
+    #background-panel.tree-mode > :not(#tree-shapes) {
+      display: none !important;
+    }
     .tree-shape-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -3066,6 +3070,14 @@
           Color Variation
           <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
         </label>
+        <label id="tree-shadows-field" class="field">
+          Tree Shadows
+          <input id="tree-shadows" class="switch" type="checkbox">
+        </label>
+        <label id="tree-shadow-color-field" class="field" hidden>
+          Tree Shadow Color
+          <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
+        </label>
       </div>
       <div class="label-section background-settings">
         <label id="background-show-labels-field" class="field">
@@ -3152,14 +3164,6 @@
         <label id="buildings-shadows-field" class="field" hidden>
           Building Shadows
           <input id="buildings-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="tree-shadows-field" class="field">
-          Tree Shadows
-          <input id="tree-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="tree-shadow-color-field" class="field" hidden>
-          Tree Shadow Color
-          <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
         </label>
         <label id="shadow-length-field" class="field" hidden>
           Shadow Length
@@ -3693,6 +3697,7 @@
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
+      document.getElementById('background-panel').classList.toggle('tree-mode', name === 'tree');
       shapeMenu.hidden = name !== 'shapes';
       if (!shapeMenu.hidden) {
         const modeMenu = document.getElementById('mode-menu');
@@ -3703,7 +3708,10 @@
       updateCursor();
     }
     for (const button of backgroundToolButtons) {
-      button.addEventListener('click', () => setBackgroundTool(button.dataset.backgroundTool));
+      button.addEventListener('click', () => {
+        setBackgroundTool(button.dataset.backgroundTool);
+        draw();
+      });
     }
     for (const button of shapeButtons) {
       button.addEventListener('click', () => {
@@ -8573,10 +8581,12 @@
       sketchSelected = null;
       selected = null;
       meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
+      if (backgroundTool === 'tree') setBackgroundTool('select');
       draw();
       updateCursor();
     });
     let hadSelection = false;
+    let hadTreeMode = false;
 
     // Stand-ins for the places labels and list items will belong to; a
     // place is one of these names, absent when there's none.
@@ -8869,7 +8879,10 @@
       resetPathsButton.hidden = !defaultPaths();
       showSettingsButton();
       const selecting = hasSelection();
-      document.getElementById('panel-back').hidden = !selecting;
+      const treeMode = !backgroundTools.hidden && backgroundTool === 'tree';
+      document.getElementById('panel-back').hidden = !selecting && !treeMode;
+      if (treeMode && !hadTreeMode) setPanelOpen(true);
+      hadTreeMode = treeMode;
       // A closed panel opens when something comes to be selected.
       if (selecting && !hadSelection) setPanelOpen(true);
       hadSelection = selecting;
@@ -14824,6 +14837,7 @@
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
         if (frameEditing) return 'Inner Frame';
+        if (backgroundTool === 'tree') return 'Trees';
         return 'Background';
       }
       if (selected?.area) return 'Area';

@@ -3044,12 +3044,12 @@
           <span class="slider"><input id="map-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Rotation"></span>
         </label>
         <div class="field">
-          Projection
           <div id="map-projection" class="toggle-group">
-            <button type="button" data-isometric="false" aria-pressed="true">Perspective</button>
-            <button type="button" data-isometric="true" aria-pressed="false">Isometric</button>
+            <button type="button" data-view="perspective" aria-pressed="true">Perspective</button>
+            <button type="button" data-view="isometric" aria-pressed="false">Isometric</button>
+            <button type="button" data-view="buildings" aria-pressed="false">Buildings Only</button>
           </div>
-          <input id="map-isometric" type="checkbox" hidden>
+          <input id="map-view" type="text" value="perspective" hidden>
         </div>
         <div id="satellite-reference-field" class="field" hidden>
           Satellite Reference
@@ -12557,17 +12557,19 @@
     const mapRotationInput = document.getElementById('map-rotation');
     linkSlider(mapRotationInput);
     mapRotationInput.addEventListener('input', draw);
-    const mapIsometric = document.getElementById('map-isometric');
+    // Perspective and Isometric tilt the whole map; Buildings Only leaves
+    // the map flat and leans just the buildings, by the same tilt.
+    const mapView = document.getElementById('map-view');
     const projectionButtons = document.querySelectorAll('#map-projection button');
-    mapIsometric.addEventListener('change', () => {
-      for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.isometric === String(mapIsometric.checked)));
+    mapView.addEventListener('change', () => {
+      for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.view === mapView.value));
       draw();
     });
     for (const button of projectionButtons) {
       button.addEventListener('click', () => {
         button.blur();
-        mapIsometric.checked = button.dataset.isometric === 'true';
-        mapIsometric.dispatchEvent(new Event('change'));
+        mapView.value = button.dataset.view;
+        mapView.dispatchEvent(new Event('change'));
       });
     }
     const buildingsColor = document.getElementById('buildings-color');
@@ -13002,8 +13004,10 @@
       const oy = Math.max(...ys);
       // The camera stands back twice the box's height on screen; isometric
       // has it infinitely far away.
-      const d = mapIsometric.checked ? Infinity : Math.max(400, 2 * (oy - Math.min(...ys)));
-      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin };
+      const d = mapView.value === 'isometric' ? Infinity : Math.max(400, 2 * (oy - Math.min(...ys)));
+      // flat: the map itself isn't tipped, and angle is only for the buildings' lean.
+      const flat = mapView.value === 'buildings';
+      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat };
       // The window's corners, taken back onto the flat map, bound what shows.
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
@@ -13026,8 +13030,8 @@
       }
       tiltView.style.transformOrigin = `${ox + margin.x}px ${oy + margin.y}px`;
       tiltView.style.transform = [
-        d === Infinity || !deg ? '' : `perspective(${d}px)`,
-        `rotateX(${deg}deg)`,
+        d === Infinity || !deg || flat ? '' : `perspective(${d}px)`,
+        `rotateX(${flat ? 0 : deg}deg)`,
         `translate(${cx - ox}px, ${cy - oy}px) rotate(${turn}deg) translate(${ox - cx}px, ${oy - cy}px)`,
       ].join(' ');
     }
@@ -13058,7 +13062,9 @@
     // A point in the window, in the flat map's canvas pixels. Points above a
     // perspective horizon have none; they're held just below it.
     function untilt(X, Y) {
-      const { ox, oy, d, angle, spin } = canvasTilt;
+      const { ox, oy, spin, flat } = canvasTilt;
+      const d = flat ? Infinity : canvasTilt.d;
+      const angle = flat ? 0 : canvasTilt.angle;
       const w = d === Infinity ? Y - oy : Math.max(Y - oy, (-0.9 * d) / Math.tan(angle || 1e-9));
       let p;
       if (d === Infinity) p = new DOMPoint(X, oy + w / Math.cos(angle));
@@ -13094,7 +13100,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

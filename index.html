@@ -3086,6 +3086,10 @@
           Lift
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
         </label>
+        <label id="buildings-color-field" class="field" hidden>
+          Building Color
+          <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
+        </label>
         <label id="buildings-side-field" class="field" hidden>
           Building Sides
           <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
@@ -12531,6 +12535,7 @@
       document.getElementById('buildings-upload-field').hidden = !!img;
       document.getElementById('buildings-lift-field').hidden = !img;
       document.getElementById('buildings-side-field').hidden = !img;
+      document.getElementById('buildings-color-field').hidden = !img;
       showShadowFields();
       if (!img) buildingsUpload.value = '';
       draw();
@@ -12564,6 +12569,22 @@
         mapIsometric.checked = button.dataset.isometric === 'true';
         mapIsometric.dispatchEvent(new Event('change'));
       });
+    }
+    const buildingsColor = document.getElementById('buildings-color');
+    buildingsColor.addEventListener('input', draw);
+    // A part's top in the building colour, laid over its own colours as
+    // strongly as the colour's opacity.
+    function partTop(part) {
+      const color = colorOf(buildingsColor);
+      if (part.topColor === color) return part.top;
+      const top = new OffscreenCanvas(part.aw, part.ah);
+      const c = top.getContext('2d');
+      c.drawImage(part.roof, 0, 0);
+      c.globalCompositeOperation = 'source-atop';
+      c.fillStyle = color;
+      c.fillRect(0, 0, part.aw, part.ah);
+      part.topColor = color;
+      return (part.top = top);
     }
     const buildingsSideColor = document.getElementById('buildings-side-color');
     buildingsSideColor.addEventListener('input', () => {
@@ -12836,13 +12857,6 @@
       drawBuildingShadows(c);
       const tilted = !!canvasTilt?.angle;
       const lit = buildingLightOn.checked;
-      if (!tilted && !selectedBuilding && !lit) {
-        c.save();
-        clipToImageRoom();
-        drawBuildings(c);
-        c.restore();
-        return;
-      }
       const dpr = window.devicePixelRatio || 1;
       const base = c.getTransform();
       const margin = canvasTilt?.margin ?? { x: 0, y: 0 };
@@ -12859,7 +12873,7 @@
         const slices = top ? Math.max(1, Math.ceil((top * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 1;
         for (let i = 1; i <= slices; i++) {
           c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
-          c.drawImage(i === slices ? part.roof : partWall(part, lit), r.x, r.y, r.w, r.h);
+          c.drawImage(i === slices ? partTop(part) : partWall(part, lit), r.x, r.y, r.w, r.h);
           if (lit && i === slices) {
             c.globalAlpha = 0.6;
             c.drawImage(partEdge(part), r.x, r.y, r.w, r.h);
@@ -13080,7 +13094,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-isometric', 'buildings-lift', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

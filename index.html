@@ -3105,6 +3105,12 @@
           Depth
           <span class="slider"><span class="percent-field"><input id="tree-depth" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Tree depth"></span>
         </label>
+        <button id="landscape-fill" class="new-style" type="button" aria-pressed="false">Fill Area<span class="material-symbols-rounded">pentagon</span></button>
+        <label id="landscape-fill-spacing-field" class="field" hidden>
+          Spacing
+          <span class="slider"><input id="landscape-fill-spacing" type="number" min="15" max="200" step="1" value="45"><input type="range" min="15" max="200" step="1" value="45" aria-label="Fill spacing"></span>
+        </label>
+        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels.</p>
         <label class="field">
           Tree Size
           <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
@@ -3794,6 +3800,7 @@
     for (const button of backgroundToolButtons) {
       button.addEventListener('click', () => {
         setBackgroundTool(button.dataset.backgroundTool);
+        if (fillingArea && button.dataset.backgroundTool !== 'tree') setFilling(false);
         draw();
       });
     }
@@ -5116,6 +5123,9 @@
     let ctx = canvas.getContext('2d');
     // Trees stamped on the map, each by the map point it stands on.
     let trees = [];
+    // Fill Area: the outline being clicked out, in map units.
+    let fillingArea = false;
+    let fillDraft = [];
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -7397,6 +7407,7 @@
       if (trees.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor);
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (trees.length && !noBackground) drawTrees(ctx);
+      if (fillDraft.length) drawFillDraft(ctx);
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart && !stackPart) {
         const r = satelliteRect();
         ctx.save();
@@ -10741,6 +10752,12 @@
         drawSketchPoint(sketchTarget(s));
         return;
       }
+      if (!inLabels && backgroundTool === 'tree' && fillingArea) {
+        const first = fillDraft[0];
+        if (fillDraft.length >= 3 && first && Math.hypot((first.x - p.x) * view.scale, (first.y - p.y) * view.scale) < 10) fillArea();
+        else fillDraft.push({ x: p.x, y: p.y });
+        return;
+      }
       if (!inLabels && backgroundTool === 'tree') {
         // A click on a tree takes it away; anywhere else plants one.
         const tree = treeAt(s);
@@ -13467,7 +13484,7 @@
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage) return;
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool === 'tree') return;
       const part = buildingAt(canvasPoint(e));
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
@@ -13861,6 +13878,64 @@
       clipToImageRoom();
       c.fillStyle = colorOf(color);
       c.fill(shadows);
+      c.restore();
+    }
+    // Fill Area scatters the chosen stamp over a clicked-out outline: a grid
+    // at the spacing, each point nudged up to 40% of it at random, so the
+    // stamps fall evenly without lining up.
+    const fillButton = document.getElementById('landscape-fill');
+    const fillSpacing = document.getElementById('landscape-fill-spacing');
+    linkSlider(fillSpacing);
+    function setFilling(on) {
+      fillingArea = on;
+      fillDraft = [];
+      fillButton.setAttribute('aria-pressed', String(on));
+      document.getElementById('landscape-fill-spacing-field').hidden = !on;
+      document.getElementById('landscape-fill-hint').hidden = !on;
+      draw();
+    }
+    fillButton.addEventListener('click', () => {
+      fillButton.blur();
+      setFilling(!fillingArea);
+    });
+    window.addEventListener('keydown', (e) => {
+      if (!fillingArea || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Escape') setFilling(false);
+      if (e.key === 'Enter' && fillDraft.length >= 3) fillArea();
+    });
+    function fillArea() {
+      const outline = new Path2D();
+      fillDraft.forEach(({ x, y }, i) => (i ? outline.lineTo(x, y) : outline.moveTo(x, y)));
+      outline.closePath();
+      const probe = new OffscreenCanvas(1, 1).getContext('2d');
+      const xs = fillDraft.map((q) => q.x);
+      const ys = fillDraft.map((q) => q.y);
+      const gap = Math.max(5, Number(fillSpacing.value) || 45);
+      const added = [];
+      for (let y = Math.min(...ys); y <= Math.max(...ys); y += gap) {
+        for (let x = Math.min(...xs); x <= Math.max(...xs); x += gap) {
+          const at = { x: x + (Math.random() - 0.5) * 0.8 * gap, y: y + (Math.random() - 0.5) * 0.8 * gap };
+          if (probe.isPointInPath(outline, at.x, at.y)) added.push({ ...at, shape: treeShape });
+        }
+      }
+      trees = [...trees, ...added];
+      setFilling(false);
+    }
+    function drawFillDraft(c) {
+      c.save();
+      c.beginPath();
+      fillDraft.forEach(({ x, y }, i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+      c.strokeStyle = '#2f80ed';
+      c.lineWidth = 2 / view.scale;
+      c.setLineDash([6 / view.scale, 4 / view.scale]);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = '#2f80ed';
+      for (const { x, y } of fillDraft) {
+        c.beginPath();
+        c.arc(x, y, 4 / view.scale, 0, Math.PI * 2);
+        c.fill();
+      }
       c.restore();
     }
     // The nearest tree drawn under a canvas point.

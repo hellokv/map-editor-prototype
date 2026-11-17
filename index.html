@@ -1359,7 +1359,9 @@
       margin-left: 0;
     }
     /* The Tree tool's panel is its options alone. */
-    #background-panel.tree-mode > :not(#tree-shapes, #rock-shapes) {
+    #background-panel:not([data-tab="base"]) > .tab-base,
+    #background-panel:not([data-tab="buildings"]) > .tab-buildings,
+    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #rock-shapes) {
       display: none !important;
     }
     .tree-shape-grid {
@@ -2291,9 +2293,6 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
-        <button type="button" data-background-tool="tree" data-shortcut="T" aria-label="Landscape" aria-pressed="false">
-          <span class="material-symbols-rounded">nature</span>
-        </button>
 
       </div>
       <div id="path-tools">
@@ -3133,8 +3132,58 @@
         <button id="delete-all-paths" class="new-style" type="button">Delete All Paths<span class="material-symbols-rounded">delete</span></button>
       </div>
     </div>
-    <div id="background-panel" hidden>
-      <div id="tree-shapes" class="label-section" hidden>
+    <div id="background-panel" data-tab="base" hidden>
+      <div id="background-tabs" class="label-section">
+        <div class="toggle-group">
+          <button type="button" data-tab="base" aria-pressed="true">Base</button>
+          <button type="button" data-tab="buildings" aria-pressed="false">Buildings</button>
+          <button type="button" data-tab="landscape" aria-pressed="false">Landscape</button>
+        </div>
+      </div>
+      <div class="label-section tab-buildings">
+        <label id="buildings-upload-field" class="field">
+          Buildings
+          <input id="buildings-upload" type="file" accept="image/*" hidden>
+          <span class="material-symbols-rounded">upload</span>
+        </label>
+        <div id="buildings-preview" hidden>
+          <img alt="Buildings image">
+          <button id="buildings-delete" type="button" aria-label="Delete buildings image">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+        <label id="buildings-lift-field" class="field" hidden>
+          Lift
+          <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
+        </label>
+        <label id="buildings-color-field" class="field" hidden>
+          Building Color
+          <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
+        </label>
+        <label id="buildings-rotation-field" class="field" hidden>
+          Building Rotation
+          <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
+          <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
+          <input id="buildings-rotate" type="checkbox" hidden>
+        </label>
+        <label id="buildings-side-field" class="field" hidden>
+          Building Sides
+          <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
+        </label>
+        <label id="buildings-shadows-field" class="field" hidden>
+          Building Shadows
+          <input id="buildings-shadows" class="switch" type="checkbox">
+        </label>
+        <label id="buildings-light-field" class="field" hidden>
+          Light Source
+          <input id="buildings-light" class="switch" type="checkbox">
+        </label>
+        <label id="light-color-field" class="field" hidden>
+          Light Color
+          <span class="color-field"><input id="light-color" type="color" value="#fff1cc"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Light opacity">%</span>
+        </label>
+      </div>
+      <div id="tree-shapes" class="label-section tab-landscape" hidden>
         <div class="field">Trees</div>
         <div class="tree-shape-grid"></div>
         <label class="field">
@@ -3178,7 +3227,7 @@
           <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
         </label>
       </div>
-      <div id="rock-shapes" class="label-section" hidden>
+      <div id="rock-shapes" class="label-section tab-landscape" hidden>
         <div class="field">Rocks</div>
         <div class="tree-shape-grid"></div>
         <label class="field">
@@ -3206,7 +3255,7 @@
           <span class="color-field"><input id="rock-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Rock shadow opacity">%</span>
         </label>
       </div>
-      <div class="label-section background-settings">
+      <div class="label-section background-settings tab-base">
         <label id="background-show-labels-field" class="field">
           Show Labels
           <input id="background-show-labels" class="switch" type="checkbox" checked>
@@ -3237,6 +3286,14 @@
           </div>
           <input id="map-view" type="text" value="perspective" hidden>
         </div>
+        <label id="shadow-length-field" class="field" hidden>
+          Shadow Length
+          <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
+        </label>
+        <label id="light-angle-field" class="field" hidden>
+          Light Angle
+          <span class="slider"><input id="light-angle" type="number" min="0" max="360" step="1" value="315"><input type="range" min="0" max="360" step="1" value="315" aria-label="Light angle"></span>
+        </label>
         <div id="satellite-reference-field" class="field" hidden>
           Satellite Reference
           <span class="field-end">
@@ -3245,7 +3302,7 @@
           </span>
         </div>
       </div>
-      <div class="label-section background-settings">
+      <div class="label-section background-settings tab-base">
         <label id="image-upload-field" class="field">
           Background Image
           <input id="image-upload" type="file" accept="image/*" hidden>
@@ -3257,55 +3314,6 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
-        <label id="buildings-upload-field" class="field">
-          Buildings
-          <input id="buildings-upload" type="file" accept="image/*" hidden>
-          <span class="material-symbols-rounded">upload</span>
-        </label>
-        <div id="buildings-preview" hidden>
-          <img alt="Buildings image">
-          <button id="buildings-delete" type="button" aria-label="Delete buildings image">
-            <span class="material-symbols-rounded">delete</span>
-          </button>
-        </div>
-        <label id="buildings-lift-field" class="field" hidden>
-          Lift
-          <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
-        </label>
-        <label id="buildings-color-field" class="field" hidden>
-          Building Color
-          <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
-        </label>
-        <label id="buildings-rotation-field" class="field" hidden>
-          Building Rotation
-          <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
-          <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
-          <input id="buildings-rotate" type="checkbox" hidden>
-        </label>
-        <label id="buildings-side-field" class="field" hidden>
-          Building Sides
-          <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
-        </label>
-        <label id="buildings-shadows-field" class="field" hidden>
-          Building Shadows
-          <input id="buildings-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="shadow-length-field" class="field" hidden>
-          Shadow Length
-          <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
-        </label>
-        <label id="buildings-light-field" class="field" hidden>
-          Light Source
-          <input id="buildings-light" class="switch" type="checkbox">
-        </label>
-        <label id="light-color-field" class="field" hidden>
-          Light Color
-          <span class="color-field"><input id="light-color" type="color" value="#fff1cc"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Light opacity">%</span>
-        </label>
-        <label id="light-angle-field" class="field" hidden>
-          Light Angle
-          <span class="slider"><input id="light-angle" type="number" min="0" max="360" step="1" value="315"><input type="range" min="0" max="360" step="1" value="315" aria-label="Light angle"></span>
-        </label>
         <div class="field-pair">
           <label class="field">
             Inside
@@ -3815,6 +3823,22 @@
     const soleShape = () => (selectedShapes.length === 1 ? selectedShapes[0] : null);
 
     // The shape options sit just right of the Shapes tool button.
+    function showBackgroundTab(tab) {
+      document.getElementById('background-panel').dataset.tab = tab;
+      for (const button of document.querySelectorAll('#background-tabs button')) button.setAttribute('aria-pressed', String(button.dataset.tab === tab));
+    }
+    for (const button of document.querySelectorAll('#background-tabs button')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        const { tab } = button.dataset;
+        if (tab === 'landscape') setBackgroundTool('tree');
+        else {
+          if (backgroundTool === 'tree') setBackgroundTool('select');
+          showBackgroundTab(tab);
+        }
+        draw();
+      });
+    }
     function setBackgroundTool(name) {
       backgroundTool = name;
       sketchActive = null;
@@ -3823,7 +3847,11 @@
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
       document.getElementById('rock-shapes').hidden = name !== 'tree';
-      document.getElementById('background-panel').classList.toggle('tree-mode', name === 'tree');
+      const panel = document.getElementById('background-panel');
+      panel.classList.toggle('tree-mode', name === 'tree');
+      // The Landscape tab is the Landscape tool; leaving one leaves the other.
+      if (name === 'tree') showBackgroundTab('landscape');
+      else if (panel.dataset.tab === 'landscape') showBackgroundTab('base');
       shapeMenu.hidden = name !== 'shapes';
       if (!shapeMenu.hidden) {
         const modeMenu = document.getElementById('mode-menu');
@@ -8720,12 +8748,10 @@
       sketchSelected = null;
       selected = null;
       meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
-      if (backgroundTool === 'tree') setBackgroundTool('select');
       draw();
       updateCursor();
     });
     let hadSelection = false;
-    let hadTreeMode = false;
 
     // Stand-ins for the places labels and list items will belong to; a
     // place is one of these names, absent when there's none.
@@ -9018,10 +9044,7 @@
       resetPathsButton.hidden = !defaultPaths();
       showSettingsButton();
       const selecting = hasSelection();
-      const treeMode = !backgroundTools.hidden && backgroundTool === 'tree';
-      document.getElementById('panel-back').hidden = !selecting && !treeMode;
-      if (treeMode && !hadTreeMode) setPanelOpen(true);
-      hadTreeMode = treeMode;
+      document.getElementById('panel-back').hidden = !selecting;
       // A closed panel opens when something comes to be selected.
       if (selecting && !hadSelection) setPanelOpen(true);
       hadSelection = selecting;
@@ -15625,7 +15648,6 @@
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
         if (frameEditing) return 'Inner Frame';
-        if (backgroundTool === 'tree') return 'Landscape';
         return 'Background';
       }
       if (selected?.area) return 'Area';

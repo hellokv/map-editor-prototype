@@ -3104,7 +3104,7 @@
         </label>
         <label id="light-color-field" class="field" hidden>
           Light Color
-          <span class="color-field"><input id="light-color" type="color" value="#fff1cc"></span>
+          <span class="color-field"><input id="light-color" type="color" value="#fff1cc"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Light opacity">%</span>
         </label>
         <label id="light-angle-field" class="field" hidden>
           Light Angle
@@ -12660,7 +12660,9 @@
       const image = c.getImageData(0, 0, aw, ah);
       const px = image.data;
       const { dx, dy } = lightFall();
-      const [lr, lg, lb] = [1, 3, 5].map((i) => parseInt(colorOf(lightColor).slice(i, i + 2), 16));
+      const light = colorOf(lightColor);
+      const [lr, lg, lb] = [1, 3, 5].map((i) => parseInt(light.slice(i, i + 2), 16));
+      const strength = WALL_LIGHT * (light.length > 7 ? parseInt(light.slice(7), 16) / 255 : 1);
       for (let y = 1; y < ah - 1; y++) {
         for (let x = 1; x < aw - 1; x++) {
           const i = (y * aw + x) * 4;
@@ -12669,7 +12671,7 @@
           const gy = a[i + aw * 4 + 3] - a[i - aw * 4 + 3];
           const g = Math.hypot(gx, gy);
           if (!g) continue;
-          const t = WALL_LIGHT * Math.max(0, (gx * dx + gy * dy) / g);
+          const t = strength * Math.max(0, (gx * dx + gy * dy) / g);
           px[i] += (lr - px[i]) * t;
           px[i + 1] += (lg - px[i + 1]) * t;
           px[i + 2] += (lb - px[i + 2]) * t;

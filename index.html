@@ -54,6 +54,9 @@
     #building-lift-pop[hidden] {
       display: none;
     }
+    #building-lift-pop .pop-row[hidden] {
+      display: none;
+    }
     #building-lift-pop .pop-row {
       display: flex;
       align-items: center;
@@ -2121,6 +2124,11 @@
         <input type="range" min="0" max="300" step="1" aria-label="Building lift">
         <output></output>
         <button id="building-lift-reset" type="button" aria-label="Use the panel's lift"><span class="material-symbols-rounded">restart_alt</span></button>
+      </div>
+      <div id="building-roof-height" class="pop-row">
+        <span>Roof Height</span>
+        <input type="range" min="0" max="300" step="1" value="100" aria-label="Roof height">
+        <output></output>
       </div>
       <div id="building-tops" class="pop-row">
         <button type="button" data-top="flat" aria-pressed="true">Flat Top</button>
@@ -12689,12 +12697,13 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, lifts = [], tops = []) {
+    async function setBuildingsImage(src, lifts = [], tops = [], roofHeights = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
       buildingParts.forEach((part, i) => {
         part.lift = lifts[i] ?? null;
         part.roofStyle = tops[i] ?? 'flat';
+        part.roofHeight = roofHeights[i] ?? 100;
       });
       selectBuilding(null);
       buildingsImage = img;
@@ -13072,10 +13081,12 @@
     // side, so an angled top's faces slope at 45°; flat tops don't.
     function roofRise(part) {
       if (!part.roofStyle || part.roofStyle === 'flat') return 0;
-      if (part.roofStyle === 'angled') return Math.max(...hipFaces(part).flatMap((face) => face.heights));
+      if (part.roofStyle === 'angled') return Math.max(...hipFaces(part).flatMap((face) => face.heights)) * roofScale(part);
       const r = partRect(part);
-      return Math.min(r.w, r.h) * 0.5;
+      return Math.min(r.w, r.h) * 0.5 * roofScale(part);
     }
+    // A building's Roof Height, as a share of its top's natural height.
+    const roofScale = (part) => (part.roofHeight ?? 100) / 100;
     // An angled top as a hip roof on the part's outline, in map units: every
     // edge rises inward at 45°, so a point's height is its distance to the
     // nearest edge, and each edge's face is where that edge is nearest. The
@@ -13202,7 +13213,7 @@
           for (const face of hipFaces(part)) {
             s.beginPath();
             face.points.forEach(([x, y], i) => {
-              const along = length + face.heights[i] * stretch;
+              const along = length + face.heights[i] * roofScale(part) * stretch;
               if (i) s.lineTo(x + dx * along, y + dy * along);
               else s.moveTo(x + dx * along, y + dy * along);
             });
@@ -13338,7 +13349,7 @@
             for (const face of [...hipFaces(part)].sort((f, g) => away(f.outward) - away(g.outward))) {
               c.beginPath();
               face.points.forEach(([x, y], i) => {
-                const q = inCanvas(liftMatrix(tilted ? (lift + face.heights[i]) * view.scale : 0)).transformPoint(new DOMPoint(x, y));
+                const q = inCanvas(liftMatrix(tilted ? (lift + face.heights[i] * roofScale(part)) * view.scale : 0)).transformPoint(new DOMPoint(x, y));
                 if (i) c.lineTo(q.x, q.y);
                 else c.moveTo(q.x, q.y);
               });
@@ -13410,6 +13421,10 @@
       for (const button of document.querySelectorAll('#building-tops button')) {
         button.setAttribute('aria-pressed', String(button.dataset.top === (selectedBuilding.roofStyle ?? 'flat')));
       }
+      const roofHeight = document.getElementById('building-roof-height');
+      roofHeight.hidden = (selectedBuilding.roofStyle ?? 'flat') === 'flat';
+      roofHeight.querySelector('input').value = selectedBuilding.roofHeight ?? 100;
+      roofHeight.querySelector('output').value = `${selectedBuilding.roofHeight ?? 100}%`;
       const r = partRect(selectedBuilding);
       const s = toScreen({ x: r.x + r.w / 2, y: r.y });
       const roof = liftMatrix(canvasTilt?.angle ? (lift + roofRise(selectedBuilding)) * view.scale : 0).transformPoint(new DOMPoint(s.x, s.y));
@@ -13439,6 +13454,11 @@
         draw();
       });
     }
+    document.querySelector('#building-roof-height input').addEventListener('input', (e) => {
+      if (!selectedBuilding) return;
+      selectedBuilding.roofHeight = Number(e.target.value);
+      draw();
+    });
     document.getElementById('building-lift-reset').addEventListener('click', () => {
       if (!selectedBuilding) return;
       selectedBuilding.lift = null;
@@ -13958,6 +13978,7 @@
       file.buildings = buildingsImage && await imageData(buildingsImage);
       file.buildingLifts = buildingParts.map((part) => part.lift);
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
+      file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
@@ -14028,7 +14049,7 @@
       }
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
       trees = file.trees ?? [];
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;

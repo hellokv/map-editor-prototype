@@ -13611,6 +13611,8 @@
       if (color === ROCK) return t ? varyColor(rockColor.value, t, rockColorVariation) : rockColor.value;
       return treeTrunkInput.value;
     }
+    // Rocks stamped before the rounded set take its nearest shapes.
+    const OLD_ROCKS = { slab: 'pebble', spire: 'tall' };
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     let treeShape = 'pine';
     // The panel's pickers, each button showing its tree or rock; one stamp is chosen across both.
@@ -14113,7 +14115,7 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
-      trees = file.trees ?? [];
+      trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_ROCKS[t.shape] ?? t.shape }));
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;
       selected = null;

@@ -3090,6 +3090,14 @@
           Building Color
           <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
         </label>
+        <label id="buildings-rotate-field" class="field" hidden>
+          Building Rotation
+          <input id="buildings-rotate" class="switch" type="checkbox">
+        </label>
+        <label id="buildings-rotation-field" class="field" hidden>
+          Rotation
+          <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
+        </label>
         <label id="buildings-side-field" class="field" hidden>
           Building Sides
           <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
@@ -12536,6 +12544,7 @@
       document.getElementById('buildings-lift-field').hidden = !img;
       document.getElementById('buildings-side-field').hidden = !img;
       document.getElementById('buildings-color-field').hidden = !img;
+      showBuildingRotation();
       showShadowFields();
       if (!img) buildingsUpload.value = '';
       draw();
@@ -12571,6 +12580,25 @@
         mapView.value = button.dataset.view;
         mapView.dispatchEvent(new Event('change'));
       });
+    }
+    const buildingsRotate = document.getElementById('buildings-rotate');
+    const buildingsRotationInput = document.getElementById('buildings-rotation');
+    function showBuildingRotation() {
+      document.getElementById('buildings-rotate-field').hidden = !buildingsImage;
+      document.getElementById('buildings-rotation-field').hidden = !buildingsImage || !buildingsRotate.checked;
+    }
+    buildingsRotate.addEventListener('change', () => {
+      showBuildingRotation();
+      draw();
+    });
+    linkSlider(buildingsRotationInput);
+    buildingsRotationInput.addEventListener('input', draw);
+    // The turn buildings are seen from, which sets the way they lean: the
+    // map's, unless Building Rotation overrides it.
+    function leanSpin() {
+      if (!buildingsRotate.checked) return canvasTilt.spin;
+      const { cx, cy } = canvasTilt;
+      return new DOMMatrix().translate(cx, cy).rotate(Number(buildingsRotationInput.value) || 0).translate(-cx, -cy);
     }
     const buildingsColor = document.getElementById('buildings-color');
     buildingsColor.addEventListener('input', draw);
@@ -12785,7 +12813,8 @@
     // isometric, shifted up by raise × tan(tilt).
     function liftMatrix(raise) {
       if (!canvasTilt?.angle || !raise) return new DOMMatrix();
-      const { ox, oy, d, angle, spin } = canvasTilt;
+      const { ox, oy, d, angle } = canvasTilt;
+      const spin = leanSpin();
       const height = d * Math.cos(angle);
       const top = Math.min(raise, height * 0.9);
       const lifted = d === Infinity
@@ -12866,7 +12895,7 @@
       const depth = (part) => {
         const r = partRect(part);
         const p = toScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-        return canvasTilt ? canvasTilt.spin.transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
+        return canvasTilt ? leanSpin().transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
       };
       const order = [...buildingParts].sort((a, b) => depth(a) - depth(b));
       for (const part of order) {
@@ -13007,7 +13036,7 @@
       const d = mapView.value === 'perspective' ? Math.max(400, 2 * (oy - Math.min(...ys))) : Infinity;
       // flat: the map itself isn't tipped, and angle is only for the buildings' lean.
       const flat = mapView.value === 'buildings';
-      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat };
+      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat, cx, cy };
       // The window's corners, taken back onto the flat map, bound what shows.
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
@@ -13100,7 +13129,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'shadow-length', 'buildings-light', 'light-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

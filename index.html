@@ -13493,6 +13493,9 @@
     // base radius] and ellipsoids [offset, centre height, radius, half height],
     // each offset taken across the light so the shadow looks alike from all sides.
     const TRUNK = 'trunk';
+    // A trunk stands on an oval as wide as it and this much of its width deep,
+    // seen from the front: its foot's curve, and where its shadow begins.
+    const TRUNK_FOOT = 0.25;
     const LEAF = 'leaf';
     function treeShapes() {
       const path = (draw) => {
@@ -13500,7 +13503,14 @@
         draw(p);
         return p;
       };
-      const trunk = (w, h) => path((p) => p.rect(-w / 2, -h, w, h));
+      // A trunk's foot is the front half of the oval it stands on (see TRUNK_FOOT).
+      const trunk = (w, h) => path((p) => {
+        p.moveTo(-w / 2, -h);
+        p.lineTo(w / 2, -h);
+        p.lineTo(w / 2, 0);
+        p.ellipse(0, 0, w / 2, w * TRUNK_FOOT, 0, 0, Math.PI);
+        p.closePath();
+      });
       const circle = (x, y, r) => (p) => p.arc(x, y, r, 0, Math.PI * 2);
       const ellipse = (x, y, rx, ry, turn = 0) => (p) => p.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
       const many = (...shapes) => path((p) => shapes.forEach((shape) => { p.moveTo(0, 0); shape(p); }));
@@ -13522,7 +13532,7 @@
         cypress: { w: 20, h: 70, parts: [[trunk(5, 8), TRUNK], [many(ellipse(0, -38, 10, 32)), LEAF]],
           volume: [['trunk', 5, 8], ['ball', 0, 38, 10, 32]] },
         palm: { w: 56, h: 66, volume: [['trunk', 5, 58], ['ball', 0, 60, 26, 5]], parts: [
-          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.closePath(); }), TRUNK],
+          [path((p) => { p.moveTo(-3.5, 0); p.lineTo(-2, -58); p.lineTo(2, -58); p.lineTo(3.5, 0); p.ellipse(0, 0, 3.5, 7 * TRUNK_FOOT, 0, 0, Math.PI); p.closePath(); }), TRUNK],
           [many(...[0.25, 0.85, Math.PI / 2, Math.PI - 0.85, Math.PI - 0.25].map((a) => ellipse(Math.cos(a) * 14, -58 - Math.sin(a) * 6, 16, 4, -a))), LEAF],
         ] },
         bush: { w: 44, h: 26, parts: [[many(circle(-11, -10, 10), circle(11, -10, 10), circle(0, -15, 11)), LEAF]],
@@ -13686,7 +13696,13 @@
           g.addColorStop(0, tint(trunk, (lx < 0 ? 0.25 : -0.35) * depth));
           g.addColorStop(1, tint(trunk, (lx < 0 ? -0.35 : 0.25) * depth));
           c.fillStyle = g;
-          c.fillRect(-w / 2, -h, w, h);
+          c.beginPath();
+          c.moveTo(-w / 2, -h);
+          c.lineTo(w / 2, -h);
+          c.lineTo(w / 2, 0);
+          c.ellipse(0, 0, w / 2, w * TRUNK_FOOT, 0, 0, Math.PI);
+          c.closePath();
+          c.fill();
         } else if (kind === 'ball') {
           const [across, z, r, half] = v;
           const g = c.createRadialGradient(across + lx * r * 0.4, -z + ly * half * 0.4, 0, across, -z, Math.max(r, half) * 1.1);
@@ -13744,8 +13760,7 @@
       const p = new Path2D();
       for (const [kind, ...v] of shape.volume) {
         if (kind === 'trunk') {
-          const [w, h] = v;
-          p.rect(0, -w / 2, h * reach, w);
+          continue;
         } else if (kind === 'ball') {
           const [across, z, r, half] = v;
           p.moveTo(z * reach + Math.hypot(r, half * reach), across);
@@ -13821,9 +13836,25 @@
         for (const t of trees.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
       } else {
         const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
+        const turn = -(canvasTilt?.turn ?? 0);
         for (const t of trees.filter((one) => !ROCK_SHAPES[one.shape])) {
-          const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(treeScale(t));
+          const k = treeScale(t);
+          const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(k);
           shadows.addPath(cast[t.shape] ?? cast.pine, ground);
+          // The trunk's shadow is its foot's oval swept along the light, so it
+          // leaves from the trunk's own bottom corners.
+          for (const [kind, w, h] of shapeOf(t).volume.filter(([kind]) => kind === 'trunk')) {
+            const rx = (w * k) / 2;
+            const ry = w * k * TRUNK_FOOT;
+            const length = h * k * reach;
+            const steps = Math.max(2, Math.ceil((length * view.scale) / 1.5));
+            for (let i = 0; i <= steps; i++) {
+              const x = t.x + (dx * length * i) / steps;
+              const y = t.y + (dy * length * i) / steps;
+              shadows.moveTo(x + rx * Math.cos(turn), y + rx * Math.sin(turn));
+              shadows.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
+            }
+          }
         }
       }
       c.save();

@@ -13413,6 +13413,7 @@
         const p = new Path2D();
         points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
         p.closePath();
+        p.points = points;
         return p;
       };
       return {
@@ -13541,26 +13542,45 @@
       return p;
     }
     // Filled as one path, so where shadows overlap they don't darken.
-    // A rock sits low and wide, so its shadow hugs it: the oval it rests
-    // on, as wide as the rock and set square to the screen, swept away from
-    // the light as far as the rock is tall.
+    // Each body of a rock is taken as a block: its outline as the front
+    // face, standing on the base line between its bottom corners, and again
+    // half as deep as it is wide behind. Its shadow is the outline of that
+    // block cast along the light, so it starts at the rock's bottom corners.
     function rockShadow(shadows, t, reach, dx, dy) {
-      const shape = ROCK_SHAPES[t.shape];
       const k = treeScale(t);
       const turn = -(canvasTilt?.turn ?? 0);
-      const rx = (shape.w * k) / 2;
-      const ry = rx / 2;
-      const length = shape.h * k * reach;
-      const steps = Math.max(2, Math.ceil(length / 2));
-      // The oval's front edge meets the rock's base: its centre sits back up the screen.
-      const cx = t.x + ry * Math.sin(turn);
-      const cy = t.y - ry * Math.cos(turn);
-      for (let i = 0; i <= steps; i++) {
-        const x = cx + (dx * length * i) / steps;
-        const y = cy + (dy * length * i) / steps;
-        shadows.moveTo(x + rx * Math.cos(turn), y + rx * Math.sin(turn));
-        shadows.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
+      // Screen right and screen up, in map directions.
+      const [ux, uy] = [Math.cos(turn), Math.sin(turn)];
+      const [bx, by] = [Math.sin(turn), -Math.cos(turn)];
+      for (const [part, color] of ROCK_SHAPES[t.shape].parts) {
+        if (color !== DARK) continue;
+        const xs = part.points.map(([x]) => x);
+        const depth = (Math.max(...xs) - Math.min(...xs)) / 2;
+        const cast = [];
+        for (const [x, y] of part.points) {
+          for (const back of [0, depth]) {
+            const up = -y * reach;
+            cast.push([t.x + k * (x * ux + back * bx + up * dx), t.y + k * (x * uy + back * by + up * dy)]);
+          }
+        }
+        const hull = convexHull(cast);
+        hull.forEach(([x, y], i) => (i ? shadows.lineTo(x, y) : shadows.moveTo(x, y)));
+        shadows.closePath();
       }
+    }
+    function convexHull(points) {
+      const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const half = (list) => {
+        const out = [];
+        for (const p of list) {
+          while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+          out.push(p);
+        }
+        out.pop();
+        return out;
+      };
+      return [...half(sorted), ...half([...sorted].reverse())];
     }
     // shapes: the stamps whose shadows to draw, trees' or rocks'.
     function drawStampShadows(c, shapes, color) {

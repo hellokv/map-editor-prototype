@@ -13321,7 +13321,9 @@
         const slices = top ? Math.max(1, Math.ceil((top * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 1;
         for (let i = 1; i <= slices; i++) {
           c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
-          c.drawImage(i === slices ? partTop(part) : partWall(part, lit), r.x, r.y, r.w, r.h);
+          // Under a dome, the roof is the dome's own first layer.
+          const roof = i === slices && part.roofStyle !== 'dome';
+          c.drawImage(roof ? partTop(part) : partWall(part, lit), r.x, r.y, r.w, r.h);
           if (lit && i === slices) {
             c.globalAlpha = 0.6;
             c.drawImage(partEdge(part), r.x, r.y, r.w, r.h);
@@ -13361,7 +13363,7 @@
               c.stroke();
             }
           }
-          for (let i = 1; i < layers && part.roofStyle === 'dome'; i++) {
+          for (let i = 0; i < layers && part.roofStyle === 'dome'; i++) {
             const t = i / layers;
             c.setTransform(inCanvas(liftMatrix(tilted ? (partLift(part) + rise * t) * view.scale : 0)));
             const box = roofBox(part, r, t);

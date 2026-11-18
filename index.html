@@ -3458,21 +3458,23 @@
           Scale
           <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
         </label>
-        <label id="map-tilt-field" class="field">
-          Tilt
-          <span class="slider"><input id="map-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Tilt"></span>
-        </label>
-        <label class="field">
-          Rotation
-          <span class="slider"><input id="map-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Rotation"></span>
-        </label>
-        <div class="field">
-          <div id="map-projection" class="toggle-group">
-            <button type="button" data-view="perspective" aria-pressed="true">Perspective</button>
-            <button type="button" data-view="isometric" aria-pressed="false">Isometric</button>
-            <button type="button" data-view="buildings" aria-pressed="false">Buildings Only</button>
+        <div class="field-group">
+          <div class="field">
+            <div id="map-projection" class="toggle-group">
+              <button type="button" data-view="perspective" aria-pressed="true">Perspective</button>
+              <button type="button" data-view="isometric" aria-pressed="false">Isometric</button>
+              <button type="button" data-view="buildings" aria-pressed="false">Buildings Only</button>
+            </div>
+            <input id="map-view" type="text" value="perspective" hidden>
           </div>
-          <input id="map-view" type="text" value="perspective" hidden>
+          <label id="map-tilt-field" class="field">
+            Tilt
+            <span class="slider"><input id="map-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Tilt"></span>
+          </label>
+          <label class="field">
+            Rotation
+            <span class="slider"><input id="map-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Rotation"></span>
+          </label>
         </div>
         <label id="shadow-length-field" class="field" hidden>
           Shadow Length

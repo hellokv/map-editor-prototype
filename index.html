@@ -104,13 +104,13 @@
       align-items: center;
       gap: 8px;
     }
-    #building-tops button {
-      padding: 3px 8px;
+    #building-lift-pop #building-tops button {
+      padding: 5px 12px;
       font: inherit;
       border: 1px solid #e3e1dc;
       border-radius: 6px;
     }
-    #building-tops button[aria-pressed="true"] {
+    #building-lift-pop #building-tops button[aria-pressed="true"] {
       color: #fff;
       background: #000;
       border-color: #000;
@@ -2181,10 +2181,10 @@
     </label>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
-        <span>Lift</span>
-        <input type="range" min="0" max="300" step="1" aria-label="Building lift">
+        <span>Height</span>
+        <input type="range" min="0" max="300" step="1" aria-label="Building height">
         <output></output>
-        <button id="building-lift-reset" type="button" aria-label="Use the panel's lift"><span class="material-symbols-rounded">restart_alt</span></button>
+        <button id="building-lift-reset" type="button" aria-label="Use the panel's building height"><span class="material-symbols-rounded">restart_alt</span></button>
       </div>
       <div id="building-roof-height" class="pop-row">
         <span>Roof Height</span>
@@ -3178,8 +3178,8 @@
           </button>
         </div>
         <label id="buildings-lift-field" class="field" hidden>
-          Lift
-          <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Buildings lift"></span>
+          Building Height
+          <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Building height"></span>
         </label>
         <label id="buildings-color-field" class="field" hidden>
           Building Color

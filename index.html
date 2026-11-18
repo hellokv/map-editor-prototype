@@ -1647,6 +1647,13 @@
     .terrain-pattern {
       display: contents;
     }
+    :is(#panel, #style-panel, #settings-panel) .field .terrain-effects button {
+      display: flex;
+      padding: 3px 6px;
+    }
+    .terrain-effects .material-symbols-rounded {
+      font-size: 20px;
+    }
     /* An icon style's color, until one is picked, is the label's own. */
     #icon-color-field .original,
     #icon-color-field.unset :is(.opacity, .percent) {
@@ -3309,7 +3316,12 @@
           </label>
           <div class="field">
             Water Effect
-            <select id="water-effect">
+            <div class="toggle-group terrain-effects" data-for="water-effect">
+              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
+              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
+              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
+            </div>
+            <select id="water-effect" hidden>
               <option value="none">None</option>
               <option value="stripes">Stripes</option>
               <option value="dots">Dots</option>
@@ -3341,7 +3353,12 @@
           </label>
           <div class="field">
             Dirt Effect
-            <select id="dirt-effect">
+            <div class="toggle-group terrain-effects" data-for="dirt-effect">
+              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
+              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
+              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
+            </div>
+            <select id="dirt-effect" hidden>
               <option value="none">None</option>
               <option value="stripes">Stripes</option>
               <option value="dots">Dots</option>
@@ -3373,7 +3390,12 @@
           </label>
           <div class="field">
             Grass Effect
-            <select id="grass-effect">
+            <div class="toggle-group terrain-effects" data-for="grass-effect">
+              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
+              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
+              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
+            </div>
+            <select id="grass-effect" hidden>
               <option value="none">None</option>
               <option value="stripes">Stripes</option>
               <option value="dots">Dots</option>
@@ -14463,9 +14485,19 @@
     }
     for (const kind of Object.values(TERRAIN)) {
       kind.color.addEventListener('input', paintTerrain);
+      // The effect is picked with icon buttons; the hidden select holds it for saving.
+      const effectButtons = document.querySelectorAll(`[data-for="${kind.effect.id}"] button`);
+      for (const button of effectButtons) {
+        button.addEventListener('click', () => {
+          button.blur();
+          kind.effect.value = button.dataset.effect;
+          kind.effect.dispatchEvent(new Event('change'));
+        });
+      }
       kind.effect.addEventListener('change', () => {
         // Effects since dropped load as None.
         if (!kind.effect.value) kind.effect.value = 'none';
+        for (const button of effectButtons) button.setAttribute('aria-pressed', String(button.dataset.effect === kind.effect.value));
         showPatternFields(kind);
         paintTerrain();
       });

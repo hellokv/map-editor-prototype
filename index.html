@@ -2698,6 +2698,12 @@
             <button type="button" data-kind="icon" aria-pressed="false">Icon Only</button>
           </div>
         </div>
+        <div class="label-section">
+          <label id="map-scale-field" class="field">
+            Scale
+            <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
+          </label>
+        </div>
         <div id="label-style-browser" class="label-section">
           <div class="section-heading">Label Styles<button id="new-label-style" type="button" aria-label="New label style"><span class="material-symbols-rounded">add</span></button></div>
           <div id="label-style-list"></div>
@@ -3436,10 +3442,6 @@
         <label id="background-show-paths-field" class="field">
           Show Paths
           <input id="background-show-paths" class="switch" type="checkbox">
-        </label>
-        <label id="map-scale-field" class="field">
-          Scale
-          <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
         </label>
         <div class="field-group">
           <div class="field">
@@ -5360,8 +5362,8 @@
     let frameDrag = null;
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
-    // Background's Scale: how large everything on the map is drawn about its
-    // own position, leaving every size field as it is.
+    // Labels' Scale: how large labels, their pins and lists are drawn about
+    // their own positions, leaving every size field as it is.
     const mapScaleInput = document.getElementById('map-scale');
     const mapScale = () => Math.min(300, Math.max(10, Number(mapScaleInput.value) || 100)) / 100;
     {
@@ -9122,7 +9124,6 @@
       const frameButton = document.getElementById('background-show-frame-field');
       frameButton.hidden = mapIsBlank();
       frameButton.setAttribute('aria-pressed', showFrameToggle.checked);
-      document.getElementById('map-scale-field').hidden = !hasLabels && !shapes.some((shape) => shape.zoomScale !== undefined) && !groups.some((group) => group.width > 0);
     }
     function updatePanel() {
       showBlankState();
@@ -9551,7 +9552,7 @@
     function strokeGroupWidth(group) {
       ctx.save();
       ctx.strokeStyle = group.widthColor;
-      ctx.lineWidth = group.width * mapScale();
+      ctx.lineWidth = group.width;
       ctx.lineCap = ctx.lineJoin = 'round';
       ctx.beginPath();
       group.segments.forEach(traceSegment);
@@ -10552,7 +10553,7 @@
     // moves and resizes go by its centre and proportions, so they carry over.
     function shownBox(shape) {
       if (shape.zoomScale === undefined) return shape;
-      const k = mapScale() * zoomLevel() ** (shape.zoomScale / 100 - 1);
+      const k = zoomLevel() ** (shape.zoomScale / 100 - 1);
       const c = shapeCentre(shape);
       return { ...shape, x: c.x - (shape.w * k) / 2, y: c.y - (shape.h * k) / 2, w: shape.w * k, h: shape.h * k, radius: (shape.radius ?? 0) * k };
     }

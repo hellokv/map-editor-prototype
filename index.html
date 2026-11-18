@@ -5230,6 +5230,8 @@
     let baseShapes = null;
     let waterImage = null;
     let waterEffect = null;
+    // Turns any CSS colour into hex, for tint; the panel's rock previews need it early.
+    const colorProbe = document.createElement('canvas').getContext('2d');
 
     const canvasColor = document.getElementById('canvas-color');
     const boardOutlineToggle = document.getElementById('board-outline-on');
@@ -13591,30 +13593,136 @@
       const light = Math.min(0.95, Math.max(0.05, l + treeRandom(t, 3) * 0.15 * spread));
       return `hsl(${h.toFixed(1)} ${(sat * 100).toFixed(1)}% ${(light * 100).toFixed(1)}%)`;
     }
-    // Rocks are single-coloured rounded lumps sitting on a flat base, each
-    // outline a squared-off half oval, so they read as solid.
+    // Rocks are seen from above, like buildings: each body an irregular outline
+    // standing up as a wall to its shoulder, then rising in faceted rings to an
+    // off-centre peak. Heights are fractions of the body's height.
     const ROCK = 'rock';
+    const ROCK_LEVELS = [0.45, 0.75, 0.93];
     function rockShapes() {
-      const dome = (cx, w, h) => {
-        const points = [];
-        for (let i = 0; i <= 24; i++) {
-          const a = (Math.PI * i) / 24;
-          const c = Math.cos(a);
-          const s = Math.sin(a);
-          points.push([cx + (w / 2) * Math.sign(c) * Math.abs(c) ** 0.75, -h * s ** 0.75]);
+      const body = (cx, cy, r, stretch, height, seed) => {
+        let s = seed;
+        const random = () => (s = (s * 16807) % 2147483647) / 2147483647;
+        const n = 10;
+        const angles = Array.from({ length: n }, (_, i) => ((i + (random() - 0.5) * 0.5) / n) * 2 * Math.PI);
+        const ring = (scale, jitter) => angles.map((a) => {
+          const rr = r * scale * (1 + (random() - 0.5) * jitter);
+          return [cx + Math.cos(a) * rr * stretch, cy + Math.sin(a) * rr];
+        });
+        const levels = [ring(1, 0.35), ring(0.7, 0.35), ring(0.38, 0.45)];
+        const peak = [cx + (random() - 0.5) * r * 0.35, cy + (random() - 0.5) * r * 0.35];
+        const faces = [];
+        for (let l = 0; l < levels.length; l++) {
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            const a = [...levels[l][i], ROCK_LEVELS[l]];
+            const b = [...levels[l][j], ROCK_LEVELS[l]];
+            if (l === levels.length - 1) {
+              faces.push([a, b, [...peak, 1]]);
+              continue;
+            }
+            const c = [...levels[l + 1][j], ROCK_LEVELS[l + 1]];
+            const d = [...levels[l + 1][i], ROCK_LEVELS[l + 1]];
+            faces.push([a, b, c], [a, c, d]);
+          }
         }
-        const p = new Path2D();
-        points.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
-        p.closePath();
-        p.points = points;
-        return [p, ROCK];
+        const outline = new Path2D();
+        levels[0].forEach(([x, y], i) => (i ? outline.lineTo(x, y) : outline.moveTo(x, y)));
+        outline.closePath();
+        return { points: levels[0], outline, faces, height };
+      };
+      const shape = (...bodies) => {
+        const xs = bodies.flatMap((b) => b.points.map(([x]) => x));
+        const ys = bodies.flatMap((b) => b.points.map(([, y]) => y));
+        return { bodies, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
       };
       return {
-        boulder: { w: 34, h: 22, parts: [dome(0, 34, 22)] },
-        pebble: { w: 40, h: 12, parts: [dome(0, 40, 12)] },
-        tall: { w: 22, h: 30, parts: [dome(0, 22, 30)] },
-        pair: { w: 46, h: 20, parts: [dome(-9, 28, 20), dome(13, 20, 12)] },
+        boulder: shape(body(0, 0, 15, 1, 16, 7)),
+        pebble: shape(body(0, 0, 12, 1.7, 6, 3)),
+        tall: shape(body(0, 0, 10, 1, 26, 11)),
+        pair: shape(body(-6, -1, 12, 1, 15, 5), body(11, 5, 7, 1.2, 9, 9)),
       };
+    }
+    // A face's shade from how squarely it faces the light, given in the rock's
+    // own units, nudged per face so the top reads as rough stone.
+    function rockFaceColor(color, face, height, light, index) {
+      const [a, b, c] = face.map(([x, y, z]) => [x, y, z * height]);
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const len = Math.hypot(...n) || 1;
+      n = n.map((x) => (x / len) * Math.sign(n[2] || 1));
+      const lit = Math.max(0, n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
+      const grain = Math.sin(index * 91.7 + height * 3.1) * 0.06;
+      return tint(color, Math.max(-0.6, Math.min(0.5, (lit - 0.8) * 0.9 + grain)));
+    }
+    // The light as a unit vector in a rock's own units, coming from opposite
+    // where shadows fall, 40° up; spin is the rock's own turn on the map.
+    function rockLight(spin) {
+      const { dx, dy } = lightFall();
+      const [x, y] = [-dx * Math.cos(spin) - dy * Math.sin(spin), dx * Math.sin(spin) - dy * Math.cos(spin)];
+      const z = Math.tan((40 * Math.PI) / 180);
+      const len = Math.hypot(x, y, z);
+      return [x / len, y / len, z / len];
+    }
+    const rockSpin = (t) => treeRandom(t, 4) * Math.PI;
+    const rockPlace = (t) => new DOMMatrix().translate(t.x, t.y).rotate((rockSpin(t) * 180) / Math.PI).scale(treeScale(t));
+    // toCanvas(raise) gives the canvas transform for the map raised by raise screen pixels.
+    function drawRock(c, t, toCanvas) {
+      const shape = ROCK_SHAPES[t.shape];
+      const k = treeScale(t);
+      const place = rockPlace(t);
+      const color = partColor(ROCK, t);
+      const side = tint(color, -0.4);
+      const light = rockLight(rockSpin(t));
+      const tilted = !!canvasTilt?.angle;
+      for (const body of shape.bodies) {
+        const raise = (z) => (tilted ? z * body.height * k * view.scale : 0);
+        const shoulder = raise(ROCK_LEVELS[0]);
+        const slices = shoulder ? Math.max(1, Math.ceil((shoulder * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 0;
+        c.fillStyle = side;
+        for (let i = 1; i < slices; i++) {
+          c.setTransform(toCanvas((shoulder * i) / slices).multiply(place));
+          c.fill(body.outline);
+        }
+        const at = new Map();
+        const point = ([x, y, z]) => {
+          if (!at.has(z)) at.set(z, toCanvas(raise(z)).multiply(place));
+          return at.get(z).transformPoint(new DOMPoint(x, y));
+        };
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.lineWidth = 0.6;
+        c.lineJoin = 'round';
+        body.faces.forEach((face, i) => {
+          c.beginPath();
+          for (const q of face.map(point)) c.lineTo(q.x, q.y);
+          c.closePath();
+          c.fillStyle = c.strokeStyle = rockFaceColor(color, face, body.height, light, i);
+          c.fill();
+          c.stroke();
+        });
+      }
+    }
+    // The panel's picture of a rock: from above, a little to the front, lit from the top left.
+    function paintRockPreview(c, shape) {
+      const color = rockColor.value;
+      const light = [-0.45, -0.55, 0.7];
+      const lean = 0.35;
+      for (const body of shape.bodies) {
+        c.save();
+        c.translate(0, -ROCK_LEVELS[0] * body.height * lean);
+        c.fillStyle = tint(color, -0.4);
+        c.fill(body.outline);
+        c.restore();
+        body.faces.forEach((face, i) => {
+          c.beginPath();
+          for (const [x, y, z] of face) c.lineTo(x, y - z * body.height * lean);
+          c.closePath();
+          c.fillStyle = c.strokeStyle = rockFaceColor(color, face, body.height, light, i);
+          c.lineWidth = 0.4;
+          c.fill();
+          c.stroke();
+        });
+      }
     }
     const ROCK_SHAPES = rockShapes();
     const rockSizeInput = document.getElementById('rock-size');
@@ -13659,6 +13767,11 @@
         const k = (size - 8) / Math.max(shape.w, shape.h);
         c.setTransform(1, 0, 0, 1, 0, 0);
         c.clearRect(0, 0, preview.width, preview.height);
+        if (shape.bodies) {
+          c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size / 2) * dpr);
+          paintRockPreview(c, shape);
+          return;
+        }
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
           c.fillStyle = partColor(color);
@@ -13720,7 +13833,6 @@
     const treeDepth = document.getElementById('tree-depth');
     linkSlider(treeDepth);
     treeDepth.addEventListener('input', draw);
-    const colorProbe = document.createElement('canvas').getContext('2d');
     // A colour moved toward white (amount > 0) or black (amount < 0).
     function tint(color, amount) {
       colorProbe.fillStyle = '#000';
@@ -13787,7 +13899,12 @@
         return { x: q.x / dpr - margin.x, y: q.y / dpr - margin.y };
       };
       const depth = (t) => tiltForward(footOf(t)).y;
+      const toCanvas = (raise) => new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(liftMatrix(raise)).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(base);
       for (const t of [...stamps].sort((a, b) => depth(a) - depth(b))) {
+        if (ROCK_SHAPES[t.shape]) {
+          drawRock(c, t, toCanvas);
+          continue;
+        }
         c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(uprightAt(footOf(t), view.scale)));
         const scale = treeScale(t);
         c.scale(scale, scale);
@@ -13835,29 +13952,14 @@
       }
       return p;
     }
-    // Filled as one path, so where shadows overlap they don't darken.
-    // Each body of a rock is taken as a block: its outline as the front
-    // face, standing on the base line between its bottom corners, and again
-    // half as deep as it is wide behind. Its shadow is the outline of that
-    // block cast along the light, so it starts at the rock's bottom corners.
+    // Each body of a rock casts its outline swept along the light by its height.
     function rockShadow(shadows, t, reach, dx, dy) {
       const k = treeScale(t);
-      const turn = -(canvasTilt?.turn ?? 0);
-      // Screen right and screen up, in map directions.
-      const [ux, uy] = [Math.cos(turn), Math.sin(turn)];
-      const [bx, by] = [Math.sin(turn), -Math.cos(turn)];
-      for (const [part, color] of ROCK_SHAPES[t.shape].parts) {
-        if (color !== ROCK) continue;
-        const xs = part.points.map(([x]) => x);
-        const depth = (Math.max(...xs) - Math.min(...xs)) / 2;
-        const cast = [];
-        for (const [x, y] of part.points) {
-          for (const back of [0, depth]) {
-            const up = -y * reach;
-            cast.push([t.x + k * (x * ux + back * bx + up * dx), t.y + k * (x * uy + back * by + up * dy)]);
-          }
-        }
-        const hull = convexHull(cast);
+      const place = rockPlace(t);
+      for (const body of ROCK_SHAPES[t.shape].bodies) {
+        const length = body.height * k * reach;
+        const ground = body.points.map(([x, y]) => place.transformPoint(new DOMPoint(x, y)));
+        const hull = convexHull(ground.flatMap(({ x, y }) => [[x, y], [x + dx * length, y + dy * length]]));
         hull.forEach(([x, y], i) => (i ? shadows.lineTo(x, y) : shadows.moveTo(x, y)));
         shadows.closePath();
       }
@@ -13881,6 +13983,7 @@
       const { dx, dy } = lightFall();
       const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       if (!reach) return;
+      // Filled as one path, so where shadows overlap they don't darken.
       const shadows = new Path2D();
       if (shapes === ROCK_SHAPES) {
         for (const t of stamps.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
@@ -14329,7 +14432,12 @@
     });
     // The nearest tree drawn under a canvas point.
     function treeAt(s) {
+      const p = toBackground(s.x, s.y);
       return [...trees].reverse().find((t) => {
+        if (ROCK_SHAPES[t.shape]) {
+          const q = rockPlace(t).inverse().transformPoint(new DOMPoint(p.x, p.y));
+          return ROCK_SHAPES[t.shape].bodies.some((body) => areaProbe.isPointInPath(body.outline, q.x, q.y));
+        }
         const foot = toScreen(t);
         const q = uprightAt(foot, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);

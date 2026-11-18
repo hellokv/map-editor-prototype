@@ -13301,7 +13301,13 @@
       c.setTransform(k, 0, 0, k, -box.x * k, -box.y * k);
       c.fillStyle = shape.color;
       c.fill(shapePath(placed));
-      const part = { key, shape, roof, aw, ah, k, mapRect: box, mapOutline: shapeOutline(placed), wall: null, lift: null, roofStyle: 'flat', roofHeight: 100 };
+      const part = { key, shape, roof, aw, ah, k, mapRect: box, mapOutline: shapeOutline(placed), wall: null };
+      // Kept on the shape, so they're saved with it and survive its redraws.
+      Object.defineProperties(part, {
+        lift: { get: () => shape.buildingLift ?? null, set: (v) => { shape.buildingLift = v; } },
+        roofStyle: { get: () => shape.roofStyle ?? 'flat', set: (v) => { shape.roofStyle = v; } },
+        roofHeight: { get: () => shape.roofHeight ?? 100, set: (v) => { shape.roofHeight = v; } },
+      });
       shapeParts.set(shape, part);
       return part;
     }
@@ -13555,7 +13561,11 @@
     }
     // The selected part's lift slider sits over its roof, where it shows in the window.
     function showBuildingPop() {
-      buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !buildingsImage;
+      // A lone selected building shape takes the same menu as the image's buildings.
+      const sole = soleShape();
+      if (sole && isBuildingShape(sole)) selectedBuilding = shapeBuildingPart(sole);
+      else if (selectedBuilding?.shape) selectedBuilding = null;
+      buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !hasBuildings();
       if (buildingPop.hidden) return;
       const lift = partLift(selectedBuilding);
       buildingPopSlider.value = lift;

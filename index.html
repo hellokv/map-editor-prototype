@@ -2205,7 +2205,7 @@
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
         <span>Height</span>
-        <input type="range" min="0" max="25" step="1" aria-label="Building height">
+        <input type="range" min="0" max="200" step="1" aria-label="Building height">
         <output></output>
         <button id="building-lift-reset" type="button" aria-label="Use the panel's building height"><span class="material-symbols-rounded">restart_alt</span></button>
       </div>
@@ -12930,11 +12930,12 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, lifts = [], tops = [], roofHeights = [], roofInsets = []) {
+    async function setBuildingsImage(src, heights = [], tops = [], roofHeights = [], roofInsets = [], lifts = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
       buildingParts.forEach((part, i) => {
-        part.lift = lifts[i] ?? null;
+        part.height = heights[i] ?? null;
+        part.oldLift = lifts[i] ?? null;
         part.roofStyle = tops[i] ?? 'flat';
         part.roofHeight = roofHeights[i] ?? 100;
         part.roofInset = roofInsets[i] ?? 10;
@@ -13393,7 +13394,8 @@
       const part = { key, shape, roof, aw, ah, k, mapRect: box, mapOutline: shapeOutline(placed), wall: null };
       // Kept on the shape, so they're saved with it and survive its redraws.
       Object.defineProperties(part, {
-        lift: { get: () => shape.buildingLift ?? null, set: (v) => { shape.buildingLift = v; } },
+        height: { get: () => shape.buildingHeight ?? null, set: (v) => { shape.buildingHeight = v; } },
+        oldLift: { get: () => shape.buildingLift ?? null, set: () => { delete shape.buildingLift; } },
         roofStyle: { get: () => shape.roofStyle ?? 'flat', set: (v) => { shape.roofStyle = v; } },
         roofHeight: { get: () => shape.roofHeight ?? 100, set: (v) => { shape.roofHeight = v; } },
         roofInset: { get: () => shape.roofInset ?? 10, set: (v) => { shape.roofInset = v; } },
@@ -13431,7 +13433,18 @@
       const sy = r.h / buildingsImage.naturalHeight;
       return { x: r.x + part.x * sx, y: r.y + part.y * sy, w: part.w * sx, h: part.h * sy };
     }
-    const partLift = (part) => Math.max(0, part.lift ?? (Number(buildingsLiftInput.value) || 0));
+    const panelLift = () => Math.max(0, Number(buildingsLiftInput.value) || 0);
+    // A part's own height is a percentage of the panel's. Older maps kept a
+    // height in pixels, taken over as a percentage the first time it's needed.
+    function partHeight(part) {
+      if (part.oldLift !== null && part.oldLift !== undefined) {
+        const base = panelLift();
+        part.height = base > 0 ? Math.round((part.oldLift / base) * 100) : 100;
+        part.oldLift = null;
+      }
+      return part.height;
+    }
+    const partLift = (part) => (panelLift() * (partHeight(part) ?? 100)) / 100;
     // In canvas pixels, how a layer raised by raise screen pixels shows over
     // the tilted map: scaled about the point under the camera, or, in
     // isometric, shifted up by raise × tan(tilt).
@@ -13661,9 +13674,9 @@
       buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !hasBuildings()
         || document.getElementById('background-panel').dataset.tab !== 'buildings';
       if (buildingPop.hidden) return;
-      const lift = partLift(selectedBuilding);
-      buildingPopSlider.value = lift;
-      buildingPopValue.value = selectedBuilding.lift === null ? `${lift} (panel)` : lift;
+      const height = partHeight(selectedBuilding) ?? 100;
+      buildingPopSlider.value = height;
+      buildingPopValue.value = `${height}%`;
       for (const button of document.querySelectorAll('#building-tops button')) {
         button.setAttribute('aria-pressed', String(button.dataset.top === (selectedBuilding.roofStyle ?? 'flat')));
       }
@@ -13693,7 +13706,7 @@
     }
     buildingPopSlider.addEventListener('input', () => {
       if (!selectedBuilding) return;
-      selectedBuilding.lift = Number(buildingPopSlider.value);
+      selectedBuilding.height = Number(buildingPopSlider.value);
       draw();
     });
     for (const button of document.querySelectorAll('#building-tops button')) {
@@ -13715,7 +13728,7 @@
     });
     document.getElementById('building-lift-reset').addEventListener('click', () => {
       if (!selectedBuilding) return;
-      selectedBuilding.lift = null;
+      selectedBuilding.height = null;
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
@@ -14857,7 +14870,7 @@
       file.images = await Promise.all(images.map(imageData));
       file.background = backgroundImage && await imageData(backgroundImage);
       file.buildings = buildingsImage && await imageData(buildingsImage);
-      file.buildingLifts = buildingParts.map((part) => part.lift);
+      file.buildingHeights = buildingParts.map(partHeight);
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
@@ -14935,7 +14948,7 @@
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? []);
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));

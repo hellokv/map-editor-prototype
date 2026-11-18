@@ -2554,61 +2554,75 @@
           <button id="list-add-item" class="new-style" type="button">Add Item<span class="material-symbols-rounded">add</span></button>
         </div>
         <div id="list-item-fields" class="label-section" hidden>
-          <label class="field">
-            Place
-            <select id="list-item-place"></select>
-          </label>
-          <label class="field">
-            Text
-            <input id="list-item-text" type="text">
-          </label>
-          <div id="list-item-style-picker"></div>
-          <div id="list-item-icon-field" class="field">
-            Icon
-            <span class="icon-picker">
-              <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
-              <span id="list-item-icon-search" class="material-symbols-rounded icon-search" aria-hidden="true">search</span>
-              <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search">
-              <div class="icon-options" hidden></div>
-            </span>
-            <button id="list-item-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
+          <div class="section-heading">Selected Item</div>
+          <div class="field-group">
+            <label class="field">
+              Place
+              <select id="list-item-place"></select>
+            </label>
+            <label class="field">
+              Text
+              <input id="list-item-text" type="text">
+            </label>
           </div>
-          <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
+          <div id="list-item-style-picker"></div>
+          <div class="field-group">
+            <div id="list-item-icon-field" class="field">
+              Icon
+              <span class="icon-picker">
+                <span id="list-item-icon-preview" class="material-symbols-rounded"></span>
+                <span id="list-item-icon-search" class="material-symbols-rounded icon-search" aria-hidden="true">search</span>
+                <input id="list-item-icon" type="text" autocomplete="off" placeholder="Search">
+                <div class="icon-options" hidden></div>
+              </span>
+              <button id="list-item-icon-clear" class="field-clear" type="button" aria-label="Clear icon"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <button id="list-delete-item" class="new-style" type="button">Delete Item<span class="material-symbols-rounded">delete</span></button>
+          </div>
         </div>
         <div class="label-section">
+          <div class="section-heading">Box</div>
           <label class="field">
             Background Color
             <span class="color-field"><input id="list-background" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
           </label>
-          <div class="field">
-            Corners
-            <select id="list-corners">
-              <option value="square">Square</option>
-              <option value="round">Rounded</option>
-              <option value="chamfer">Chamfered</option>
-            </select>
+          <div class="field-group">
+            <div class="field">
+              Corners
+              <select id="list-corners">
+                <option value="square">Square</option>
+                <option value="round">Rounded</option>
+                <option value="chamfer">Chamfered</option>
+              </select>
+            </div>
+            <label class="field">
+              Corner Radius
+              <input id="list-radius" type="number" min="0" step="1">
+            </label>
           </div>
-          <label class="field">
-            Corner Radius
-            <input id="list-radius" type="number" min="0" step="1">
-          </label>
-          <label class="field">
-            Padding
-            <input id="list-padding" type="number" min="0" step="1">
-          </label>
-          <label class="field">
-            Item Spacing
-            <input id="list-item-gap" type="number" min="0" step="1">
-          </label>
-          <label class="field">
-            Outline
-            <span class="color-field"><input id="list-outline" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-            <input id="list-outline-on" class="switch" type="checkbox">
-          </label>
-          <label id="list-outline-width-field" class="field">
-            Outline Weight
-            <input id="list-outline-width" type="number" min="0" step="0.5">
-          </label>
+          <div class="field-group">
+            <div class="field-pair">
+              <label class="field">
+                Padding
+                <input id="list-padding" type="number" min="0" step="1">
+              </label>
+              <label class="field">
+                Spacing
+                <input id="list-item-gap" type="number" min="0" step="1">
+              </label>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field">
+              Outline
+              <span class="color-field"><input id="list-outline" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+              <input id="list-outline-on" class="switch" type="checkbox">
+            </label>
+            <label id="list-outline-width-field" class="field">
+              Weight
+              <input id="list-outline-width" type="number" min="0" step="0.5">
+            </label>
+          </div>
           <label class="field">
             Shadow
             <span class="color-field"><input id="list-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
@@ -2616,19 +2630,22 @@
           </label>
         </div>
         <div class="label-section">
-          <label class="field">
-            Scale Factor
-            <span class="slider"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
-          </label>
-          <div class="field-pair">
+          <div class="section-heading">Position</div>
+          <div class="field-group">
             <label class="field">
-              X
-              <input id="list-x" type="number" step="1">
+              Scale Factor
+              <span class="slider"><span class="percent-field"><input id="list-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
             </label>
-            <label class="field">
-              Y
-              <input id="list-y" type="number" step="1">
-            </label>
+            <div class="field-pair">
+              <label class="field">
+                X
+                <input id="list-x" type="number" step="1">
+              </label>
+              <label class="field">
+                Y
+                <input id="list-y" type="number" step="1">
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -16087,12 +16104,26 @@
       updateCursor();
       draw();
     }
-    // Resize to Fit: the frame, while selected, shrinks or grows to the
-    // background's edges, without anything moving on screen.
+    // Resize to Fit: the frame, while selected, shrinks or grows to take in
+    // the background and every label, pin, list and shape, without anything
+    // moving on screen.
+    function fitFrameRect() {
+      let fit = backgroundImage ? backgroundRect() : satelliteReference ? satelliteRect() : null;
+      if (!fit) return null;
+      const rects = [...labels.map(labelArea), ...labels.flatMap((label) => label.pins.map(pinBox)), ...lists.map(listArea)];
+      for (const shape of shapes) {
+        const corners = boxCorners(shape);
+        const xs = corners.map((q) => q.x);
+        const ys = corners.map((q) => q.y);
+        rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+      }
+      for (const r of rects) fit = unionRect(fit, r);
+      return fit;
+    }
     function showFitFrameButton() {
       const fitFrameButton = document.getElementById('fit-frame');
-      // Only once the frame no longer matches the background's edges.
-      const fit = frameEditing && (backgroundImage ? backgroundRect() : satelliteReference ? satelliteRect() : null);
+      // Only once the frame no longer matches what it would fit.
+      const fit = frameEditing && fitFrameRect();
       const fitted = !fit || [fit.x, fit.y, fit.w - board.w, fit.h - board.h].every((d) => Math.abs(d) < 0.5);
       fitFrameButton.hidden = !frameEditing || backgroundTools.hidden || fitted;
       if (fitFrameButton.hidden) return;
@@ -16101,7 +16132,7 @@
     }
     document.getElementById('fit-frame').addEventListener('click', (e) => {
       e.currentTarget.blur();
-      const fit = backgroundImage ? backgroundRect() : satelliteRect();
+      const fit = fitFrameRect();
       translateContent(-fit.x, -fit.y);
       view.x += fit.x * view.scale;
       view.y += fit.y * view.scale;

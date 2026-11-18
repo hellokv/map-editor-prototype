@@ -12919,6 +12919,7 @@
     mapView.addEventListener('change', () => {
       for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.view === mapView.value));
       document.getElementById('map-tilt-field').hidden = mapView.value === 'buildings';
+      showBuildingRotation();
       draw();
     });
     for (const button of projectionButtons) {
@@ -12941,7 +12942,7 @@
       showShadowFields();
     }
     function showBuildingRotation() {
-      document.getElementById('buildings-rotation-field').hidden = !hasBuildings();
+      document.getElementById('buildings-rotation-field').hidden = !hasBuildings() || mapView.value !== 'buildings';
       buildingsRotationReset.hidden = !buildingsRotate.checked;
       if (!buildingsRotate.checked) {
         buildingsRotationInput.value = Number(mapRotationInput.value) || 0;
@@ -12972,8 +12973,9 @@
     });
     // The turn buildings are seen from, which sets the way they lean: the
     // map's, unless Building Rotation overrides it.
+    // Building Rotation applies only in Buildings Only, where it's offered.
     function leanSpin() {
-      if (!buildingsRotate.checked) return canvasTilt.spin;
+      if (!buildingsRotate.checked || mapView.value !== 'buildings') return canvasTilt.spin;
       const { cx, cy } = canvasTilt;
       return new DOMMatrix().translate(cx, cy).rotate(Number(buildingsRotationInput.value) || 0).translate(-cx, -cy);
     }

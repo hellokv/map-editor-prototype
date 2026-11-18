@@ -3244,15 +3244,17 @@
           Building Height
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Building height"></span>
         </label>
-        <div id="buildings-colors" class="field-pair" hidden>
-          <label class="field">
-            Top
-            <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building top color strength">%</span>
-          </label>
-          <label class="field">
-            Sides
-            <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
-          </label>
+        <div id="buildings-colors" class="field-group" hidden>
+          <div class="field-pair">
+            <label class="field">
+              Top
+              <span class="color-field"><input id="buildings-color" type="color" value="#615348"></span>
+            </label>
+            <label class="field">
+              Sides
+              <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
+            </label>
+          </div>
         </div>
         <label id="buildings-rotation-field" class="field" hidden>
           Building Rotation
@@ -14925,7 +14927,7 @@
           input.value = input.defaultValue;
           if (opacity) opacity.value = opacity.defaultValue;
         } else if (opacity) showColor(input, value);
-        else input.value = value;
+        else input.value = input.type === 'color' ? String(value).slice(0, 7) : value;
       }
       for (const input of fields) {
         input.dispatchEvent(new Event('input'));

@@ -1177,16 +1177,6 @@
     :is(#panel, #style-panel, #settings-panel) .toggle-group button[aria-pressed="true"] {
       background: #ddd;
     }
-    .layer-toggles {
-      display: flex;
-      gap: 2px;
-    }
-    :is(#panel, #style-panel, #settings-panel) .layer-toggles button {
-      padding: 3px 8px;
-    }
-    :is(#panel, #style-panel, #settings-panel) .layer-toggles button[aria-pressed="true"] {
-      background: #ddd;
-    }
     #image-upload {
       max-width: 100%;
       font: inherit;
@@ -2436,9 +2426,9 @@
       </button>
     </div>
   </div>
-  <div id="panel">
+  <div id="panel" class="label-look">
     <div id="panel-header">
-      <button id="panel-back" type="button" aria-label="Back" hidden><span class="material-symbols-rounded">arrow_back</span></button>
+      <button id="panel-back" type="button" aria-label="Back" hidden><span class="material-symbols-rounded">chevron_left</span></button>
       <h2 id="panel-title"></h2>
       <button id="add-pin" type="button" aria-label="Add location" aria-pressed="false" hidden>
         <span class="material-symbols-rounded">add_location</span>
@@ -2643,69 +2633,81 @@
         </div>
       </div>
       <div id="image-properties" hidden>
-        <div class="group">
-          <label class="row">
-            Place
-            <select id="image-place"></select>
-          </label>
-          <button id="image-change" type="button">Change Image</button>
-          <label class="row">
+        <div class="label-section">
+          <div class="field-group">
+            <label class="field">
+              Place
+              <select id="image-place"></select>
+            </label>
+            <button id="image-change" class="new-style" type="button">Change Image<span class="material-symbols-rounded">image</span></button>
+          </div>
+          <div class="field">
             Plane
-            <select id="image-plane">
+            <div id="image-plane-toggle" class="toggle-group">
+              <button type="button" data-plane="base" aria-pressed="true">Base</button>
+              <button type="button" data-plane="screen" aria-pressed="false">Screen</button>
+            </div>
+            <select id="image-plane" hidden>
               <option value="base">Base</option>
               <option value="screen">Screen</option>
             </select>
-          </label>
-        </div>
-        <div class="group">
-          <div class="row">
+          </div>
+          <div class="field">
             Layers
-            <div class="layer-toggles">
+            <div class="toggle-group">
               <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
               <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
               <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
             </div>
           </div>
         </div>
-        <div class="group">
-          <div class="row">
-            Corners
-            <select id="image-corners">
-              <option value="square">Square</option>
-              <option value="round">Rounded</option>
-              <option value="chamfer">Chamfered</option>
-            </select>
+        <div class="label-section">
+          <div class="field-group">
+            <div class="field">
+              Corners
+              <select id="image-corners">
+                <option value="square">Square</option>
+                <option value="round">Rounded</option>
+                <option value="chamfer">Chamfered</option>
+              </select>
+            </div>
+            <label class="field">
+              Corner Radius
+              <input id="image-radius" type="number" min="0" step="1">
+            </label>
           </div>
-          <label class="row">
-            Corner Radius
-            <input id="image-radius" type="number" min="0" step="1">
-          </label>
-          <label class="row">
+          <label class="field">
             Scale Factor
-            <span class="slider"><input type="range" min="0" max="100" step="1" aria-label="Scale factor"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span></span>
+            <span class="slider"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
           </label>
         </div>
-        <div class="group">
-          <label class="row">
-            X
-            <input id="image-x" type="number" step="1">
-          </label>
-          <label class="row">
-            Y
-            <input id="image-y" type="number" step="1">
-          </label>
-          <label class="row">
-            Width
-            <input id="image-w" type="number" min="1" step="1">
-          </label>
-          <label class="row">
-            Height
-            <input id="image-h" type="number" min="1" step="1">
-          </label>
-          <label class="row">
-            Rotation
-            <input id="image-rotation" type="number" step="1">
-          </label>
+        <div class="label-section">
+          <div class="field-group">
+            <div class="field-pair">
+              <label class="field">
+                X
+                <input id="image-x" type="number" step="1">
+              </label>
+              <label class="field">
+                Y
+                <input id="image-y" type="number" step="1">
+              </label>
+            </div>
+            <div class="field-pair">
+              <label class="field">
+                Width
+                <input id="image-w" type="number" min="1" step="1">
+              </label>
+              <label class="field">
+                Height
+                <input id="image-h" type="number" min="1" step="1">
+              </label>
+            </div>
+            <label class="field">
+              Rotation
+              <input id="image-rotation" type="number" step="1">
+            </label>
+          </div>
         </div>
       </div>
       <div id="label-styles">
@@ -8941,6 +8943,13 @@
       draw();
     });
     const imagePlane = document.getElementById('image-plane');
+    for (const button of document.querySelectorAll('#image-plane-toggle button')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        imagePlane.value = button.dataset.plane;
+        imagePlane.dispatchEvent(new Event('change'));
+      });
+    }
     imagePlane.addEventListener('change', () => {
       const image = soleImage();
       if (!image) return;
@@ -8975,6 +8984,9 @@
       const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
       show(imagePlace, image.place ?? '');
       show(imagePlane, image.screenPlane ? 'screen' : 'base');
+      for (const button of document.querySelectorAll('#image-plane-toggle button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.plane === imagePlane.value));
+      }
       show(imageInputs.corners, image.corners ?? 'round');
       show(imageInputs.radius, image.radius ?? 0);
       show(imageInputs.zoomScale, image.zoomScale ?? 100);
@@ -9313,10 +9325,6 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      // The panel's look, header included, everywhere but a placed image's fields.
-      const labelLook = labelTools.hidden || !selectedShapes.length;
-      document.getElementById('panel').classList.toggle('label-look', labelLook);
-      document.querySelector('#panel-back .material-symbols-rounded').textContent = labelLook ? 'chevron_left' : 'arrow_back';
       labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
       showListPanel();
       showImagePanel();

@@ -2646,6 +2646,13 @@
             <select id="image-place"></select>
           </label>
           <button id="image-change" type="button">Change Image</button>
+          <label class="row">
+            Plane
+            <select id="image-plane">
+              <option value="base">Base</option>
+              <option value="screen">Screen</option>
+            </select>
+          </label>
         </div>
         <div class="group">
           <div class="row">
@@ -8923,6 +8930,16 @@
       imagePlace.blur();
       draw();
     });
+    const imagePlane = document.getElementById('image-plane');
+    imagePlane.addEventListener('change', () => {
+      const image = soleImage();
+      if (!image) return;
+      recordUndo();
+      if (imagePlane.value === 'screen') image.screenPlane = true;
+      else delete image.screenPlane;
+      imagePlane.blur();
+      draw();
+    });
     const imageInputs = {
       corners: liveField('image-corners', 'corners', (input) => input.value, soleImage),
       radius: liveField('image-radius', 'radius', (input) => Math.max(0, Number(input.value) || 0), soleImage),
@@ -8947,6 +8964,7 @@
       if (imageProperties.hidden) return;
       const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
       show(imagePlace, image.place ?? '');
+      show(imagePlane, image.screenPlane ? 'screen' : 'base');
       show(imageInputs.corners, image.corners ?? 'round');
       show(imageInputs.radius, image.radius ?? 0);
       show(imageInputs.zoomScale, image.zoomScale ?? 100);
@@ -10709,6 +10727,7 @@
           continue;
         }
         if (shape.kind === 'image') {
+          if (!onItsPlane(shape)) continue;
           drawImageShape(shape);
           continue;
         }
@@ -10806,7 +10825,7 @@
       return { x: frame.x + v.x, y: frame.y + v.y };
     }
     function drawShapeSelection() {
-      if (!selectedShapes.length) return;
+      if (!selectedShapes.length || !selectionOnItsPlane()) return;
       ctx.save();
       ctx.globalAlpha = selectionAlpha();
       ctx.strokeStyle = SELECTED_COLOR;
@@ -10834,7 +10853,7 @@
     }
     // The resize handle under a screen point, if any.
     function handleAt(s) {
-      if (!s || !selectedShapes.length) return null;
+      if (!s || !selectedShapes.length || !selectionOnItsPlane()) return null;
       const frame = selectionFrame();
       for (const [name, [fx, fy]] of Object.entries(SHAPE_HANDLES)) {
         const h = toScreen(framePoint(frame, fx, fy));
@@ -10881,7 +10900,11 @@
       updateCursor();
     });
     // Images are placed and edited in label mode, other shapes in background mode.
-    const editableShape = (shape) => (shape.kind === 'image') === !labelTools.hidden;
+    const editableShape = (shape) => (shape.kind === 'image') === !labelTools.hidden && onItsPlane(shape);
+    // Over a tilted map, a Screen image stands upright with the labels, and
+    // is drawn and pressed only while working on that plane.
+    const onItsPlane = (shape) => !canvasTilt || !!shape.screenPlane === onPlane;
+    const selectionOnItsPlane = () => !canvasTilt || selectedShapes.every((shape) => !!shape.screenPlane) === onPlane;
     function shapeAt(p) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
@@ -12182,6 +12205,19 @@
         const p = toBackground(s.x, s.y);
         const q = screenPlanePoint(e);
         const [pinHit, labelHit, listHit] = onScreenPlane(() => [pinAt(q), labelAt(q), listAt(q)]);
+        // A Screen image, or its handles, under the pointer.
+        const raw = windowLocal(e.clientX, e.clientY);
+        if (canvasTilt && onScreenPlane(() => handleAt(raw) || (!pinHit && !labelHit && !listHit && shapeAt(q)))) {
+          selectedLabels = [];
+          selectedPins = [];
+          selectedList = null;
+          const before = snapshot();
+          onScreenPlane(() => shapePointerDown(e, raw));
+          if (drag) Object.assign(drag, { before, onPlane: true });
+          draw();
+          updateCursor();
+          return;
+        }
         // A selected image's handles, then any image not under a label, pin
         // or list, are handled as shapes are.
         if (handleAt(s) || (!pinHit && !labelHit && !listHit && shapeAt(p))) {
@@ -12285,7 +12321,10 @@
       pointer = canvasPoint(e);
       shiftHeld = e.shiftKey;
       if (drag?.shapes) {
-        shapePointerMove(e);
+        if (drag.onPlane) {
+          pointer = windowLocal(e.clientX, e.clientY);
+          onScreenPlane(() => shapePointerMove(e));
+        } else shapePointerMove(e);
         draw();
         updateCursor();
         return;
@@ -12710,7 +12749,8 @@
         return;
       }
       if (drag.shapes) {
-        shapePointerUp();
+        if (drag.onPlane) onScreenPlane(shapePointerUp);
+        else shapePointerUp();
         draw();
         updateCursor();
         return;
@@ -14570,6 +14610,8 @@
       });
     }
     let canvasTilt = null;
+    // True while onScreenPlane has things moved to where they show.
+    let onPlane = false;
     // Turned or tilted, the map is painted on #tilt-view instead: a canvas
     // reaching past the window on every side, so what the turn brings into
     // view from outside the window's rectangle is there to show.
@@ -14693,8 +14735,18 @@
     const labelPlane = document.getElementById('label-plane');
     let labelPlaneWanted = false;
     function drawLabelLayer() {
+      for (const shape of shapes) {
+        if (shape.kind !== 'image' || !shape.screenPlane) continue;
+        ctx.save();
+        ctx.globalAlpha = labelAlpha(shape);
+        if (ctx.globalAlpha) drawImageShape(shape);
+        ctx.restore();
+      }
       if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
-      if (!labelTools.hidden) drawPins();
+      if (!labelTools.hidden) {
+        drawPins();
+        drawShapeSelection();
+      }
     }
     function clearLabelPlane() {
       const dpr = window.devicePixelRatio || 1;
@@ -14730,23 +14782,36 @@
     // Runs fn with every label, pin, list and the label being typed moved to
     // where it shows on the screen plane, then puts them back. Drawing and
     // hit testing in there treat the map as flat.
-    let onPlane = false;
+    // Anything fn moves there is taken back to the spot under where it ends up.
     function onScreenPlane(fn) {
       if (!canvasTilt || onPlane) return fn();
-      const moved = [...labels, ...labels.flatMap((label) => label.pins), ...lists];
+      const moved = [...labels, ...labels.flatMap((label) => label.pins), ...lists, ...shapes.filter((shape) => shape.screenPlane)];
       if (editingLabel) moved.push(editingLabel);
-      const saved = moved.map((item) => [item, item.x, item.y]);
-      for (const item of moved) {
-        const f = toScreen(item);
+      // An image stands at its centre's spot.
+      const anchor = (item) => (item.kind === 'image' ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : { x: item.x, y: item.y });
+      const setAnchor = (item, p) => Object.assign(item, item.kind === 'image' ? { x: p.x - item.w / 2, y: p.y - item.h / 2 } : p);
+      const saved = moved.map((item) => {
+        const real = anchor(item);
+        const f = toScreen(real);
         const w = windowPoint(f.x, f.y);
-        Object.assign(item, toBackground(w.x, w.y));
-      }
+        const shown = toBackground(w.x, w.y);
+        setAnchor(item, shown);
+        return [item, real, shown];
+      });
       onPlane = true;
       try {
         return fn();
       } finally {
         onPlane = false;
-        for (const [item, x, y] of saved) Object.assign(item, { x, y });
+        for (const [item, real, shown] of saved) {
+          const now = anchor(item);
+          if (now.x === shown.x && now.y === shown.y) setAnchor(item, real);
+          else {
+            const s = toScreen(now);
+            const flat = untilt(s.x, s.y);
+            setAnchor(item, toBackground(flat.x, flat.y));
+          }
+        }
       }
     }
     // A pointer event's spot on the screen plane, in map units.
@@ -14774,7 +14839,7 @@
     // A client point in the canvas's own, unturned and untilted pixels.
     function canvasLocal(clientX, clientY) {
       const { x, y } = windowLocal(clientX, clientY);
-      return canvasTilt ? untilt(x, y) : { x, y };
+      return canvasTilt && !onPlane ? untilt(x, y) : { x, y };
     }
     // A client point in the canvas's window, as it shows.
     function windowLocal(clientX, clientY) {

@@ -38,6 +38,14 @@
       position: absolute;
       pointer-events: none;
     }
+    .panel-tilt {
+      position: absolute;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .panel-tilt canvas {
+      position: absolute;
+    }
     #label-plane {
       position: absolute;
       left: 0;
@@ -5459,7 +5467,7 @@
     // Split screen zooms each panel on its own.
     function showViewMenu() {
       zoomInput.parentElement.hidden = splitOn();
-      for (const id of ['layer-select', 'layers-button']) document.getElementById(id).hidden = inLocation();
+      for (const id of ['layer-select', 'layers-button']) document.getElementById(id).hidden = !inLabelsMode();
       document.getElementById('location-view').hidden = !inLocation();
       document.getElementById('turn-button').hidden = !inLocation();
     }
@@ -5546,7 +5554,7 @@
       showFitFrameButton();
       if (!backgroundTools.hidden) showMinResolution();
       // Under Automatic, names the layers the current zoom shows.
-      autoLayers.hidden = layerSelect.value !== 'Automatic' || inPreview();
+      autoLayers.hidden = chosenLayer() !== 'Automatic' || inPreview();
       if (!autoLayers.hidden) {
         const names = shownLayers().map((layer) => layer[0].toUpperCase() + layer.slice(1));
         autoLayers.textContent = names.join(', ') || 'None';
@@ -5554,7 +5562,7 @@
       tiltCanvas(noMode || (!backgroundTools.hidden && mapIsBlank()));
       paintTilted(() => {
         if (inLocation()) paintLocation();
-        else if (layerSelect.value === 'Split Screen') paintSplit();
+        else if (chosenLayer() === 'Split Screen') paintSplit();
         else paintView();
       });
       showBuildingPop();
@@ -5574,7 +5582,10 @@
     let layerOverride = null;
     let panelViews = null;
     let activePanel = 0;
-    const splitOn = () => layerSelect.value === 'Split Screen' && !inLocation();
+    // Levels are chosen in Labels mode; Preview picks its own. Elsewhere everything shows.
+    const inLabelsMode = () => !document.getElementById('labels-panel').hidden;
+    const chosenLayer = () => (inLabelsMode() || inPreview() ? layerSelect.value : 'All');
+    const splitOn = () => chosenLayer() === 'Split Screen' && !inLocation();
     const splitPanels = () => {
       const w = canvas.clientWidth / 2;
       const h = canvas.clientHeight / 2;
@@ -5619,12 +5630,13 @@
     // The pointer makes the panel it's over the active one, except mid-drag.
     function focusPanelAt(e) {
       if (!panelViews || drag) return;
-      const { x, y } = canvasLocal(e.clientX, e.clientY);
+      const { x, y } = windowLocal(e.clientX, e.clientY);
       const i = splitPanels().findIndex((panel) => x >= panel.x && x < panel.x + panel.w && y >= panel.y && y < panel.y + panel.h);
       if (i < 0 || i === activePanel) return;
       storeActiveView();
       activePanel = i;
       loadPanelView(i);
+      if (panelTilts[i]) canvasTilt = panelTilts[i];
     }
     for (const type of ['pointerdown', 'pointermove', 'wheel', 'dblclick']) canvas.addEventListener(type, focusPanelAt, { capture: true, passive: true });
     // Each panel's name, where it was last painted. Clicking one leaves
@@ -5632,7 +5644,7 @@
     const splitTags = [];
     const splitTagAt = (e) => {
       if (!panelViews || drag) return -1;
-      const { x, y } = canvasLocal(e.clientX, e.clientY);
+      const { x, y } = windowLocal(e.clientX, e.clientY);
       return splitTags.findIndex((tag) => tag && x >= tag.x && x <= tag.x + tag.w && y >= tag.y && y <= tag.y + tag.h);
     };
     canvas.addEventListener('pointerdown', (e) => {
@@ -5654,16 +5666,38 @@
     function paintSplit() {
       const dpr = window.devicePixelRatio || 1;
       storeActiveView();
+      // Tilted, each panel's map is on a canvas of its own under the label
+      // plane, so names and dividers go on the label plane.
+      const tilted = !!tiltAngles;
+      labelPlane.hidden = !tilted;
+      const screenCtx = ctx;
+      if (tilted) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        clearLabelPlane();
+      }
+      const topCtx = tilted ? labelPlane.getContext('2d') : ctx;
       for (const [i, panel] of splitPanels().entries()) {
-        ctx.save();
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.beginPath();
-        ctx.rect(panel.x, panel.y, panel.w, panel.h);
-        ctx.clip();
         layerOverride = panel.name;
         loadPanelView(i);
-        paintView();
-        ctx.restore();
+        if (tilted) {
+          const holder = panelTiltHolders[i];
+          holder.hidden = false;
+          Object.assign(holder.style, { left: `${panel.x}px`, top: `${panel.y}px`, width: `${panel.w}px`, height: `${panel.h}px` });
+          canvasTilt = panelTilts[i] = layTilt(holder.firstChild, panel, TILT_VIEW_PIXELS / SPLIT_PANELS.length);
+          labelPlaneWanted = false;
+          paintTiltedOn(canvasTilt, paintView);
+          if (labelPlaneWanted) paintLabelPlane(panel);
+        } else {
+          ctx.save();
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.beginPath();
+          ctx.rect(panel.x, panel.y, panel.w, panel.h);
+          ctx.clip();
+          paintView();
+          ctx.restore();
+        }
+        ctx = topCtx;
         // The panel's level, named in its bottom left corner.
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -5682,16 +5716,18 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(panel.name, tag.x + 10, tag.y + tag.h / 2);
         ctx.restore();
+        ctx = screenCtx;
       }
       layerOverride = null;
       loadPanelView(activePanel);
+      canvasTilt = panelTilts[activePanel] ?? null;
       // The panels' dividing lines.
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(canvas.clientWidth / 2 - 0.5, 0, 1, canvas.clientHeight);
-      ctx.fillRect(0, canvas.clientHeight / 2 - 0.5, canvas.clientWidth, 1);
-      ctx.restore();
+      topCtx.save();
+      topCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      topCtx.fillStyle = '#000';
+      topCtx.fillRect(canvas.clientWidth / 2 - 0.5, 0, 1, canvas.clientHeight);
+      topCtx.fillRect(0, canvas.clientHeight / 2 - 0.5, canvas.clientWidth, 1);
+      topCtx.restore();
     }
 
     // Location mode shows the map's background and its paths, each as
@@ -9932,7 +9968,7 @@
     const layerSelect = document.getElementById('layer-select');
     // Split screen paints each panel with its own setting; clicking, and
     // what's added by clicking, goes by the active panel's.
-    const layerMode = () => layerOverride ?? (splitOn() && panelViews ? SPLIT_PANELS[activePanel] : layerSelect.value);
+    const layerMode = () => layerOverride ?? (splitOn() && panelViews ? SPLIT_PANELS[activePanel] : chosenLayer());
     function shownLayers() {
       if (layerMode() === 'All') return LAYERS;
       if (layerMode() === 'Automatic') {
@@ -10329,7 +10365,8 @@
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
       ctx.restore();
-      placeLabelInput();
+      // In split screen, the text box follows the label in the active panel.
+      if (!panelViews || layerOverride === SPLIT_PANELS[activePanel]) placeLabelInput();
     }
 
     // Pins grow with zoom by view.scale raised to PIN_SCALING: at 0 they'd
@@ -14524,24 +14561,39 @@
     // reaching past the window on every side, so what the turn brings into
     // view from outside the window's rectangle is there to show.
     const tiltView = document.getElementById('tilt-view');
-    const tiltCtx = tiltView.getContext('2d');
     const TILT_VIEW_PIXELS = 32e6;
     // Rotation turns the map about the box's centre; tilt then tips it back
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
       // Buildings Only leans at 45°, so a building rises on screen exactly as far as its lift.
       const flat = mapView.value === 'buildings';
-      // Paths and split screen panels show the map top down, whatever its tilt and rotation.
-      const topDown = blank || !pathTools.hidden || splitOn();
+      // Paths show the map top down, whatever its tilt and rotation.
+      const topDown = blank || !pathTools.hidden;
       const deg = topDown ? 0 : flat ? 45 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
       const turn = topDown ? 0 : (Number(mapRotationInput.value) || 0) % 360;
       canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);
-      tiltView.hidden = !deg && !turn;
-      canvas.style.opacity = tiltView.hidden ? '' : '0';
-      if (tiltView.hidden) {
-        canvasTilt = null;
-        return;
-      }
+      tiltAngles = deg || turn ? { deg, turn, flat } : null;
+      // Split screen tilts each panel on its own, as it paints them.
+      const whole = tiltAngles && !panelViews;
+      tiltView.hidden = !whole;
+      canvas.style.opacity = whole ? '0' : '';
+      for (const holder of panelTiltHolders) holder.hidden = true;
+      panelTilts = [];
+      canvasTilt = whole ? layTilt(tiltView, { x: 0, y: 0, w: canvas.clientWidth, h: canvas.clientHeight }, TILT_VIEW_PIXELS) : null;
+    }
+    let tiltAngles = null;
+    let panelTilts = [];
+    // A canvas laid over a split panel, clipped to it, for that panel's tilted map.
+    const panelTiltHolders = SPLIT_PANELS.map(() => {
+      const holder = Object.assign(document.createElement('div'), { className: 'panel-tilt', hidden: true });
+      holder.append(document.createElement('canvas'));
+      document.getElementById('label-plane').before(holder);
+      return holder;
+    });
+    // Tips and turns el so the flat map, as the view paints it, shows tilted
+    // in rect of the window, and returns how it was done.
+    function layTilt(el, rect, budget) {
+      const { deg, turn, flat } = tiltAngles;
       const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
       const cx = centre.x;
       const cy = centre.y;
@@ -14555,36 +14607,39 @@
       // has it infinitely far away.
       const d = mapView.value === 'perspective' ? Math.max(400, 2 * (oy - Math.min(...ys))) : Infinity;
       // flat: the map itself isn't tipped, and angle is only for the buildings' lean.
-      canvasTilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat, cx, cy };
-      // The window's corners, taken back onto the flat map, bound what shows.
-      const W = canvas.clientWidth;
-      const H = canvas.clientHeight;
-      const seen = [[0, 0], [W, 0], [0, H], [W, H]].map(([x, y]) => untilt(x, y));
-      let left = Math.max(0, -Math.min(...seen.map((p) => p.x)));
-      let right = Math.max(0, Math.max(...seen.map((p) => p.x)) - W);
-      let top = Math.max(0, -Math.min(...seen.map((p) => p.y)));
-      let bottom = Math.max(0, Math.max(...seen.map((p) => p.y)) - H);
+      const tilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat, cx, cy };
+      // The rect's corners, taken back onto the flat map, bound what shows.
+      const { w: W, h: H } = rect;
+      const seen = [[0, 0], [W, 0], [0, H], [W, H]].map(([x, y]) => untilt(rect.x + x, rect.y + y, tilt));
+      let left = Math.max(0, rect.x - Math.min(...seen.map((p) => p.x)));
+      let right = Math.max(0, Math.max(...seen.map((p) => p.x)) - rect.x - W);
+      let top = Math.max(0, rect.y - Math.min(...seen.map((p) => p.y)));
+      let bottom = Math.max(0, Math.max(...seen.map((p) => p.y)) - rect.y - H);
       const dpr = window.devicePixelRatio || 1;
       const fit = (n) => Math.min(n, 3 * Math.max(W, H));
       [left, right, top, bottom] = [left, right, top, bottom].map(fit);
-      const over = ((W + left + right) * (H + top + bottom) * dpr * dpr) / TILT_VIEW_PIXELS;
+      const over = ((W + left + right) * (H + top + bottom) * dpr * dpr) / budget;
       if (over > 1) [left, right, top, bottom] = [left, right, top, bottom].map((n) => n / Math.sqrt(over));
-      const margin = { x: Math.ceil(left), y: Math.ceil(top), w: Math.ceil(W + left + right), h: Math.ceil(H + top + bottom) };
-      canvasTilt.margin = margin;
-      Object.assign(tiltView.style, { left: `${-margin.x}px`, top: `${-margin.y}px`, width: `${margin.w}px`, height: `${margin.h}px` });
-      if (tiltView.width !== Math.round(margin.w * dpr) || tiltView.height !== Math.round(margin.h * dpr)) {
-        tiltView.width = Math.round(margin.w * dpr);
-        tiltView.height = Math.round(margin.h * dpr);
+      // The flat map at (x, y) is at (x + margin.x, y + margin.y) on el.
+      const margin = { x: Math.ceil(left) - rect.x, y: Math.ceil(top) - rect.y, w: Math.ceil(W + left + right), h: Math.ceil(H + top + bottom) };
+      tilt.margin = margin;
+      // el's parent sits at the rect's corner.
+      Object.assign(el.style, { left: `${-margin.x - rect.x}px`, top: `${-margin.y - rect.y}px`, width: `${margin.w}px`, height: `${margin.h}px` });
+      if (el.width !== Math.round(margin.w * dpr) || el.height !== Math.round(margin.h * dpr)) {
+        el.width = Math.round(margin.w * dpr);
+        el.height = Math.round(margin.h * dpr);
       }
-      tiltView.style.transformOrigin = `${ox + margin.x}px ${oy + margin.y}px`;
-      tiltView.style.transform = [
+      el.style.transformOrigin = `${ox + margin.x}px ${oy + margin.y}px`;
+      el.style.transform = [
         d === Infinity || !deg || flat ? '' : `perspective(${d}px)`,
         `rotateX(${flat ? 0 : deg}deg)`,
         `translate(${cx - ox}px, ${cy - oy}px) rotate(${turn}deg) translate(${ox - cx}px, ${oy - cy}px)`,
       ].join(' ');
-      const cs = getComputedStyle(tiltView);
+      const cs = getComputedStyle(el);
       const [tx, ty] = cs.transformOrigin.split(' ').map(parseFloat);
-      canvasTilt.toWindow = new DOMMatrix().translate(tx, ty).multiply(new DOMMatrix(cs.transform)).translate(-tx, -ty);
+      tilt.toWindow = new DOMMatrix().translate(tx, ty).multiply(new DOMMatrix(cs.transform)).translate(-tx, -ty);
+      tilt.el = el;
+      return tilt;
     }
     // Paints onto #tilt-view when the map is turned or tilted, with the view
     // shifted by the margin it reaches past the window.
@@ -14594,14 +14649,21 @@
         paint();
         return;
       }
-      labelPlaneWanted = false;
-      const { margin } = canvasTilt;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      tiltCtx.setTransform(1, 0, 0, 1, 0, 0);
-      tiltCtx.clearRect(0, 0, tiltView.width, tiltView.height);
+      clearLabelPlane();
+      labelPlaneWanted = false;
+      paintTiltedOn(canvasTilt, paint);
+      if (labelPlaneWanted) paintLabelPlane();
+    }
+    // Paints onto the tilt's canvas, with the view shifted by its margin.
+    function paintTiltedOn(tilt, paint) {
+      const { margin, el } = tilt;
+      const c = el.getContext('2d');
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.clearRect(0, 0, el.width, el.height);
       const screenCtx = ctx;
-      ctx = tiltCtx;
+      ctx = c;
       view.x += margin.x;
       view.y += margin.y;
       try {
@@ -14611,7 +14673,6 @@
         view.y -= margin.y;
         ctx = screenCtx;
       }
-      paintLabelPlane();
     }
 
     // Labels, their pins and lists stand upright on the screen whatever the
@@ -14622,7 +14683,7 @@
       if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
       if (!labelTools.hidden) drawPins();
     }
-    function paintLabelPlane() {
+    function clearLabelPlane() {
       const dpr = window.devicePixelRatio || 1;
       const w = Math.round(canvas.clientWidth * dpr);
       const h = Math.round(canvas.clientHeight * dpr);
@@ -14630,16 +14691,26 @@
       const planeCtx = labelPlane.getContext('2d');
       planeCtx.setTransform(1, 0, 0, 1, 0, 0);
       planeCtx.clearRect(0, 0, w, h);
-      if (!labelPlaneWanted) return;
+    }
+    // Clipped to clip, a split panel, when given.
+    function paintLabelPlane(clip = null) {
+      const dpr = window.devicePixelRatio || 1;
       const screenCtx = ctx;
-      ctx = planeCtx;
+      ctx = labelPlane.getContext('2d');
+      ctx.save();
       try {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (clip) {
+          ctx.beginPath();
+          ctx.rect(clip.x, clip.y, clip.w, clip.h);
+          ctx.clip();
+        }
         ctx.translate(view.x, view.y);
         ctx.scale(view.scale, view.scale);
         placeMap(ctx);
         onScreenPlane(drawLabelLayer);
       } finally {
+        ctx.restore();
         ctx = screenCtx;
       }
     }
@@ -14672,10 +14743,10 @@
     }
     // A point in the window, in the flat map's canvas pixels. Points above a
     // perspective horizon have none; they're held just below it.
-    function untilt(X, Y) {
-      const { ox, oy, spin, flat } = canvasTilt;
-      const d = flat ? Infinity : canvasTilt.d;
-      const angle = flat ? 0 : canvasTilt.angle;
+    function untilt(X, Y, tilt = canvasTilt) {
+      const { ox, oy, spin, flat } = tilt;
+      const d = flat ? Infinity : tilt.d;
+      const angle = flat ? 0 : tilt.angle;
       const w = d === Infinity ? Y - oy : Math.max(Y - oy, (-0.9 * d) / Math.tan(angle || 1e-9));
       let p;
       if (d === Infinity) p = new DOMPoint(X, oy + w / Math.cos(angle));
@@ -14689,10 +14760,13 @@
     }
     // A client point in the canvas's own, unturned and untilted pixels.
     function canvasLocal(clientX, clientY) {
+      const { x, y } = windowLocal(clientX, clientY);
+      return canvasTilt ? untilt(x, y) : { x, y };
+    }
+    // A client point in the canvas's window, as it shows.
+    function windowLocal(clientX, clientY) {
       const rect = canvas.parentElement.getBoundingClientRect();
-      const X = clientX - rect.left;
-      const Y = clientY - rect.top;
-      return canvasTilt ? untilt(X, Y) : { x: X, y: Y };
+      return { x: clientX - rect.left, y: clientY - rect.top };
     }
     // Over the background image where there is one, else as large as fits the box.
     function buildingsRect() {

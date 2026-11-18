@@ -1393,7 +1393,7 @@
     /* The Tree tool's panel is its options alone. */
     #background-panel:not([data-tab="base"]) > .tab-base,
     #background-panel:not([data-tab="buildings"]) > .tab-buildings,
-    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #rock-shapes, #terrain-settings) {
+    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #terrain-settings) {
       display: none !important;
     }
     .tree-shape-grid {
@@ -3196,19 +3196,21 @@
           Building Height
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Building height"></span>
         </label>
-        <label id="buildings-color-field" class="field" hidden>
-          Building Color
-          <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building color strength">%</span>
-        </label>
+        <div id="buildings-colors" class="field-pair" hidden>
+          <label class="field">
+            Top
+            <span class="color-field"><input id="buildings-color" type="color" value="#615348"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building top color strength">%</span>
+          </label>
+          <label class="field">
+            Sides
+            <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
+          </label>
+        </div>
         <label id="buildings-rotation-field" class="field" hidden>
           Building Rotation
           <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
           <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
           <input id="buildings-rotate" type="checkbox" hidden>
-        </label>
-        <label id="buildings-side-field" class="field" hidden>
-          Building Sides
-          <span class="color-field"><input id="buildings-side-color" type="color" value="#3f362f"></span>
         </label>
         <label id="buildings-shadows-field" class="field" hidden>
           Building Shadows
@@ -3261,34 +3263,6 @@
         <label id="tree-shadow-color-field" class="field" hidden>
           Tree Shadow Color
           <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
-        </label>
-      </div>
-      <div id="rock-shapes" class="label-section tab-landscape" hidden>
-        <div class="field">Rocks</div>
-        <div class="tree-shape-grid"></div>
-        <label class="field">
-          Rock Size
-          <span class="slider"><span class="percent-field"><input id="rock-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Rock size"></span>
-        </label>
-        <label class="field">
-          Size Variation
-          <span class="slider"><span class="percent-field"><input id="rock-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock size variation"></span>
-        </label>
-        <label class="field">
-          Rock Color
-          <span class="color-field"><input id="rock-color" type="color" value="#9a958b"></span>
-        </label>
-        <label class="field">
-          Color Variation
-          <span class="slider"><span class="percent-field"><input id="rock-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Rock color variation"></span>
-        </label>
-        <label class="field">
-          Rock Shadows
-          <input id="rock-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="rock-shadow-color-field" class="field" hidden>
-          Rock Shadow Color
-          <span class="color-field"><input id="rock-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Rock shadow opacity">%</span>
         </label>
       </div>
       <div id="terrain-settings" class="label-section tab-landscape" hidden>
@@ -3919,7 +3893,6 @@
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
-      document.getElementById('rock-shapes').hidden = name !== 'tree';
       document.getElementById('terrain-settings').hidden = name !== 'tree';
       const panel = document.getElementById('background-panel');
       panel.classList.toggle('tree-mode', name === 'tree');
@@ -5274,7 +5247,7 @@
     let baseShapes = null;
     let terrainImage = null;
     let terrainEffect = null;
-    // Turns any CSS colour into hex, for tint; the panel's rock previews need it early.
+    // Turns any CSS colour into hex, for tint.
     const colorProbe = document.createElement('canvas').getContext('2d');
 
     const canvasColor = document.getElementById('canvas-color');
@@ -7557,8 +7530,7 @@
         ctx.restore();
       }
       const stamps = allStamps();
-      if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, TREE_SHAPES, treeShadowColor, stamps);
-      if (stamps.length && rockShadowsOn.checked && !noBackground) drawStampShadows(ctx, ROCK_SHAPES, rockShadowColor, stamps);
+      if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
       if (!backgroundTools.hidden && backgroundTool === 'tree') {
@@ -12899,8 +12871,7 @@
       buildingsPreview.hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
       document.getElementById('buildings-lift-field').hidden = !img;
-      document.getElementById('buildings-side-field').hidden = !img;
-      document.getElementById('buildings-color-field').hidden = !img;
+      document.getElementById('buildings-colors').hidden = !img;
       showBuildingRotation();
       showShadowFields();
       if (!img) buildingsUpload.value = '';
@@ -13012,19 +12983,16 @@
       const buildings = !!buildingsImage;
       const buildingShadows = buildings && buildingShadowsOn.checked;
       shown('buildings-shadows-field', buildings);
-      const stampShadows = treeShadowsOn.checked || rockShadowsOn.checked;
+      const stampShadows = treeShadowsOn.checked;
       shown('shadow-length-field', buildingShadows || stampShadows);
       shown('tree-shadow-color-field', treeShadowsOn.checked);
-      shown('rock-shadow-color-field', rockShadowsOn.checked);
       shown('buildings-shadow-color-field', buildingShadows);
       shown('light-angle-field', buildingShadows || stampShadows);
     }
     const treeShadowsOn = document.getElementById('tree-shadows');
     const treeShadowColor = document.getElementById('tree-shadow-color');
-    const rockShadowsOn = document.getElementById('rock-shadows');
-    const rockShadowColor = document.getElementById('rock-shadow-color');
-    for (const input of [treeShadowColor, rockShadowColor]) input.addEventListener('input', draw);
-    for (const input of [buildingShadowsOn, treeShadowsOn, rockShadowsOn]) {
+    treeShadowColor.addEventListener('input', draw);
+    for (const input of [buildingShadowsOn, treeShadowsOn]) {
       input.addEventListener('change', () => {
         showShadowFields();
         draw();
@@ -13628,7 +13596,7 @@
       input.addEventListener('input', draw);
     }
     const treeTrunkInput = document.getElementById('tree-trunk-color');
-    for (const input of [treeColorInput, treeTrunkInput, document.getElementById('rock-color')]) {
+    for (const input of [treeColorInput, treeTrunkInput]) {
       input.addEventListener('input', () => {
         for (const preview of document.querySelectorAll('.tree-shape-grid canvas')) preview.paint();
         draw();
@@ -13641,8 +13609,7 @@
     }
     // Size: the base times up to 2× either way at full variation.
     const treeScale = (t) => {
-      const [size, variation] = ROCK_SHAPES[t.shape] ? [rockSizeInput, rockSizeVariation] : [treeSizeInput, treeSizeVariation];
-      return ((Number(size.value) || 100) / 100) * 2 ** (treeRandom(t, 1) * (Number(variation.value) || 0) / 100);
+      return ((Number(treeSizeInput.value) || 100) / 100) * 2 ** (treeRandom(t, 1) * (Number(treeSizeVariation.value) || 0) / 100);
     };
     // A colour moved by a stamp's variation: hue up to 30° and lightness 15% either way at full.
     const treeLeaf = (t) => varyColor(treeColorInput.value, t, treeColorVariation);
@@ -13660,155 +13627,14 @@
       const light = Math.min(0.95, Math.max(0.05, l + treeRandom(t, 3) * 0.15 * spread));
       return `hsl(${h.toFixed(1)} ${(sat * 100).toFixed(1)}% ${(light * 100).toFixed(1)}%)`;
     }
-    // Rocks are seen from above, like buildings: each body an irregular outline
-    // standing up as a wall to its shoulder, then rising in faceted rings to an
-    // off-centre peak. Heights are fractions of the body's height.
-    const ROCK = 'rock';
-    const ROCK_LEVELS = [0.45, 0.75, 0.93];
-    function rockShapes() {
-      const body = (cx, cy, r, stretch, height, seed) => {
-        let s = seed;
-        const random = () => (s = (s * 16807) % 2147483647) / 2147483647;
-        const n = 10;
-        const angles = Array.from({ length: n }, (_, i) => ((i + (random() - 0.5) * 0.5) / n) * 2 * Math.PI);
-        const ring = (scale, jitter) => angles.map((a) => {
-          const rr = r * scale * (1 + (random() - 0.5) * jitter);
-          return [cx + Math.cos(a) * rr * stretch, cy + Math.sin(a) * rr];
-        });
-        const levels = [ring(1, 0.35), ring(0.7, 0.35), ring(0.38, 0.45)];
-        const peak = [cx + (random() - 0.5) * r * 0.35, cy + (random() - 0.5) * r * 0.35];
-        const faces = [];
-        for (let l = 0; l < levels.length; l++) {
-          for (let i = 0; i < n; i++) {
-            const j = (i + 1) % n;
-            const a = [...levels[l][i], ROCK_LEVELS[l]];
-            const b = [...levels[l][j], ROCK_LEVELS[l]];
-            if (l === levels.length - 1) {
-              faces.push([a, b, [...peak, 1]]);
-              continue;
-            }
-            const c = [...levels[l + 1][j], ROCK_LEVELS[l + 1]];
-            const d = [...levels[l + 1][i], ROCK_LEVELS[l + 1]];
-            faces.push([a, b, c], [a, c, d]);
-          }
-        }
-        const outline = new Path2D();
-        levels[0].forEach(([x, y], i) => (i ? outline.lineTo(x, y) : outline.moveTo(x, y)));
-        outline.closePath();
-        return { points: levels[0], outline, faces, height };
-      };
-      const shape = (...bodies) => {
-        const xs = bodies.flatMap((b) => b.points.map(([x]) => x));
-        const ys = bodies.flatMap((b) => b.points.map(([, y]) => y));
-        return { bodies, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-      };
-      return {
-        boulder: shape(body(0, 0, 15, 1, 16, 7)),
-        pebble: shape(body(0, 0, 12, 1.7, 6, 3)),
-        tall: shape(body(0, 0, 10, 1, 26, 11)),
-        pair: shape(body(-6, -1, 12, 1, 15, 5), body(11, 5, 7, 1.2, 9, 9)),
-      };
-    }
-    // A face's shade from how squarely it faces the light, given in the rock's
-    // own units, nudged per face so the top reads as rough stone.
-    function rockFaceColor(color, face, height, light, index) {
-      const [a, b, c] = face.map(([x, y, z]) => [x, y, z * height]);
-      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
-      const len = Math.hypot(...n) || 1;
-      n = n.map((x) => (x / len) * Math.sign(n[2] || 1));
-      const lit = Math.max(0, n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
-      const grain = Math.sin(index * 91.7 + height * 3.1) * 0.06;
-      return tint(color, Math.max(-0.6, Math.min(0.5, (lit - 0.8) * 0.9 + grain)));
-    }
-    // The light as a unit vector in a rock's own units, coming from opposite
-    // where shadows fall, 40° up; spin is the rock's own turn on the map.
-    function rockLight(spin) {
-      const { dx, dy } = lightFall();
-      const [x, y] = [-dx * Math.cos(spin) - dy * Math.sin(spin), dx * Math.sin(spin) - dy * Math.cos(spin)];
-      const z = Math.tan((40 * Math.PI) / 180);
-      const len = Math.hypot(x, y, z);
-      return [x / len, y / len, z / len];
-    }
-    const rockSpin = (t) => treeRandom(t, 4) * Math.PI;
-    const rockPlace = (t) => new DOMMatrix().translate(t.x, t.y).rotate((rockSpin(t) * 180) / Math.PI).scale(treeScale(t));
-    // toCanvas(raise) gives the canvas transform for the map raised by raise screen pixels.
-    function drawRock(c, t, toCanvas) {
-      const shape = ROCK_SHAPES[t.shape];
-      const k = treeScale(t);
-      const place = rockPlace(t);
-      const color = partColor(ROCK, t);
-      const side = tint(color, -0.4);
-      const light = rockLight(rockSpin(t));
-      const tilted = !!canvasTilt?.angle;
-      for (const body of shape.bodies) {
-        const raise = (z) => (tilted ? z * body.height * k * view.scale : 0);
-        const shoulder = raise(ROCK_LEVELS[0]);
-        const slices = shoulder ? Math.max(1, Math.ceil((shoulder * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 0;
-        c.fillStyle = side;
-        for (let i = 1; i < slices; i++) {
-          c.setTransform(toCanvas((shoulder * i) / slices).multiply(place));
-          c.fill(body.outline);
-        }
-        const at = new Map();
-        const point = ([x, y, z]) => {
-          if (!at.has(z)) at.set(z, toCanvas(raise(z)).multiply(place));
-          return at.get(z).transformPoint(new DOMPoint(x, y));
-        };
-        c.setTransform(1, 0, 0, 1, 0, 0);
-        c.lineWidth = 0.6;
-        c.lineJoin = 'round';
-        body.faces.forEach((face, i) => {
-          c.beginPath();
-          for (const q of face.map(point)) c.lineTo(q.x, q.y);
-          c.closePath();
-          c.fillStyle = c.strokeStyle = rockFaceColor(color, face, body.height, light, i);
-          c.fill();
-          c.stroke();
-        });
-      }
-    }
-    // The panel's picture of a rock: from above, a little to the front, lit from the top left.
-    function paintRockPreview(c, shape) {
-      const color = rockColor.value;
-      const light = [-0.45, -0.55, 0.7];
-      const lean = 0.35;
-      for (const body of shape.bodies) {
-        c.save();
-        c.translate(0, -ROCK_LEVELS[0] * body.height * lean);
-        c.fillStyle = tint(color, -0.4);
-        c.fill(body.outline);
-        c.restore();
-        body.faces.forEach((face, i) => {
-          c.beginPath();
-          for (const [x, y, z] of face) c.lineTo(x, y - z * body.height * lean);
-          c.closePath();
-          c.fillStyle = c.strokeStyle = rockFaceColor(color, face, body.height, light, i);
-          c.lineWidth = 0.4;
-          c.fill();
-          c.stroke();
-        });
-      }
-    }
-    const ROCK_SHAPES = rockShapes();
-    const rockSizeInput = document.getElementById('rock-size');
-    const rockSizeVariation = document.getElementById('rock-size-variation');
-    const rockColor = document.getElementById('rock-color');
-    const rockColorVariation = document.getElementById('rock-color-variation');
-    for (const input of [rockSizeInput, rockSizeVariation, rockColorVariation]) {
-      linkSlider(input);
-      input.addEventListener('input', draw);
-    }
     // The fill for a stamp's part; without t, the base colour, for the panel's previews.
     function partColor(color, t) {
       if (color === LEAF) return t ? treeLeaf(t) : treeColorInput.value;
-      if (color === ROCK) return t ? varyColor(rockColor.value, t, rockColorVariation) : rockColor.value;
       return treeTrunkInput.value;
     }
     // Stamps from shapes since dropped take the nearest ones still offered.
-    const OLD_STAMPS = { slab: 'pebble', spire: 'tall', cypress: 'pine', palm: 'round', bush: 'oak' };
-    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? ROCK_SHAPES[t.shape] ?? TREE_SHAPES.pine;
+    const OLD_STAMPS = { cypress: 'pine', palm: 'round', bush: 'oak' };
+    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     // Null when no stamp is chosen: clicks then only select fill areas.
     let treeShape = null;
     let stampChoice = new Set();
@@ -13816,10 +13642,10 @@
     function showStampChoice() {
       for (const button of stampButtons) button.setAttribute('aria-pressed', String(stampChoice.has(button.dataset.tree)));
     }
-    // The panel's pickers, each button showing its tree or rock; one stamp is chosen across both.
+    // The panel's pickers, each button showing its tree.
     const stampButtons = [];
-    for (const [name, shape] of [...Object.entries(TREE_SHAPES), ...Object.entries(ROCK_SHAPES)]) {
-      const grid = document.querySelector(`#${TREE_SHAPES[name] ? 'tree' : 'rock'}-shapes .tree-shape-grid`);
+    for (const [name, shape] of Object.entries(TREE_SHAPES)) {
+      const grid = document.querySelector('#tree-shapes .tree-shape-grid');
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.tree = name;
@@ -13834,11 +13660,6 @@
         const k = (size - 8) / Math.max(shape.w, shape.h);
         c.setTransform(1, 0, 0, 1, 0, 0);
         c.clearRect(0, 0, preview.width, preview.height);
-        if (shape.bodies) {
-          c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size / 2) * dpr);
-          paintRockPreview(c, shape);
-          return;
-        }
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
           c.fillStyle = partColor(color);
@@ -13966,12 +13787,7 @@
         return { x: q.x / dpr - margin.x, y: q.y / dpr - margin.y };
       };
       const depth = (t) => tiltForward(footOf(t)).y;
-      const toCanvas = (raise) => new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(liftMatrix(raise)).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(base);
       for (const t of [...stamps].sort((a, b) => depth(a) - depth(b))) {
-        if (ROCK_SHAPES[t.shape]) {
-          drawRock(c, t, toCanvas);
-          continue;
-        }
         c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(uprightAt(footOf(t), view.scale)));
         const scale = treeScale(t);
         c.scale(scale, scale);
@@ -14019,18 +13835,6 @@
       }
       return p;
     }
-    // Each body of a rock casts its outline swept along the light by its height.
-    function rockShadow(shadows, t, reach, dx, dy) {
-      const k = treeScale(t);
-      const place = rockPlace(t);
-      for (const body of ROCK_SHAPES[t.shape].bodies) {
-        const length = body.height * k * reach;
-        const ground = body.points.map(([x, y]) => place.transformPoint(new DOMPoint(x, y)));
-        const hull = convexHull(ground.flatMap(({ x, y }) => [[x, y], [x + dx * length, y + dy * length]]));
-        hull.forEach(([x, y], i) => (i ? shadows.lineTo(x, y) : shadows.moveTo(x, y)));
-        shadows.closePath();
-      }
-    }
     function convexHull(points) {
       const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
       const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
@@ -14045,35 +13849,30 @@
       };
       return [...half(sorted), ...half([...sorted].reverse())];
     }
-    // shapes: the stamps whose shadows to draw, trees' or rocks'.
-    function drawStampShadows(c, shapes, color, stamps) {
+    function drawStampShadows(c, color, stamps) {
       const { dx, dy } = lightFall();
       const reach = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       if (!reach) return;
       // Filled as one path, so where shadows overlap they don't darken.
       const shadows = new Path2D();
-      if (shapes === ROCK_SHAPES) {
-        for (const t of stamps.filter((one) => ROCK_SHAPES[one.shape])) rockShadow(shadows, t, reach, dx, dy);
-      } else {
-        const cast = Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, treeShadow(shape, reach)]));
-        const turn = -(canvasTilt?.turn ?? 0);
-        for (const t of stamps.filter((one) => !ROCK_SHAPES[one.shape])) {
-          const k = treeScale(t);
-          const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(k);
-          shadows.addPath(cast[t.shape] ?? cast.pine, ground);
-          // The trunk's shadow is its foot's oval swept along the light, so it
-          // leaves from the trunk's own bottom corners.
-          for (const [kind, w, h] of shapeOf(t).volume.filter(([kind]) => kind === 'trunk')) {
-            const rx = (w * k) / 2;
-            const ry = w * k * TRUNK_FOOT;
-            const length = h * k * reach;
-            const steps = Math.max(2, Math.ceil((length * view.scale) / 1.5));
-            for (let i = 0; i <= steps; i++) {
-              const x = t.x + (dx * length * i) / steps;
-              const y = t.y + (dy * length * i) / steps;
-              shadows.moveTo(x + rx * Math.cos(turn), y + rx * Math.sin(turn));
-              shadows.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
-            }
+      const cast = Object.fromEntries(Object.entries(TREE_SHAPES).map(([name, shape]) => [name, treeShadow(shape, reach)]));
+      const turn = -(canvasTilt?.turn ?? 0);
+      for (const t of stamps) {
+        const k = treeScale(t);
+        const ground = new DOMMatrix([dx, dy, -dy, dx, t.x, t.y]).scale(k);
+        shadows.addPath(cast[t.shape] ?? cast.pine, ground);
+        // The trunk's shadow is its foot's oval swept along the light, so it
+        // leaves from the trunk's own bottom corners.
+        for (const [kind, w, h] of shapeOf(t).volume.filter(([kind]) => kind === 'trunk')) {
+          const rx = (w * k) / 2;
+          const ry = w * k * TRUNK_FOOT;
+          const length = h * k * reach;
+          const steps = Math.max(2, Math.ceil((length * view.scale) / 1.5));
+          for (let i = 0; i <= steps; i++) {
+            const x = t.x + (dx * length * i) / steps;
+            const y = t.y + (dy * length * i) / steps;
+            shadows.moveTo(x + rx * Math.cos(turn), y + rx * Math.sin(turn));
+            shadows.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
           }
         }
       }
@@ -14527,12 +14326,7 @@
     });
     // The nearest tree drawn under a canvas point.
     function treeAt(s) {
-      const p = toBackground(s.x, s.y);
       return [...trees].reverse().find((t) => {
-        if (ROCK_SHAPES[t.shape]) {
-          const q = rockPlace(t).inverse().transformPoint(new DOMPoint(p.x, p.y));
-          return ROCK_SHAPES[t.shape].bodies.some((body) => areaProbe.isPointInPath(body.outline, q.x, q.y));
-        }
         const foot = toScreen(t);
         const q = uprightAt(foot, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);
@@ -14667,7 +14461,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -14817,8 +14611,9 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
-      trees = (file.trees ?? []).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
-      fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.map((name) => OLD_STAMPS[name] ?? name) }));
+      const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
+      trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
+      fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));
       selectedArea = null;
       await setSatelliteReference(file.satelliteReference ?? null);
       undoState = null;

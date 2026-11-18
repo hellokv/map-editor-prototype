@@ -2309,7 +2309,7 @@
     </div>
     <div id="mode-menu">
       <div class="menu-card">
-      <button type="button" data-mode="background" aria-label="Background" aria-pressed="false">
+      <button type="button" data-mode="background" aria-label="Base" aria-pressed="false">
         <span class="material-symbols-rounded">image</span>
       </button>
       <button type="button" data-mode="labels" aria-label="Labels" aria-pressed="false" aria-disabled="true">
@@ -3230,7 +3230,7 @@
       <div id="background-tabs" class="label-section">
         <div class="field">
           <div class="toggle-group">
-            <button type="button" data-tab="base" aria-pressed="true">Base</button>
+            <button type="button" data-tab="base" aria-pressed="true">Background</button>
             <button type="button" data-tab="buildings" aria-pressed="false">Buildings</button>
             <button type="button" data-tab="landscape" aria-pressed="false">Landscape</button>
           </div>
@@ -16201,7 +16201,7 @@
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
         if (frameEditing) return 'Inner Frame';
-        return 'Background';
+        return 'Base';
       }
       if (selected?.area) return 'Area';
       if (selected?.group) return 'Path';

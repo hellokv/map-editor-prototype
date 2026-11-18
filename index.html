@@ -1169,6 +1169,12 @@
       display: flex;
       gap: 2px;
     }
+    #background-tabs .toggle-group {
+      flex: 1;
+    }
+    #background-tabs .toggle-group button {
+      flex: 1;
+    }
     :is(#panel, #style-panel, #settings-panel) .toggle-group button {
       padding: 3px 8px;
     }
@@ -3151,10 +3157,12 @@
     </div>
     <div id="background-panel" data-tab="base" hidden>
       <div id="background-tabs" class="label-section">
-        <div class="toggle-group">
-          <button type="button" data-tab="base" aria-pressed="true">Base</button>
-          <button type="button" data-tab="buildings" aria-pressed="false">Buildings</button>
-          <button type="button" data-tab="landscape" aria-pressed="false">Landscape</button>
+        <div class="field">
+          <div class="toggle-group">
+            <button type="button" data-tab="base" aria-pressed="true">Base</button>
+            <button type="button" data-tab="buildings" aria-pressed="false">Buildings</button>
+            <button type="button" data-tab="landscape" aria-pressed="false">Landscape</button>
+          </div>
         </div>
       </div>
       <div class="label-section tab-buildings">
@@ -3279,8 +3287,6 @@
           <select id="water-effect">
             <option value="none">None</option>
             <option value="depth">Depth</option>
-            <option value="waves">Waves</option>
-            <option value="caustics">Caustics</option>
           </select>
         </div>
         <p class="panel-note">With no stamp chosen, click a shape in the base layer to mark it as water.</p>
@@ -14272,9 +14278,9 @@
     // Filters are costly to redraw every frame, so effects are drawn once into a bitmap.
     async function waterEffectImage(request) {
       const effect = waterEffectInput.value;
-      if (!['depth', 'waves', 'caustics'].includes(effect)) return null;
+      if (effect !== 'depth') return null;
       const { naturalWidth: W, naturalHeight: H } = backgroundImage;
-      const text = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${waterEffectMarkup(effect)}</svg>`;
+      const text = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${waterEffectMarkup()}</svg>`;
       const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
       const svg = await loadImage(url).catch(() => null);
       URL.revokeObjectURL(url);
@@ -14288,16 +14294,15 @@
     const waterEffectInput = document.getElementById('water-effect');
     waterEffectInput.addEventListener('change', paintWater);
     const mixHex = (hex, to, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - t) + to * t).toString(16).padStart(2, '0')).join('')}`;
-    // Each water shape's effect as SVG filters in the image's pixels, sized in map units.
-    // Every effect sits on Depth: deeper and darker away from the shore.
-    function waterEffectMarkup(effect) {
+    // Depth for each water shape, as an SVG filter in the image's pixels, sized in
+    // map units: lighter shallows at the shore, deeper and darker away from it.
+    function waterEffectMarkup() {
       const u = 1 / baseScale().kx;
       const color = waterColorInput.value;
       const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
       const tint = (hex, a) => `${rgb(hex).map((v) => `0 0 0 0 ${v}`).join(' ')} 0 0 0 1 ${a}`;
       const deep = mixHex(color, 0, 0.45);
       const shallow = mixHex(color, 255, 0.4);
-      const bright = mixHex(color, 255, 0.75);
       let out = '';
       for (const i of water) {
         const shape = baseShapes.shapes[i];
@@ -14316,37 +14321,8 @@
           <feComponentTransfer in="shallowRaw" result="shallow"><feFuncA type="table" tableValues="0 0.55 0.55 0.12 0"/></feComponentTransfer>
           <feMerge><feMergeNode in="deep"/><feMergeNode in="shallow"/></feMerge>
         </filter>`;
-        let surface = '';
-        if (effect === 'waves') {
-          // Wind-stretched noise as a height field: shaded for swell, with sun glinting off crests.
-          surface = `<filter id="${id}-surface" filterUnits="userSpaceOnUse" ${region} color-interpolation-filters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="${1 / (26 * u)} ${1 / (7 * u)}" numOctaves="4" seed="${i + 1}" result="n"/>
-            <feDiffuseLighting in="n" surfaceScale="2.2" diffuseConstant="1" lighting-color="#fff" result="lit"><feDistantLight azimuth="235" elevation="50"/></feDiffuseLighting>
-            <feColorMatrix in="lit" type="matrix" values="${rgb(deep).map((v) => `0 0 0 0 ${v}`).join(' ')} -0.9 0 0 0 0.8" result="trough"/>
-            <feSpecularLighting in="n" surfaceScale="3" specularConstant="1.2" specularExponent="30" lighting-color="${bright}" result="spec"><feDistantLight azimuth="235" elevation="38"/></feSpecularLighting>
-            <feComponentTransfer in="spec" result="glint"><feFuncA type="gamma" amplitude="1" exponent="2.2" offset="0"/></feComponentTransfer>
-            <feMerge><feMergeNode in="trough"/><feMergeNode in="glint"/></feMerge>
-          </filter>`;
-        } else if (effect === 'caustics') {
-          // Turbulence dips to zero along a web of seams; brightening only those gives
-          // the net of light that ripples focus on a shallow bottom. Two scales layered.
-          const web = (name, scale, seed, alpha) => `
-            <feTurbulence type="turbulence" baseFrequency="${1 / (scale * u)}" numOctaves="1" seed="${seed}" result="${name}n"/>
-            <feColorMatrix in="${name}n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="${name}g"/>
-            <feComponentTransfer in="${name}g" result="${name}a"><feFuncA type="table" tableValues="${alpha} ${alpha * 0.35} 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/></feComponentTransfer>
-            <feFlood flood-color="${bright}" result="${name}c"/>
-            <feComposite in="${name}c" in2="${name}a" operator="in" result="${name}"/>`;
-          surface = `<filter id="${id}-surface" filterUnits="userSpaceOnUse" ${region} color-interpolation-filters="sRGB">
-            ${web('big', 20, i + 1, 0.85)}
-            ${web('fine', 9, i + 7, 0.45)}
-            <feMerge result="m"><feMergeNode in="big"/><feMergeNode in="fine"/></feMerge>
-            <feGaussianBlur in="m" stdDeviation="${0.3 * u}"/>
-          </filter>`;
-        }
-        out += `<defs><clipPath id="${id}-clip">${outline}</clipPath>${depth}${surface}</defs>`;
-        out += `<g clip-path="url(#${id}-clip)"><g filter="url(#${id}-depth)">${outline}</g>`;
-        if (surface) out += `<rect ${region} fill="#fff" filter="url(#${id}-surface)"/>`;
-        out += '</g>';
+        out += `<defs><clipPath id="${id}-clip">${outline}</clipPath>${depth}</defs>`;
+        out += `<g clip-path="url(#${id}-clip)"><g filter="url(#${id}-depth)">${outline}</g></g>`;
       }
       return out;
     }

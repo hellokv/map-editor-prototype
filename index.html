@@ -3306,14 +3306,16 @@
             <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
           </label>
         </div>
-        <label id="tree-shadows-field" class="field">
-          Shadows
-          <input id="tree-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="tree-shadow-color-field" class="field" hidden>
-          Shadow Color
-          <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
-        </label>
+        <div class="field-group">
+          <label id="tree-shadows-field" class="field">
+            Shadows
+            <input id="tree-shadows" class="switch" type="checkbox">
+          </label>
+          <label id="tree-shadow-color-field" class="field" hidden>
+            Color
+            <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
+          </label>
+        </div>
       </div>
       <div id="terrain-settings" class="label-section tab-landscape" hidden>
         <div class="section-heading">Terrain</div>

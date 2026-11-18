@@ -1195,6 +1195,13 @@
       display: flex;
       gap: 2px;
     }
+    /* The tabs stay just under the panel's header while the column scrolls. */
+    #background-tabs {
+      position: sticky;
+      top: 49px;
+      z-index: 2;
+      background: var(--label-ground);
+    }
     #background-tabs .toggle-group {
       flex: 1;
     }

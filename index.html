@@ -45,7 +45,7 @@
       flex-direction: column;
       gap: 6px;
       padding: 6px 10px;
-      transform: translate(-50%, calc(-100% - 12px));
+      transform: translate(-50%, 12px);
       font: 12px system-ui, sans-serif;
       background: #fff;
       border-radius: 8px;
@@ -13455,12 +13455,14 @@
       roofHeight.hidden = (selectedBuilding.roofStyle ?? 'flat') === 'flat';
       roofHeight.querySelector('input').value = selectedBuilding.roofHeight ?? 100;
       roofHeight.querySelector('output').value = `${selectedBuilding.roofHeight ?? 100}%`;
+      // Under the building's footprint on the ground, so changing its lift doesn't move it.
       const r = partRect(selectedBuilding);
-      const s = toScreen({ x: r.x + r.w / 2, y: r.y });
-      const roof = liftMatrix(canvasTilt?.angle ? (lift + roofRise(selectedBuilding)) * view.scale : 0).transformPoint(new DOMPoint(s.x, s.y));
-      const at = windowPoint(roof.x, roof.y);
-      buildingPop.style.left = `${at.x}px`;
-      buildingPop.style.top = `${at.y}px`;
+      const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([x, y]) => {
+        const q = toScreen({ x, y });
+        return windowPoint(q.x, q.y);
+      });
+      buildingPop.style.left = `${corners.reduce((sum, q) => sum + q.x, 0) / 4}px`;
+      buildingPop.style.top = `${Math.max(...corners.map((q) => q.y))}px`;
     }
     // A canvas point where it shows in the window, after any turn and tilt.
     function windowPoint(x, y) {

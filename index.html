@@ -2062,6 +2062,7 @@
       display: none;
     }
     /* The board's settings wait for a background or satellite reference to set them against. */
+    #background-panel:not(.has-reference):has(#image-preview[hidden]) .frame-settings,
     #background-panel:not(.has-reference) #image-preview[hidden] ~ :not(.template-setting),
     #background-panel #image-preview[hidden] ~ .resolution-group #resolution-field {
       display: none;
@@ -3265,7 +3266,7 @@
           </div>
         </div>
         <label id="buildings-rotation-field" class="field" hidden>
-          Building Rotation
+          Rotation
           <span class="slider"><input id="buildings-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Building rotation"></span>
           <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
           <input id="buildings-rotate" type="checkbox" hidden>
@@ -3446,6 +3447,37 @@
         </div>
       </div>
       <div class="label-section background-settings tab-base">
+        <label id="image-upload-field" class="field">
+          Background Image
+          <input id="image-upload" type="file" accept="image/*" hidden>
+          <span class="material-symbols-rounded">upload</span>
+        </label>
+        <div id="image-preview" hidden>
+          <img alt="Background image">
+          <button id="image-delete" type="button" aria-label="Delete image">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+        </div>
+        <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
+        <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
+        <div class="field-group template-setting resolution-group">
+          <div id="resolution-field" class="field">
+            Resolution
+            <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
+          </div>
+          <div class="field">
+            Recommended
+            <output id="background-min-resolution"></output>
+          </div>
+          <button id="download-template" class="new-style" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
+        </div>
+        <div id="template-formats" class="field-pair template-setting" hidden>
+          <button class="new-style" type="button" data-format="png">PNG<span class="material-symbols-rounded">image</span></button>
+          <button class="new-style" type="button" data-format="svg">SVG<span class="material-symbols-rounded">polyline</span></button>
+        </div>
+        <p id="download-template-status" class="panel-note template-setting" hidden></p>
+      </div>
+      <div class="label-section background-settings tab-base">
         <label id="background-show-labels-field" class="field">
           Show Labels
           <input id="background-show-labels" class="switch" type="checkbox" checked>
@@ -3476,10 +3508,6 @@
             <span class="slider"><input id="map-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Rotation"></span>
           </label>
         </div>
-        <label id="shadow-length-field" class="field" hidden>
-          Shadow Length
-          <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
-        </label>
         <div class="field-group">
           <label id="light-angle-field" class="field">
             Light Angle
@@ -3494,6 +3522,10 @@
             <span class="slider"><span class="percent-field"><input id="map-light-spread" type="number" min="10" max="200" step="1" value="100"></span><input type="range" min="10" max="200" step="1" value="100" aria-label="Light spread"></span>
           </label>
         </div>
+        <label id="shadow-length-field" class="field" hidden>
+          Shadow Length
+          <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
+        </label>
         <div id="satellite-reference-field" class="field" hidden>
           Satellite Reference
           <span class="field-end">
@@ -3502,41 +3534,13 @@
           </span>
         </div>
       </div>
-      <div class="label-section background-settings tab-base">
-        <label id="image-upload-field" class="field">
-          Background Image
-          <input id="image-upload" type="file" accept="image/*" hidden>
-          <span class="material-symbols-rounded">upload</span>
-        </label>
-        <div id="image-preview" hidden>
-          <img alt="Background image">
-          <button id="image-delete" type="button" aria-label="Delete image">
-            <span class="material-symbols-rounded">delete</span>
-          </button>
-        </div>
-        <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
-        <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
-        <div class="field-group template-setting resolution-group">
-          <div id="resolution-field" class="field">
-            Resolution
-            <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
-          </div>
-          <div class="field">
-            Recommended
-            <output id="background-min-resolution"></output>
-          </div>
-          <button id="download-template" class="new-style" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
-        </div>
-        <div id="template-formats" class="field-pair template-setting" hidden>
-          <button class="new-style" type="button" data-format="png">PNG<span class="material-symbols-rounded">image</span></button>
-          <button class="new-style" type="button" data-format="svg">SVG<span class="material-symbols-rounded">polyline</span></button>
-        </div>
-        <p id="download-template-status" class="panel-note template-setting" hidden></p>
+      <div class="label-section background-settings tab-base frame-settings">
+        <div class="section-heading">Frame</div>
         <div class="field-group">
           <div class="field-pair">
             <label class="field">
               Inside
-              <span class="color-field"><input id="board-color" type="color" value="#ffffff"></span>
+              <span class="color-field"><input id="board-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Inside opacity">%</span>
             </label>
             <label class="field">
               Outside
@@ -4049,6 +4053,8 @@
           if (backgroundTool === 'tree') setBackgroundTool('select');
           showBackgroundTab(tab);
         }
+        if (tab !== 'buildings' && !selectedBuilding?.shape) selectedBuilding = null;
+        showBuildingPop();
         draw();
       });
     }
@@ -13788,7 +13794,8 @@
       const sole = soleShape();
       if (sole && isBuildingShape(sole)) selectedBuilding = shapeBuildingPart(sole);
       else if (selectedBuilding?.shape) selectedBuilding = null;
-      buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !hasBuildings();
+      buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !hasBuildings()
+        || document.getElementById('background-panel').dataset.tab !== 'buildings';
       if (buildingPop.hidden) return;
       const lift = partLift(selectedBuilding);
       buildingPopSlider.value = lift;
@@ -13851,7 +13858,8 @@
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool !== 'select') return;
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool !== 'select'
+        || document.getElementById('background-panel').dataset.tab !== 'buildings') return;
       const s = canvasPoint(e);
       // Drawn shapes sit above the buildings image, so a click on one picks the shape.
       const part = shapeAt(toBackground(s.x, s.y)) ? null : buildingAt(s);

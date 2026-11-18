@@ -9808,7 +9808,7 @@
     // no room.
     // zoom is how much larger the label is drawn than its style's sizes,
     // which matters only to a pin's shadow gap.
-    function labelLayout(label, zoom = 1) {
+    function labelLayout(label, zoom = mapScale()) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
       const hidden = textIsHidden(label);
@@ -9840,7 +9840,7 @@
       let below = head;
       if (pinBeside) {
         below = head * PIN_REACH;
-        if (style.iconShadow) below += style.iconShadowGap / zoom + head * 0.7 * (style.iconShadowSize / 100) * GROUND_SHADOW_SQUASH;
+        if (style.iconShadow) below += (style.iconShadowGap * mapScale()) / zoom + head * 0.7 * (style.iconShadowSize / 100) * GROUND_SHADOW_SQUASH;
       }
       const iconRect = (icon) => ({ x: icon.x - sw / 2, y: icon.y - head, w: sw, h: head + below });
       // Laid out around the text's centre at (0, 0), then moved onto the spot.
@@ -10132,7 +10132,7 @@
 
     // Expects c's font, alignment and shadow to be set up for the style.
     // zoom is how much larger the label is drawn than its style's sizes.
-    function paintLabel(c, label, style, zoom = 1) {
+    function paintLabel(c, label, style, zoom = mapScale()) {
       const baseline = c.measureText('H').actualBoundingBoxAscent / 2;
       if (style.background) {
         // With a background, the outline and shadow belong to the box, not the text.
@@ -10237,8 +10237,8 @@
       const pin = style.iconShape === 'pin';
       // A pin stands on the map, so its shadow is a soft oval on the ground
       // under its point rather than a drop shadow.
-      // The shadow's gap scales with the map, not with the label.
-      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH + style.iconShadowGap / zoom, r * 0.7 * (style.iconShadowSize / 100));
+      // The shadow's gap scales with the map and Scale, not with the label's zoom scaling.
+      if (pin && style.iconShadow) paintGroundShadow(c, style.iconShadow, x, y + r * PIN_REACH + (style.iconShadowGap * mapScale()) / zoom, r * 0.7 * (style.iconShadowSize / 100));
       c.shadowColor = pin ? 'transparent' : style.iconShadow ?? 'transparent';
       if (style.iconBackground) {
         c.fillStyle = style.iconBackground;

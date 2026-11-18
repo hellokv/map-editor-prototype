@@ -3889,6 +3889,7 @@
     // The shape options sit just right of the Shapes tool button.
     function showBackgroundTab(tab) {
       document.getElementById('background-panel').dataset.tab = tab;
+      if (tab === 'buildings' && frameEditing) setFrameEditing(false);
       for (const button of document.querySelectorAll('#background-tabs button')) button.setAttribute('aria-pressed', String(button.dataset.tab === tab));
     }
     for (const button of document.querySelectorAll('#background-tabs button')) {
@@ -15799,7 +15800,9 @@
       draw();
     });
     // The frame is there to select once there's an image to frame.
-    const frameSelectable = () => !backgroundTools.hidden && backgroundTool === 'select' && !!(backgroundImage || satelliteReference);
+    // The Buildings tab works on buildings, so the frame stays put there.
+    const frameSelectable = () => !backgroundTools.hidden && backgroundTool === 'select' && !!(backgroundImage || satelliteReference)
+      && document.getElementById('background-panel').dataset.tab !== 'buildings';
     // Shapes and sketch figures lie over the frame and are picked first.
     function overFrameItem(s) {
       return !!(shapeAt(toBackground(s.x, s.y)) || sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints()) || sketchSegmentAt(s));

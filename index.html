@@ -3360,7 +3360,7 @@
           Shadow Length
           <span class="slider"><span class="percent-field"><input id="shadow-length" type="number" min="0" max="300" step="1" value="100"></span><input type="range" min="0" max="300" step="1" value="100" aria-label="Shadow length"></span>
         </label>
-        <label id="light-angle-field" class="field" hidden>
+        <label id="light-angle-field" class="field">
           Light Angle
           <span class="slider"><input id="light-angle" type="number" min="0" max="360" step="1" value="315"><input type="range" min="0" max="360" step="1" value="315" aria-label="Light angle"></span>
         </label>
@@ -13021,7 +13021,6 @@
       shown('shadow-length-field', buildingShadows || stampShadows);
       shown('tree-shadow-color-field', treeShadowsOn.checked);
       shown('buildings-shadow-color-field', buildingShadows);
-      shown('light-angle-field', buildingShadows || stampShadows);
     }
     const treeShadowsOn = document.getElementById('tree-shadows');
     const treeShadowColor = document.getElementById('tree-shadow-color');

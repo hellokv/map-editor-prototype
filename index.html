@@ -13609,8 +13609,10 @@
       draw();
     });
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool === 'tree') return;
-      const part = buildingAt(canvasPoint(e));
+      if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool !== 'select') return;
+      const s = canvasPoint(e);
+      // Drawn shapes sit above the buildings image, so a click on one picks the shape.
+      const part = shapeAt(toBackground(s.x, s.y)) ? null : buildingAt(s);
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
         return;

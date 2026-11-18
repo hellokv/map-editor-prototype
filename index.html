@@ -3526,27 +3526,31 @@
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">
         </label>
-        <label class="field">
-          Outline
-          <span class="color-field"><input id="board-outline" type="color" value="#c8c8c8"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
-          <input id="board-outline-on" class="switch" type="checkbox">
-        </label>
-        <label id="board-outline-width-field" class="field">
-          Outline Weight
-          <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
-        </label>
-        <div class="field">
-          Corners
-          <select id="board-corners">
-            <option value="square" selected>Square</option>
-            <option value="round">Rounded</option>
-            <option value="chamfer">Chamfered</option>
-          </select>
+        <div class="field-group">
+          <label class="field">
+            Outline
+            <span class="color-field"><input id="board-outline" type="color" value="#c8c8c8"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Opacity">%</span>
+            <input id="board-outline-on" class="switch" type="checkbox">
+          </label>
+          <label id="board-outline-width-field" class="field">
+            Weight
+            <input id="board-outline-width" type="number" min="0" step="0.5" value="1">
+          </label>
         </div>
-        <label class="field">
-          Corner Radius
-          <input id="board-radius" type="number" min="0" step="1" value="0">
-        </label>
+        <div class="field-group">
+          <div class="field">
+            Corners
+            <select id="board-corners">
+              <option value="square" selected>Square</option>
+              <option value="round">Rounded</option>
+              <option value="chamfer">Chamfered</option>
+            </select>
+          </div>
+          <label class="field">
+            Radius
+            <input id="board-radius" type="number" min="0" step="1" value="0">
+          </label>
+        </div>
         <label class="field">
           Shadow
           <span class="color-field"><input id="board-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>

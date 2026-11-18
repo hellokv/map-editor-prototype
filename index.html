@@ -38,6 +38,14 @@
       position: absolute;
       pointer-events: none;
     }
+    #label-plane {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
     #building-lift-pop {
       position: absolute;
       z-index: 6;
@@ -2168,6 +2176,7 @@
     </div>
     <canvas id="canvas"></canvas>
     <canvas id="tilt-view" hidden></canvas>
+    <canvas id="label-plane" hidden></canvas>
     <div id="area-pop" hidden>
       <span>Density</span>
       <input type="range" min="1" max="100" step="1" aria-label="Area density">
@@ -7608,11 +7617,10 @@
           drawPathLines();
         }
         if (!layerOverride) captureLabelBackdrop();
-        if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
-        if (!labelTools.hidden) {
-          drawPins();
-          drawShapeSelection();
-        }
+        // Split screen panels keep their labels on the map.
+        if (canvasTilt && !panelViews) labelPlaneWanted = true;
+        else drawLabelLayer();
+        if (!labelTools.hidden) drawShapeSelection();
         if (!backgroundTools.hidden) {
           drawSketch();
           drawShapeSelection();
@@ -9682,7 +9690,9 @@
     // The text box is invisible and only gathers typing; it sits on the
     // label's spot so the browser's input method popups appear there.
     function placeLabelInput() {
-      if (!editingLabel) return;
+      if (editingLabel) onScreenPlane(placeLabelInputFlat);
+    }
+    function placeLabelInputFlat() {
       labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
       labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
       if (!placeSuggestions.hidden) {
@@ -9773,8 +9783,8 @@
 
     canvas.addEventListener('dblclick', (e) => {
       if (labelTools.hidden || labelTool !== 'select') return;
-      const s = canvasPoint(e);
-      const label = labelAt(toBackground(s.x, s.y));
+      const q = screenPlanePoint(e);
+      const label = onScreenPlane(() => labelAt(q));
       if (label) startLabel(label, label);
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
@@ -12133,9 +12143,11 @@
       }
       if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
+        const q = screenPlanePoint(e);
+        const [pinHit, labelHit, listHit] = onScreenPlane(() => [pinAt(q), labelAt(q), listAt(q)]);
         // A selected image's handles, then any image not under a label, pin
         // or list, are handled as shapes are.
-        if (handleAt(s) || (!pinAt(p) && !labelAt(p) && !listAt(p) && shapeAt(p))) {
+        if (handleAt(s) || (!pinHit && !labelHit && !listHit && shapeAt(p))) {
           selectedLabels = [];
           selectedPins = [];
           selectedList = null;
@@ -12145,7 +12157,7 @@
           return;
         }
         selectedShapes = [];
-        const pressedPin = pinAt(p);
+        const pressedPin = pinHit;
         if (pressedPin) {
           selectedList = null;
           // Selecting a pin selects its label too, so it shows at full opacity.
@@ -12169,8 +12181,8 @@
           return;
         }
         if (!shiftHeld) selectedPins = [];
-        const pressedLabel = labelAt(p);
-        const pressedList = pressedLabel ? null : listAt(p);
+        const pressedLabel = labelHit;
+        const pressedList = pressedLabel ? null : listHit;
         if (!pressedList) selectedList = null;
         if (pressedList) {
           selectedLabels = [];
@@ -13638,11 +13650,8 @@
     // A canvas point where it shows in the window, after any turn and tilt.
     function windowPoint(x, y) {
       if (!canvasTilt) return { x, y };
-      const { margin } = canvasTilt;
-      const cs = getComputedStyle(tiltView);
-      const [ox, oy] = cs.transformOrigin.split(' ').map(parseFloat);
-      const M = new DOMMatrix().translate(ox, oy).multiply(new DOMMatrix(cs.transform)).translate(-ox, -oy);
-      const q = M.transformPoint(new DOMPoint(x + margin.x, y + margin.y, 0, 1));
+      const { margin, toWindow } = canvasTilt;
+      const q = toWindow.transformPoint(new DOMPoint(x + margin.x, y + margin.y, 0, 1));
       return { x: q.x / q.w - margin.x, y: q.y / q.w - margin.y };
     }
     buildingPopSlider.addEventListener('input', () => {
@@ -14571,14 +14580,19 @@
         `rotateX(${flat ? 0 : deg}deg)`,
         `translate(${cx - ox}px, ${cy - oy}px) rotate(${turn}deg) translate(${ox - cx}px, ${oy - cy}px)`,
       ].join(' ');
+      const cs = getComputedStyle(tiltView);
+      const [tx, ty] = cs.transformOrigin.split(' ').map(parseFloat);
+      canvasTilt.toWindow = new DOMMatrix().translate(tx, ty).multiply(new DOMMatrix(cs.transform)).translate(-tx, -ty);
     }
     // Paints onto #tilt-view when the map is turned or tilted, with the view
     // shifted by the margin it reaches past the window.
     function paintTilted(paint) {
+      labelPlane.hidden = !canvasTilt;
       if (!canvasTilt) {
         paint();
         return;
       }
+      labelPlaneWanted = false;
       const { margin } = canvasTilt;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -14595,6 +14609,64 @@
         view.y -= margin.y;
         ctx = screenCtx;
       }
+      paintLabelPlane();
+    }
+
+    // Labels, their pins and lists stand upright on the screen whatever the
+    // map's tilt and turn, each at the spot its map point shows in the window.
+    const labelPlane = document.getElementById('label-plane');
+    let labelPlaneWanted = false;
+    function drawLabelLayer() {
+      if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
+      if (!labelTools.hidden) drawPins();
+    }
+    function paintLabelPlane() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(canvas.clientWidth * dpr);
+      const h = Math.round(canvas.clientHeight * dpr);
+      if (labelPlane.width !== w || labelPlane.height !== h) Object.assign(labelPlane, { width: w, height: h });
+      const planeCtx = labelPlane.getContext('2d');
+      planeCtx.setTransform(1, 0, 0, 1, 0, 0);
+      planeCtx.clearRect(0, 0, w, h);
+      if (!labelPlaneWanted) return;
+      const screenCtx = ctx;
+      ctx = planeCtx;
+      try {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.translate(view.x, view.y);
+        ctx.scale(view.scale, view.scale);
+        placeMap(ctx);
+        onScreenPlane(drawLabelLayer);
+      } finally {
+        ctx = screenCtx;
+      }
+    }
+    // Runs fn with every label, pin, list and the label being typed moved to
+    // where it shows on the screen plane, then puts them back. Drawing and
+    // hit testing in there treat the map as flat.
+    let onPlane = false;
+    function onScreenPlane(fn) {
+      if (!canvasTilt || onPlane) return fn();
+      const moved = [...labels, ...labels.flatMap((label) => label.pins), ...lists];
+      if (editingLabel) moved.push(editingLabel);
+      const saved = moved.map((item) => [item, item.x, item.y]);
+      for (const item of moved) {
+        const f = toScreen(item);
+        const w = windowPoint(f.x, f.y);
+        Object.assign(item, toBackground(w.x, w.y));
+      }
+      onPlane = true;
+      try {
+        return fn();
+      } finally {
+        onPlane = false;
+        for (const [item, x, y] of saved) Object.assign(item, { x, y });
+      }
+    }
+    // A pointer event's spot on the screen plane, in map units.
+    function screenPlanePoint(e) {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      return toBackground(e.clientX - rect.left, e.clientY - rect.top);
     }
     // A point in the window, in the flat map's canvas pixels. Points above a
     // perspective horizon have none; they're held just below it.

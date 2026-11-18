@@ -13552,21 +13552,27 @@
       const many = (...shapes) => path((p) => shapes.forEach((shape) => { p.moveTo(0, 0); shape(p); }));
       // An evergreen as stacked triangles, [apex, base, half width] each, apex
       // and base as heights; each tier's foot shows as a notch in its outline.
-      const evergreen = (layers) => ({
-        w: 2 * Math.max(...layers.map(([, , half]) => half)),
-        h: Math.max(...layers.map(([apex]) => apex)),
-        parts: [[trunk(6, 12), TRUNK], [path((p) => {
-          for (const [apex, base, half] of layers) {
-            p.moveTo(0, -apex);
-            p.lineTo(half, -base);
-            p.lineTo(-half, -base);
-            p.closePath();
-          }
-        }), LEAF]],
-        volume: [['trunk', 6, 12], ...layers.map((layer) => ['cone', ...layer])],
-      });
+      // Trunks run up into the foliage, so none shows a gap beneath it.
+      const evergreen = (layers) => {
+        const [apex, base] = layers[layers.length - 1];
+        const trunkH = base + (apex - base) * 0.4;
+        return {
+          w: 2 * Math.max(...layers.map(([, , half]) => half)),
+          h: Math.max(...layers.map(([a]) => a)),
+          parts: [[trunk(6, trunkH), TRUNK], [path((p) => {
+            for (const [apex, base, half] of layers) {
+              p.moveTo(0, -apex);
+              p.lineTo(half, -base);
+              p.lineTo(-half, -base);
+              p.closePath();
+            }
+          }), LEAF]],
+          volume: [['trunk', 6, trunkH], ...layers.map((layer) => ['cone', ...layer])],
+        };
+      };
       // A broadleaf as a trunk under circles, [across, height, radius] each.
-      const broadleaf = (trunkW, trunkH, balls) => {
+      const broadleaf = (trunkW, balls) => {
+        const trunkH = Math.min(...balls.map(([, z]) => z));
         const xs = balls.flatMap(([x, , r]) => [x - r, x + r]);
         return {
           w: Math.max(...xs) - Math.min(...xs),
@@ -13578,9 +13584,9 @@
       // In the panel's order: broadleaves of one to three circles, then
       // evergreens with no notch to two.
       return {
-        round: broadleaf(6, 22, [[0, 38, 19]]),
-        duo: broadleaf(7, 20, [[-10, 30, 15], [10, 40, 15]]),
-        oak: broadleaf(8, 20, [[-12, 30, 14], [12, 30, 14], [0, 44, 15]]),
+        round: broadleaf(6, [[0, 38, 19]]),
+        duo: broadleaf(7, [[-10, 30, 15], [10, 40, 15]]),
+        oak: broadleaf(8, [[-12, 30, 14], [12, 30, 14], [0, 44, 15]]),
         cone: evergreen([[62, 10, 15]]),
         spruce: evergreen([[62, 28, 13], [44, 10, 18]]),
         pine: evergreen([[60, 30, 11], [48, 20, 15], [36, 10, 18]]),

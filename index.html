@@ -3305,7 +3305,6 @@
           Water Effect
           <select id="water-effect">
             <option value="none">None</option>
-            <option value="depth">Depth</option>
             <option value="stripes">Stripes</option>
             <option value="dots">Dots</option>
           </select>
@@ -14456,6 +14455,8 @@
     for (const kind of Object.values(TERRAIN)) {
       kind.color.addEventListener('input', paintTerrain);
       kind.effect.addEventListener('change', () => {
+        // Effects since dropped load as None.
+        if (!kind.effect.value) kind.effect.value = 'none';
         showPatternFields(kind);
         paintTerrain();
       });
@@ -14466,8 +14467,6 @@
     // Each terrain shape's effect as an SVG filter in the image's pixels, sized in map units.
     function terrainEffectMarkup() {
       const u = 1 / baseScale().kx;
-      const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-      const paint = (hex) => `${rgb(hex).map((v) => `0 0 0 0 ${v}`).join(' ')} 0 0 0 1 0`;
       // Noise at the given scale in map units, coloured, its alpha mapped by a table over the noise's value.
       const noise = (name, sx, sy, octaves, seed, color, alphas) => `
         <feTurbulence type="fractalNoise" baseFrequency="${1 / (sx * u)} ${1 / (sy * u)}" numOctaves="${octaves}" seed="${seed}" result="${name}n"/>
@@ -14507,17 +14506,6 @@
             ? `<rect x="0" y="0" width="${step}" height="${size}" fill="${hex}" fill-opacity="${alpha}"/>`
             : `<circle cx="${step / 2}" cy="${step / 2}" r="${size / 2}" fill="${hex}" fill-opacity="${alpha}"/>`;
           fill = `<pattern id="${id}-pat" patternUnits="userSpaceOnUse" width="${step}" height="${step}" patternTransform="rotate(${Number(kind.patternAngle.value) || 0})">${tile}</pattern>`;
-        } else if (type === 'water') {
-          // The outline blurred reads about 0.5 at the shore and 1 well inside it:
-          // lighter shallows along the shore, deeper and darker away from it.
-          const deep = mixHex(color, 0, 0.45);
-          const shallow = mixHex(color, 255, 0.4);
-          primitives = `<feGaussianBlur in="SourceAlpha" stdDeviation="${16 * u}" result="b"/>
-            <feColorMatrix in="b" type="matrix" values="${paint(deep)}" result="deepRaw"/>
-            <feComponentTransfer in="deepRaw" result="deep"><feFuncA type="table" tableValues="0 0 0 0.3 0.6"/></feComponentTransfer>
-            <feColorMatrix in="b" type="matrix" values="${paint(shallow)}" result="shallowRaw"/>
-            <feComponentTransfer in="shallowRaw" result="shallow"><feFuncA type="table" tableValues="0 0.55 0.55 0.12 0"/></feComponentTransfer>
-            ${merge('deep', 'shallow')}`;
         } else if (type === 'dirt') {
           // Broad patches of damper earth under a fine grain of dark and pale specks.
           primitives = `${noise('m', 30, 30, 2, seed, dark, '0 0 0 0 0.1 0.25 0.35 0.4 0.4 0.4')}
@@ -14531,6 +14519,7 @@
             ${noise('b', 6, 1.2, 2, seed + 9, dark, '0 0 0 0 0 0 0.3 0.55 0.6 0.6')}
             ${merge('p', 's', 'b')}`;
         }
+        if (!fill && !primitives) continue;
         if (fill) {
           out += `<defs><mask id="${id}-mask" maskUnits="userSpaceOnUse" ${region}>${outline}${covers}</mask>${fill}</defs>`;
           out += `<g mask="url(#${id}-mask)"><rect ${region} fill="url(#${id}-pat)"/></g>`;

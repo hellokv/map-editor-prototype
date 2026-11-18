@@ -1639,13 +1639,15 @@
       border-radius: 6px;
       overflow: hidden;
     }
-    .field-group > .field,
-    .field-group > .terrain-pattern > .field,
-    .field-group > .field-pair > .field {
+    .field-group .field {
       border-radius: 0;
     }
-    .field-group > .field-pair {
+    .field-group .field-pair {
       gap: 1px;
+    }
+    /* The board shadow's details sit in its group as if they were its own. */
+    .label-section .field-group #board-shadow-fields {
+      display: contents;
     }
     /* A terrain's pattern fields sit in its group as if they were its own. */
     .terrain-pattern {
@@ -3551,24 +3553,28 @@
             <input id="board-radius" type="number" min="0" step="1" value="0">
           </label>
         </div>
-        <label class="field">
-          Shadow
-          <span class="color-field"><input id="board-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
-          <input id="board-shadow-on" class="switch" type="checkbox">
-        </label>
-        <div id="board-shadow-fields">
+        <div class="field-group">
           <label class="field">
-            Shadow X
-            <input id="board-shadow-x" type="number" step="1" value="0">
+            Shadow
+            <span class="color-field"><input id="board-shadow" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Opacity">%</span>
+            <input id="board-shadow-on" class="switch" type="checkbox">
           </label>
-          <label class="field">
-            Shadow Y
-            <input id="board-shadow-y" type="number" step="1" value="8">
-          </label>
-          <label class="field">
-            Shadow Blur
-            <input id="board-shadow-blur" type="number" min="0" step="1" value="24">
-          </label>
+          <div id="board-shadow-fields">
+            <div class="field-pair">
+              <label class="field">
+                X
+                <input id="board-shadow-x" type="number" step="1" value="0">
+              </label>
+              <label class="field">
+                Y
+                <input id="board-shadow-y" type="number" step="1" value="8">
+              </label>
+            </div>
+            <label class="field">
+              Blur
+              <input id="board-shadow-blur" type="number" min="0" step="1" value="24">
+            </label>
+          </div>
         </div>
       </div>
       <div id="background-layers" class="label-section" hidden>

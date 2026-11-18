@@ -64,10 +64,23 @@
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     }
-    #area-pop[hidden], #water-pop[hidden] {
+    #area-pop[hidden], #terrain-pop[hidden] {
       display: none;
     }
-    #water-pop {
+    #terrain-pop button {
+      padding: 5px 12px;
+      font: inherit;
+      background: none;
+      border: 1px solid #e3e1dc;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #terrain-pop button[aria-pressed="true"] {
+      color: #fff;
+      background: #000;
+      border-color: #000;
+    }
+    #terrain-pop {
       position: absolute;
       z-index: 6;
       display: flex;
@@ -1380,7 +1393,7 @@
     /* The Tree tool's panel is its options alone. */
     #background-panel:not([data-tab="base"]) > .tab-base,
     #background-panel:not([data-tab="buildings"]) > .tab-buildings,
-    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #rock-shapes, #water-settings) {
+    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #rock-shapes, #terrain-settings) {
       display: none !important;
     }
     .tree-shape-grid {
@@ -2175,10 +2188,12 @@
       <button id="area-shuffle" type="button" aria-label="Shuffle placement"><span class="material-symbols-rounded">shuffle</span></button>
       <button id="area-delete" type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
     </div>
-    <label id="water-pop" hidden>
-      Water
-      <input class="switch" type="checkbox">
-    </label>
+    <div id="terrain-pop" hidden>
+      <button type="button" data-terrain="none">None</button>
+      <button type="button" data-terrain="water">Water</button>
+      <button type="button" data-terrain="dirt">Dirt</button>
+      <button type="button" data-terrain="grass">Grass</button>
+    </div>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
         <span>Height</span>
@@ -3276,8 +3291,8 @@
           <span class="color-field"><input id="rock-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Rock shadow opacity">%</span>
         </label>
       </div>
-      <div id="water-settings" class="label-section tab-landscape" hidden>
-        <div class="field">Water</div>
+      <div id="terrain-settings" class="label-section tab-landscape" hidden>
+        <div class="field">Terrain</div>
         <label class="field">
           Water Color
           <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"></span>
@@ -3289,7 +3304,29 @@
             <option value="depth">Depth</option>
           </select>
         </div>
-        <p class="panel-note">With no stamp chosen, click a shape in the base layer to mark it as water. Shift-click to select several.</p>
+        <label class="field">
+          Dirt Color
+          <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"></span>
+        </label>
+        <div class="field">
+          Dirt Effect
+          <select id="dirt-effect">
+            <option value="none">None</option>
+            <option value="grain">Grain</option>
+          </select>
+        </div>
+        <label class="field">
+          Grass Color
+          <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"></span>
+        </label>
+        <div class="field">
+          Grass Effect
+          <select id="grass-effect">
+            <option value="none">None</option>
+            <option value="mottled">Mottled</option>
+          </select>
+        </div>
+        <p class="panel-note">With no stamp chosen, click a shape in the base layer to set its terrain. Shift-click to select several.</p>
       </div>
       <div class="label-section background-settings tab-base">
         <label id="background-show-labels-field" class="field">
@@ -3883,7 +3920,7 @@
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
       document.getElementById('rock-shapes').hidden = name !== 'tree';
-      document.getElementById('water-settings').hidden = name !== 'tree';
+      document.getElementById('terrain-settings').hidden = name !== 'tree';
       const panel = document.getElementById('background-panel');
       panel.classList.toggle('tree-mode', name === 'tree');
       // The Landscape tab is the Landscape tool; leaving one leaves the other.
@@ -5230,12 +5267,13 @@
     // Filled areas, kept so they can be changed: { points, shape, density, seed }.
     let fillAreas = [];
     let selectedArea = null;
-    // Base-layer shapes marked as water, by their order among the base SVG's shapes.
-    let water = [];
-    let selectedWater = [];
+    // Base-layer shapes given a terrain, { index: 'water' | 'dirt' | 'grass' }, by
+    // their order among the base SVG's shapes.
+    let terrain = {};
+    let selectedTerrain = [];
     let baseShapes = null;
-    let waterImage = null;
-    let waterEffect = null;
+    let terrainImage = null;
+    let terrainEffect = null;
     // Turns any CSS colour into hex, for tint; the panel's rock previews need it early.
     const colorProbe = document.createElement('canvas').getContext('2d');
 
@@ -5397,7 +5435,7 @@
       stackView.hidden = !stackOn();
       showBuildingPop();
       showAreaPop();
-      showWaterPop();
+      showTerrainPop();
       updatePanel();
     }
 
@@ -7515,7 +7553,7 @@
         ctx.save();
         clipToImageRoom();
         ctx.drawImage(baseImage(), x, y, w, h);
-        if (water.length && waterEffect) ctx.drawImage(waterEffect, x, y, w, h);
+        if (terrainEffect) ctx.drawImage(terrainEffect, x, y, w, h);
         ctx.restore();
       }
       const stamps = allStamps();
@@ -7524,7 +7562,7 @@
       if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
       if (!backgroundTools.hidden && backgroundTool === 'tree') {
-        drawWaterSelection(ctx);
+        drawTerrainSelection(ctx);
         drawFillAreas(ctx);
       }
       if (fillDraft.length) drawFillDraft(ctx);
@@ -10878,11 +10916,11 @@
         // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
         // With no stamp, a click selects a base shape; Shift adds or drops one.
         const area = fillAreaAt(p);
-        const hadSelection = selectedArea || selectedWater.length;
+        const hadSelection = selectedArea || selectedTerrain.length;
         selectedArea = area;
         const shape = area || treeShape ? null : baseShapeAt(p);
-        if (!e.shiftKey || area || treeShape) selectedWater = shape === null ? [] : [shape];
-        else if (shape !== null) selectedWater = selectedWater.includes(shape) ? selectedWater.filter((i) => i !== shape) : [...selectedWater, shape];
+        if (!e.shiftKey || area || treeShape) selectedTerrain = shape === null ? [] : [shape];
+        else if (shape !== null) selectedTerrain = selectedTerrain.includes(shape) ? selectedTerrain.filter((i) => i !== shape) : [...selectedTerrain, shape];
         stampChoice = area ? new Set(area.shapes) : soloStamp();
         showStampChoice();
         if (area || hadSelection || !treeShape) return draw();
@@ -12774,7 +12812,7 @@
       if (!file) return;
       const url = URL.createObjectURL(file);
       if (file.type === 'image/svg+xml') svgUploads.add(url);
-      water = [];
+      terrain = {};
       setBackgroundImage(url).then(() => {
         if (!backgroundImage || backgroundImage.src !== url) return;
         backgroundPlace = null;
@@ -12822,11 +12860,11 @@
       if (backgroundImage?.src.startsWith('blob:')) URL.revokeObjectURL(backgroundImage.src);
       backgroundRequest++;
       backgroundImage = null;
-      water = [];
-      selectedWater = [];
+      terrain = {};
+      selectedTerrain = [];
       baseShapes = null;
-      waterImage = null;
-      waterEffect = null;
+      terrainImage = null;
+      terrainEffect = null;
       previewImg.removeAttribute('src');
       upload.value = '';
       preview.hidden = true;
@@ -13819,7 +13857,7 @@
         } else {
           treeShape = treeShape === name ? null : name;
           stampChoice = soloStamp();
-          selectedWater = [];
+          selectedTerrain = [];
           draw();
         }
         showStampChoice();
@@ -14219,12 +14257,14 @@
       }
       c.restore();
     }
-    const waterColorInput = document.getElementById('water-color');
-    const waterPop = document.getElementById('water-pop');
-    const waterPopSwitch = waterPop.querySelector('input');
+    const TERRAIN = Object.fromEntries(['water', 'dirt', 'grass'].map((type) => [type, {
+      color: document.getElementById(`${type}-color`),
+      effect: document.getElementById(`${type}-effect`),
+    }]));
+    const terrainPop = document.getElementById('terrain-pop');
     const BASE_SHAPES = 'path, circle, rect, ellipse, polygon, polyline';
     function baseImage() {
-      return (water.length && waterImage) || backgroundImage;
+      return terrainImage || backgroundImage;
     }
     function svgShapeData(el) {
       const n = (name) => parseFloat(el.getAttribute(name)) || 0;
@@ -14245,8 +14285,8 @@
     async function loadBaseShapes() {
       const img = backgroundImage;
       baseShapes = null;
-      waterImage = null;
-      waterEffect = null;
+      terrainImage = null;
+      terrainEffect = null;
       const text = img && backgroundIsSvg() ? await svgTextOf(img.src) : null;
       if (!text || img !== backgroundImage) return;
       const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
@@ -14263,89 +14303,132 @@
         const path = new Path2D();
         const d = svgShapeData(el);
         const m = ctm ? [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f] : [1, 0, 0, 1, 0, 0];
-        if (ctm && !el.closest('defs, clipPath, mask, pattern, symbol')) path.addPath(new Path2D(d), DOMMatrix.fromMatrix(ctm));
-        return { path, d, m, filled: !!ctm && getComputedStyle(el).fill !== 'none' };
+        const drawn = ctm && !el.closest('defs, clipPath, mask, pattern, symbol');
+        if (drawn) path.addPath(new Path2D(d), DOMMatrix.fromMatrix(ctm));
+        const style = getComputedStyle(el);
+        const stroke = style.stroke !== 'none' ? parseFloat(style.strokeWidth) || 0 : 0;
+        // Bounds in image pixels, grown by the stroke, to find which shapes overlap.
+        let box = null;
+        if (drawn) {
+          const b = el.getBBox();
+          const corners = [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]].map(([x, y]) => DOMMatrix.fromMatrix(ctm).transformPoint(new DOMPoint(x, y)));
+          const grow = stroke * Math.hypot(ctm.a, ctm.b);
+          box = { x0: Math.min(...corners.map((q) => q.x)) - grow, x1: Math.max(...corners.map((q) => q.x)) + grow, y0: Math.min(...corners.map((q) => q.y)) - grow, y1: Math.max(...corners.map((q) => q.y)) + grow };
+        }
+        return { path, d, m, box, stroke, filled: !!drawn && style.fill !== 'none' };
       });
       holder.remove();
       baseShapes = { img, text, shapes };
-      paintWater();
+      paintTerrain();
     }
     // Loads finish out of order, so only the latest asked for is kept. Blob URLs
     // stay alive while their image is shown, as saving and export fetch them.
-    let waterRequest = 0;
+    let terrainRequest = 0;
     const blobImage = (blob) => loadImage(URL.createObjectURL(blob)).catch(() => null);
     const dropImage = (img) => {
       if (img?.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     };
-    async function paintWater() {
-      const request = ++waterRequest;
+    async function paintTerrain() {
+      const request = ++terrainRequest;
       const keep = (img, effect) => {
-        if (request !== waterRequest) {
+        if (request !== terrainRequest) {
           dropImage(img);
           dropImage(effect);
           return;
         }
-        dropImage(waterImage);
-        dropImage(waterEffect);
-        waterImage = img;
-        waterEffect = effect;
+        dropImage(terrainImage);
+        dropImage(terrainEffect);
+        terrainImage = img;
+        terrainEffect = effect;
         draw();
       };
-      if (!baseShapes || !water.length) return keep(null, null);
+      if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
-      for (const i of water) els[i]?.style.setProperty('fill', waterColorInput.value);
+      for (const [i, type] of Object.entries(terrain)) els[i]?.style.setProperty('fill', TERRAIN[type].color.value);
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
-      keep(img, await waterEffectImage(request));
+      keep(img, await terrainEffectImage(request));
     }
     // Filters are costly to redraw every frame, so effects are drawn once into a bitmap.
-    async function waterEffectImage(request) {
-      const effect = waterEffectInput.value;
-      if (effect !== 'depth') return null;
+    async function terrainEffectImage(request) {
+      const markup = terrainEffectMarkup();
+      if (!markup) return null;
       const { naturalWidth: W, naturalHeight: H } = backgroundImage;
-      const text = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${waterEffectMarkup()}</svg>`;
+      const text = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${markup}</svg>`;
       const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
       const svg = await loadImage(url).catch(() => null);
       URL.revokeObjectURL(url);
-      if (!svg || request !== waterRequest) return null;
+      if (!svg || request !== terrainRequest) return null;
       const k = Math.min(2, 4096 / Math.max(W, H));
       const canvas = new OffscreenCanvas(Math.round(W * k), Math.round(H * k));
       canvas.getContext('2d').drawImage(svg, 0, 0, canvas.width, canvas.height);
       return blobImage(await canvas.convertToBlob());
     }
-    waterColorInput.addEventListener('input', paintWater);
-    const waterEffectInput = document.getElementById('water-effect');
-    waterEffectInput.addEventListener('change', paintWater);
+    for (const { color, effect } of Object.values(TERRAIN)) {
+      color.addEventListener('input', paintTerrain);
+      effect.addEventListener('change', paintTerrain);
+    }
     const mixHex = (hex, to, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - t) + to * t).toString(16).padStart(2, '0')).join('')}`;
-    // Depth for each water shape, as an SVG filter in the image's pixels, sized in
-    // map units: lighter shallows at the shore, deeper and darker away from it.
-    function waterEffectMarkup() {
+    // Each terrain shape's effect as an SVG filter in the image's pixels, sized in map units.
+    function terrainEffectMarkup() {
       const u = 1 / baseScale().kx;
-      const color = waterColorInput.value;
       const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-      const tint = (hex, a) => `${rgb(hex).map((v) => `0 0 0 0 ${v}`).join(' ')} 0 0 0 1 ${a}`;
-      const deep = mixHex(color, 0, 0.45);
-      const shallow = mixHex(color, 255, 0.4);
+      const paint = (hex) => `${rgb(hex).map((v) => `0 0 0 0 ${v}`).join(' ')} 0 0 0 1 0`;
+      // Noise at the given scale in map units, coloured, its alpha mapped by a table over the noise's value.
+      const noise = (name, sx, sy, octaves, seed, color, alphas) => `
+        <feTurbulence type="fractalNoise" baseFrequency="${1 / (sx * u)} ${1 / (sy * u)}" numOctaves="${octaves}" seed="${seed}" result="${name}n"/>
+        <feColorMatrix in="${name}n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="${name}g"/>
+        <feComponentTransfer in="${name}g" result="${name}a"><feFuncA type="table" tableValues="${alphas}"/></feComponentTransfer>
+        <feFlood flood-color="${color}" result="${name}c"/>
+        <feComposite in="${name}c" in2="${name}a" operator="in" result="${name}"/>`;
+      const merge = (...names) => `<feMerge>${names.map((n) => `<feMergeNode in="${n}"/>`).join('')}</feMerge>`;
       let out = '';
-      for (const i of water) {
+      for (const [i, type] of Object.entries(terrain)) {
         const shape = baseShapes.shapes[i];
-        if (!shape) continue;
-        const id = `map-editor-water-${i}`;
+        const kind = TERRAIN[type];
+        if (!shape || !kind || kind.effect.value === 'none') continue;
+        const color = kind.color.value;
+        const dark = mixHex(color, 0, 0.35);
+        const light = mixHex(color, 255, 0.35);
+        const id = `map-editor-terrain-${i}`;
+        const seed = Number(i) + 1;
         const box = baseBounds(shape.path);
         const pad = 40 * u;
         const region = `x="${box.x0 - pad}" y="${box.y0 - pad}" width="${box.x1 - box.x0 + 2 * pad}" height="${box.y1 - box.y0 + 2 * pad}"`;
-        const outline = `<path d="${shape.d.replace(/"/g, '')}" transform="matrix(${shape.m.join(' ')})" fill="#fff"/>`;
-        // The outline blurred reads about 0.5 at the shore and 1 well inside it.
-        const depth = `<filter id="${id}-depth" filterUnits="userSpaceOnUse" ${region} color-interpolation-filters="sRGB">
-          <feGaussianBlur in="SourceAlpha" stdDeviation="${16 * u}" result="b"/>
-          <feColorMatrix in="b" type="matrix" values="${tint(deep, 0)}" result="deepRaw"/>
-          <feComponentTransfer in="deepRaw" result="deep"><feFuncA type="table" tableValues="0 0 0 0.3 0.6"/></feComponentTransfer>
-          <feColorMatrix in="b" type="matrix" values="${tint(shallow, 0)}" result="shallowRaw"/>
-          <feComponentTransfer in="shallowRaw" result="shallow"><feFuncA type="table" tableValues="0 0.55 0.55 0.12 0"/></feComponentTransfer>
-          <feMerge><feMergeNode in="deep"/><feMergeNode in="shallow"/></feMerge>
-        </filter>`;
-        out += `<defs><clipPath id="${id}-clip">${outline}</clipPath>${depth}</defs>`;
-        out += `<g clip-path="url(#${id}-clip)"><g filter="url(#${id}-depth)">${outline}</g></g>`;
+        const pathOf = (one, attrs) => `<path d="${one.d.replace(/"/g, '')}" transform="matrix(${one.m.join(' ')})" ${attrs}/>`;
+        const outline = pathOf(shape, 'fill="#fff"');
+        // Shapes drawn over this one hide its effect where they cover it.
+        const over = (one) => one.box && shape.box && one.box.x0 < shape.box.x1 && one.box.x1 > shape.box.x0 && one.box.y0 < shape.box.y1 && one.box.y1 > shape.box.y0;
+        const covers = baseShapes.shapes.slice(Number(i) + 1).filter((one) => (one.filled || one.stroke) && over(one))
+          .map((one) => pathOf(one, `fill="${one.filled ? '#000' : 'none'}" stroke="${one.stroke ? '#000' : 'none'}" stroke-width="${one.stroke}"`)).join('');
+        let primitives = '';
+        if (type === 'water') {
+          // The outline blurred reads about 0.5 at the shore and 1 well inside it:
+          // lighter shallows along the shore, deeper and darker away from it.
+          const deep = mixHex(color, 0, 0.45);
+          const shallow = mixHex(color, 255, 0.4);
+          primitives = `<feGaussianBlur in="SourceAlpha" stdDeviation="${16 * u}" result="b"/>
+            <feColorMatrix in="b" type="matrix" values="${paint(deep)}" result="deepRaw"/>
+            <feComponentTransfer in="deepRaw" result="deep"><feFuncA type="table" tableValues="0 0 0 0.3 0.6"/></feComponentTransfer>
+            <feColorMatrix in="b" type="matrix" values="${paint(shallow)}" result="shallowRaw"/>
+            <feComponentTransfer in="shallowRaw" result="shallow"><feFuncA type="table" tableValues="0 0.55 0.55 0.12 0"/></feComponentTransfer>
+            ${merge('deep', 'shallow')}`;
+        } else if (type === 'dirt') {
+          // Broad patches of damper earth under a fine grain of dark and pale specks.
+          primitives = `${noise('m', 30, 30, 2, seed, dark, '0 0 0 0 0.1 0.25 0.35 0.4 0.4 0.4')}
+            ${noise('d', 2.5, 2.5, 2, seed + 3, dark, '0 0 0 0 0 0 0.45 0.85 0.9 0.9')}
+            ${noise('l', 2.5, 2.5, 2, seed + 7, light, '0.8 0.8 0.45 0 0 0 0 0 0 0')}
+            ${merge('m', 'd', 'l')}`;
+        } else if (type === 'grass') {
+          // Sunlit and shaded patches, with short upright streaks for blades.
+          primitives = `${noise('p', 28, 28, 3, seed, light, '0 0 0 0 0.15 0.35 0.45 0.5 0.5 0.5')}
+            ${noise('s', 28, 28, 3, seed + 5, dark, '0.5 0.5 0.4 0.2 0 0 0 0 0 0')}
+            ${noise('b', 6, 1.2, 2, seed + 9, dark, '0 0 0 0 0 0 0.3 0.55 0.6 0.6')}
+            ${merge('p', 's', 'b')}`;
+        }
+        out += `<defs><mask id="${id}-mask" maskUnits="userSpaceOnUse" ${region}>${outline}${covers}</mask>
+          <filter id="${id}-fx" filterUnits="userSpaceOnUse" ${region} color-interpolation-filters="sRGB">${primitives}</filter></defs>`;
+        out += `<g mask="url(#${id}-mask)"><g filter="url(#${id}-fx)">${outline}</g></g>`;
       }
       return out;
     }
@@ -14366,9 +14449,9 @@
       }
       return null;
     }
-    const selectedWaterShapes = () => selectedWater.map((i) => baseShapes?.shapes[i]).filter(Boolean);
-    function drawWaterSelection(c) {
-      const shapes = selectedWaterShapes();
+    const selectedTerrainShapes = () => selectedTerrain.map((i) => baseShapes?.shapes[i]).filter(Boolean);
+    function drawTerrainSelection(c) {
+      const shapes = selectedTerrainShapes();
       if (!shapes.length) return;
       const { r, kx, ky } = baseScale();
       c.save();
@@ -14385,19 +14468,22 @@
       }
       c.restore();
     }
-    // The switch sits over the top of the selection, on only when every selected shape is water.
-    function showWaterPop() {
-      const shapes = selectedWaterShapes();
-      waterPop.hidden = !shapes.length || backgroundTools.hidden || backgroundTool !== 'tree';
-      if (waterPop.hidden) return;
-      waterPopSwitch.checked = selectedWater.every((i) => water.includes(i));
+    // The choice sits over the top of the selection, showing its terrain when all of it shares one.
+    function showTerrainPop() {
+      const shapes = selectedTerrainShapes();
+      terrainPop.hidden = !shapes.length || backgroundTools.hidden || backgroundTool !== 'tree';
+      if (terrainPop.hidden) return;
+      const types = new Set(selectedTerrain.map((i) => terrain[i] ?? 'none'));
+      for (const button of terrainPop.querySelectorAll('button')) button.setAttribute('aria-pressed', String(types.size === 1 && types.has(button.dataset.terrain)));
       const { r, kx, ky } = baseScale();
       const boxes = shapes.map((shape) => baseBounds(shape.path));
       const x = (Math.min(...boxes.map((b) => b.x0)) + Math.max(...boxes.map((b) => b.x1))) / 2;
       const s = toScreen({ x: r.x + x * kx, y: r.y + Math.min(...boxes.map((b) => b.y0)) * ky });
       const at = windowPoint(s.x, s.y);
-      waterPop.style.left = `${at.x}px`;
-      waterPop.style.top = `${at.y}px`;
+      // A shape reaching past the window keeps the choice in view.
+      const half = terrainPop.offsetWidth / 2 + 8;
+      terrainPop.style.left = `${Math.min(Math.max(at.x, half), canvas.clientWidth - half)}px`;
+      terrainPop.style.top = `${Math.min(Math.max(at.y, terrainPop.offsetHeight + 20), canvas.clientHeight - 8)}px`;
     }
     // A path's bounds in image pixels, from where it paints on a small canvas.
     const boundsCache = new WeakMap();
@@ -14423,14 +14509,20 @@
       boundsCache.set(path, box);
       return box;
     }
-    waterPopSwitch.addEventListener('change', () => {
-      const others = water.filter((i) => !selectedWater.includes(i));
-      water = waterPopSwitch.checked ? [...others, ...selectedWater] : others;
-      paintWater();
-    });
+    for (const button of terrainPop.querySelectorAll('button')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        terrain = { ...terrain };
+        for (const i of selectedTerrain) {
+          if (button.dataset.terrain === 'none') delete terrain[i];
+          else terrain[i] = button.dataset.terrain;
+        }
+        paintTerrain();
+      });
+    }
     window.addEventListener('keydown', (e) => {
-      if (!selectedWater.length || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
-      selectedWater = [];
+      if (!selectedTerrain.length || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
+      selectedTerrain = [];
       draw();
     });
     // The nearest tree drawn under a canvas point.
@@ -14575,7 +14667,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'rock-shadows', 'rock-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'tree-color-variation', 'rock-size', 'rock-size-variation', 'rock-color', 'rock-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -14651,7 +14743,7 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
-      file.water = water;
+      file.terrain = terrain;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
@@ -14720,8 +14812,8 @@
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new Event('change'));
       }
-      water = file.water ?? [];
-      selectedWater = [];
+      terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
+      selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
@@ -14815,7 +14907,7 @@
         ctx.save();
         clipToImageRoom();
         if (backgroundImage) ctx.drawImage(baseImage(), g.x, g.y, g.w, g.h);
-        if (backgroundImage && water.length && waterEffect) ctx.drawImage(waterEffect, g.x, g.y, g.w, g.h);
+        if (backgroundImage && terrainEffect) ctx.drawImage(terrainEffect, g.x, g.y, g.w, g.h);
         if (buildingsImage) drawBuildings(ctx);
         if (showsSatelliteReference()) {
           const r = satelliteRect();
@@ -14837,7 +14929,7 @@
       const image = (href, x, y, w, h) => `<image href="${href}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
       const layers = [`<rect x="0" y="0" width="${board.w}" height="${board.h}" fill="${colorOf(boardColor)}"/>`];
       if (backgroundImage) layers.push(image(await imageData(baseImage()), g.x, g.y, g.w, g.h));
-      if (backgroundImage && water.length && waterEffect) layers.push(image(await imageData(waterEffect), g.x, g.y, g.w, g.h));
+      if (backgroundImage && terrainEffect) layers.push(image(await imageData(terrainEffect), g.x, g.y, g.w, g.h));
       if (buildingsImage) {
         const r = buildingsRect();
         layers.push(image(await imageData(buildingsImage), r.x, r.y, r.w, r.h));

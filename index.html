@@ -3289,7 +3289,7 @@
             <option value="depth">Depth</option>
           </select>
         </div>
-        <p class="panel-note">With no stamp chosen, click a shape in the base layer to mark it as water.</p>
+        <p class="panel-note">With no stamp chosen, click a shape in the base layer to mark it as water. Shift-click to select several.</p>
       </div>
       <div class="label-section background-settings tab-base">
         <label id="background-show-labels-field" class="field">
@@ -5232,7 +5232,7 @@
     let selectedArea = null;
     // Base-layer shapes marked as water, by their order among the base SVG's shapes.
     let water = [];
-    let selectedWater = null;
+    let selectedWater = [];
     let baseShapes = null;
     let waterImage = null;
     let waterEffect = null;
@@ -10876,10 +10876,13 @@
       if (!inLabels && backgroundTool === 'tree') {
         // A click in a filled area selects it and a click off one lets it go; otherwise,
         // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
+        // With no stamp, a click selects a base shape; Shift adds or drops one.
         const area = fillAreaAt(p);
-        const hadSelection = selectedArea || selectedWater !== null;
+        const hadSelection = selectedArea || selectedWater.length;
         selectedArea = area;
-        selectedWater = area || treeShape ? null : baseShapeAt(p);
+        const shape = area || treeShape ? null : baseShapeAt(p);
+        if (!e.shiftKey || area || treeShape) selectedWater = shape === null ? [] : [shape];
+        else if (shape !== null) selectedWater = selectedWater.includes(shape) ? selectedWater.filter((i) => i !== shape) : [...selectedWater, shape];
         stampChoice = area ? new Set(area.shapes) : soloStamp();
         showStampChoice();
         if (area || hadSelection || !treeShape) return draw();
@@ -12820,7 +12823,7 @@
       backgroundRequest++;
       backgroundImage = null;
       water = [];
-      selectedWater = null;
+      selectedWater = [];
       baseShapes = null;
       waterImage = null;
       waterEffect = null;
@@ -13796,7 +13799,7 @@
         } else {
           treeShape = treeShape === name ? null : name;
           stampChoice = soloStamp();
-          selectedWater = null;
+          selectedWater = [];
           draw();
         }
         showStampChoice();
@@ -14343,31 +14346,35 @@
       }
       return null;
     }
+    const selectedWaterShapes = () => selectedWater.map((i) => baseShapes?.shapes[i]).filter(Boolean);
     function drawWaterSelection(c) {
-      const shape = selectedWater !== null && baseShapes?.shapes[selectedWater];
-      if (!shape) return;
+      const shapes = selectedWaterShapes();
+      if (!shapes.length) return;
       const { r, kx, ky } = baseScale();
       c.save();
       c.translate(r.x, r.y);
       c.scale(kx, ky);
       const width = 2 / (view.scale * kx);
-      c.lineWidth = width * 2;
-      c.strokeStyle = '#fff';
-      c.stroke(shape.path);
-      c.lineWidth = width;
-      c.strokeStyle = '#2f80ed';
-      c.stroke(shape.path);
+      for (const shape of shapes) {
+        c.lineWidth = width * 2;
+        c.strokeStyle = '#fff';
+        c.stroke(shape.path);
+        c.lineWidth = width;
+        c.strokeStyle = '#2f80ed';
+        c.stroke(shape.path);
+      }
       c.restore();
     }
-    // The switch sits over the top of the selected shape.
+    // The switch sits over the top of the selection, on only when every selected shape is water.
     function showWaterPop() {
-      const shape = selectedWater !== null && baseShapes?.shapes[selectedWater];
-      waterPop.hidden = !shape || backgroundTools.hidden || backgroundTool !== 'tree';
+      const shapes = selectedWaterShapes();
+      waterPop.hidden = !shapes.length || backgroundTools.hidden || backgroundTool !== 'tree';
       if (waterPop.hidden) return;
-      waterPopSwitch.checked = water.includes(selectedWater);
+      waterPopSwitch.checked = selectedWater.every((i) => water.includes(i));
       const { r, kx, ky } = baseScale();
-      const box = baseBounds(shape.path);
-      const s = toScreen({ x: r.x + (box.x0 + box.x1) / 2 * kx, y: r.y + box.y0 * ky });
+      const boxes = shapes.map((shape) => baseBounds(shape.path));
+      const x = (Math.min(...boxes.map((b) => b.x0)) + Math.max(...boxes.map((b) => b.x1))) / 2;
+      const s = toScreen({ x: r.x + x * kx, y: r.y + Math.min(...boxes.map((b) => b.y0)) * ky });
       const at = windowPoint(s.x, s.y);
       waterPop.style.left = `${at.x}px`;
       waterPop.style.top = `${at.y}px`;
@@ -14397,13 +14404,13 @@
       return box;
     }
     waterPopSwitch.addEventListener('change', () => {
-      if (selectedWater === null) return;
-      water = waterPopSwitch.checked ? [...water, selectedWater] : water.filter((i) => i !== selectedWater);
+      const others = water.filter((i) => !selectedWater.includes(i));
+      water = waterPopSwitch.checked ? [...others, ...selectedWater] : others;
       paintWater();
     });
     window.addEventListener('keydown', (e) => {
-      if (selectedWater === null || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
-      selectedWater = null;
+      if (!selectedWater.length || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
+      selectedWater = [];
       draw();
     });
     // The nearest tree drawn under a canvas point.
@@ -14693,7 +14700,7 @@
         input.dispatchEvent(new Event('change'));
       }
       water = file.water ?? [];
-      selectedWater = null;
+      selectedWater = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);

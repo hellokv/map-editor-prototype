@@ -2223,10 +2223,16 @@
         <input type="range" min="0" max="300" step="1" value="100" aria-label="Roof height">
         <output></output>
       </div>
+      <div id="building-roof-inset" class="pop-row">
+        <span>Inset</span>
+        <input type="range" min="1" max="60" step="1" value="10" aria-label="Roof inset">
+        <output></output>
+      </div>
       <div id="building-tops" class="pop-row">
         <button type="button" data-top="flat" aria-pressed="true">Flat Top</button>
         <button type="button" data-top="dome" aria-pressed="false">Dome Top</button>
         <button type="button" data-top="angled" aria-pressed="false">Angled Top</button>
+        <button type="button" data-top="inset" aria-pressed="false">Inset Top</button>
       </div>
     </div>
     <div id="capture-box" hidden>
@@ -12878,13 +12884,14 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, lifts = [], tops = [], roofHeights = []) {
+    async function setBuildingsImage(src, lifts = [], tops = [], roofHeights = [], roofInsets = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
       buildingParts.forEach((part, i) => {
         part.lift = lifts[i] ?? null;
         part.roofStyle = tops[i] ?? 'flat';
         part.roofHeight = roofHeights[i] ?? 100;
+        part.roofInset = roofInsets[i] ?? 10;
       });
       selectBuilding(null);
       buildingsImage = img;
@@ -13172,7 +13179,7 @@
     // side, so an angled top's faces slope at 45°; flat tops don't.
     function roofRise(part) {
       if (!part.roofStyle || part.roofStyle === 'flat') return 0;
-      if (part.roofStyle === 'angled') return Math.max(...hipFaces(part).flatMap((face) => face.heights)) * roofScale(part);
+      if (faceted(part)) return Math.max(...roofFaces(part).flatMap((face) => face.heights)) * roofScale(part);
       const r = partRect(part);
       return Math.min(r.w, r.h) * 0.5 * roofScale(part);
     }
@@ -13214,6 +13221,41 @@
       part.facesKey = key;
       return (part.faces = faces);
     }
+    // An inset top: the angled top cut off at the inset distance from the
+    // outline, so its slopes run in that far and a flat top fills the middle.
+    function insetFaces(part) {
+      const d = part.roofInset ?? 10;
+      const faces = [];
+      for (const face of hipFaces(part)) {
+        // Heights are linear across a face, so a face can be cut where its height is d.
+        const cut = (below) => {
+          const points = [];
+          const heights = [];
+          face.points.forEach((p, i) => {
+            const j = (i + 1) % face.points.length;
+            const [hp, hq] = [face.heights[i], face.heights[j]];
+            if ((hp <= d) === below || hp === d) {
+              points.push(p);
+              heights.push(below ? hp : d);
+            }
+            if ((hp < d) !== (hq < d) && hp !== hq && hp !== d && hq !== d) {
+              const t = (d - hp) / (hq - hp);
+              const q = face.points[j];
+              points.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+              heights.push(d);
+            }
+          });
+          return { points, heights };
+        };
+        const slope = cut(true);
+        if (slope.points.length >= 3) faces.push({ ...slope, outward: face.outward });
+        const top = cut(false);
+        if (top.points.length >= 3) faces.push({ ...top, outward: null });
+      }
+      return faces;
+    }
+    const roofFaces = (part) => (part.roofStyle === 'inset' ? insetFaces(part) : hipFaces(part));
+    const faceted = (part) => part.roofStyle === 'angled' || part.roofStyle === 'inset';
     // The polygon's part where f(p) <= 0, f being linear.
     function clipPolygon(poly, f) {
       const out = [];
@@ -13309,6 +13351,7 @@
         lift: { get: () => shape.buildingLift ?? null, set: (v) => { shape.buildingLift = v; } },
         roofStyle: { get: () => shape.roofStyle ?? 'flat', set: (v) => { shape.roofStyle = v; } },
         roofHeight: { get: () => shape.roofHeight ?? 100, set: (v) => { shape.roofHeight = v; } },
+        roofInset: { get: () => shape.roofInset ?? 10, set: (v) => { shape.roofInset = v; } },
       });
       shapeParts.set(shape, part);
       return part;
@@ -13387,8 +13430,8 @@
           const along = (length * i) / slices;
           s.drawImage(part.roof, r.x + dx * along, r.y + dy * along, r.w, r.h);
         }
-        if (part.roofStyle === 'angled') {
-          for (const face of hipFaces(part)) {
+        if (faceted(part)) {
+          for (const face of roofFaces(part)) {
             s.beginPath();
             face.points.forEach(([x, y], i) => {
               const along = length + face.heights[i] * roofScale(part) * stretch;
@@ -13492,13 +13535,14 @@
           // darker the lower they sit; an angled top's show its faceted roof,
           // each layer the part of it that lies at that height.
           const layers = Math.max(16, Math.ceil((rise * view.scale) / 1.5));
-          if (part.roofStyle === 'angled') {
-            // Faces turned away from the viewer first, so nearer ones cover them.
+          if (faceted(part)) {
+            // Faces turned away from the viewer first, so nearer ones cover them;
+            // an inset top's flat middle last, as it lies above every slope.
             const spin = canvasTilt ? leanSpin() : new DOMMatrix();
-            const away = ([ox, oy]) => spin.b * ox + spin.d * oy;
+            const away = (outward) => (outward ? spin.b * outward[0] + spin.d * outward[1] : Infinity);
             const lift = partLift(part);
             c.setTransform(1, 0, 0, 1, 0, 0);
-            for (const face of [...hipFaces(part)].sort((f, g) => away(f.outward) - away(g.outward))) {
+            for (const face of [...roofFaces(part)].sort((f, g) => away(f.outward) - away(g.outward))) {
               c.beginPath();
               face.points.forEach(([x, y], i) => {
                 const q = inCanvas(liftMatrix(tilted ? (lift + face.heights[i] * roofScale(part)) * view.scale : 0)).transformPoint(new DOMPoint(x, y));
@@ -13506,7 +13550,7 @@
                 else c.moveTo(q.x, q.y);
               });
               c.closePath();
-              c.fillStyle = hipColor(face.outward);
+              c.fillStyle = face.outward ? hipColor(face.outward) : buildingsColor.value;
               c.fill();
               c.strokeStyle = c.fillStyle;
               c.lineWidth = 0.75;
@@ -13581,6 +13625,10 @@
       roofHeight.hidden = (selectedBuilding.roofStyle ?? 'flat') === 'flat';
       roofHeight.querySelector('input').value = selectedBuilding.roofHeight ?? 100;
       roofHeight.querySelector('output').value = `${selectedBuilding.roofHeight ?? 100}%`;
+      const inset = document.getElementById('building-roof-inset');
+      inset.hidden = selectedBuilding.roofStyle !== 'inset';
+      inset.querySelector('input').value = selectedBuilding.roofInset ?? 10;
+      inset.querySelector('output').value = selectedBuilding.roofInset ?? 10;
       // Under the building's footprint on the ground, so changing its lift doesn't move it.
       const r = partRect(selectedBuilding);
       const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([x, y]) => {
@@ -13612,6 +13660,11 @@
         draw();
       });
     }
+    document.querySelector('#building-roof-inset input').addEventListener('input', (e) => {
+      if (!selectedBuilding) return;
+      selectedBuilding.roofInset = Number(e.target.value);
+      draw();
+    });
     document.querySelector('#building-roof-height input').addEventListener('input', (e) => {
       if (!selectedBuilding) return;
       selectedBuilding.roofHeight = Number(e.target.value);
@@ -14664,6 +14717,7 @@
       file.buildingLifts = buildingParts.map((part) => part.lift);
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
+      file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed }));
@@ -14738,7 +14792,7 @@
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingLifts ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? []);
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));

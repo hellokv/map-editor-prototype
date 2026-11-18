@@ -3489,6 +3489,10 @@
             Light Color
             <span class="color-field"><input id="map-light-color" type="color" value="#fff3d6"><input class="opacity" type="number" min="0" max="100" step="1" value="25" aria-label="Light opacity">%</span>
           </label>
+          <label class="field">
+            Light Spread
+            <span class="slider"><span class="percent-field"><input id="map-light-spread" type="number" min="10" max="200" step="1" value="100"></span><input type="range" min="10" max="200" step="1" value="100" aria-label="Light spread"></span>
+          </label>
         </div>
         <div id="satellite-reference-field" class="field" hidden>
           Satellite Reference
@@ -5330,6 +5334,9 @@
     // edge, fading across the map to nothing on the far side.
     const mapLightColor = document.getElementById('map-light-color');
     mapLightColor.addEventListener('input', draw);
+    const mapLightSpread = document.getElementById('map-light-spread');
+    linkSlider(mapLightSpread);
+    mapLightSpread.addEventListener('input', draw);
     function drawMapLight(c, turn) {
       const color = colorOf(mapLightColor);
       const alpha = color.length > 7 ? parseInt(color.slice(7), 16) / 255 : 1;
@@ -5338,7 +5345,9 @@
       const reach = Math.hypot(board.w, board.h);
       const sx = board.w / 2 - dx * reach * 0.6;
       const sy = board.h / 2 - dy * reach * 0.6;
-      const glow = c.createRadialGradient(sx, sy, 0, sx, sy, reach * 1.2);
+      // Spread scales how far the glow reaches across the map.
+      const spread = reach * 1.2 * Math.max(0.1, (Number(mapLightSpread.value) || 100) / 100);
+      const glow = c.createRadialGradient(sx, sy, 0, sx, sy, spread);
       glow.addColorStop(0, color);
       glow.addColorStop(1, `${color.slice(0, 7)}00`);
       c.save();
@@ -5347,7 +5356,7 @@
       c.clip(boxPath(box, board.radius, board.corners));
       c.setTransform(onMap);
       c.fillStyle = glow;
-      c.fillRect(sx - reach * 1.2, sy - reach * 1.2, reach * 2.4, reach * 2.4);
+      c.fillRect(sx - spread, sy - spread, spread * 2, spread * 2);
       c.restore();
     }
     function boxPath(box, radius, corners) {
@@ -14805,7 +14814,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle', 'map-light-color',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

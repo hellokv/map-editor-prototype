@@ -3160,6 +3160,10 @@
         </label>
       </div>
       <div class="label-section">
+        <button id="background-show-frame-field" class="new-style" type="button" aria-pressed="false">Set Default Position<span class="material-symbols-rounded">smartphone</span></button>
+        <input id="background-show-frame" type="checkbox" hidden>
+      </div>
+      <div class="label-section">
         <button id="map-save" class="new-style" type="button">Save Map File<span class="material-symbols-rounded">download</span></button>
         <button id="map-load" class="new-style" type="button">Load Map File<span class="material-symbols-rounded">upload</span></button>
         <input id="map-file" type="file" accept=".json,application/json" hidden>
@@ -3450,8 +3454,6 @@
           Show Paths
           <input id="background-show-paths" class="switch" type="checkbox">
         </label>
-        <button id="background-show-frame-field" class="new-style" type="button" aria-pressed="false">Set Default Position<span class="material-symbols-rounded">smartphone</span></button>
-        <input id="background-show-frame" type="checkbox" hidden>
         <label id="map-scale-field" class="field">
           Scale
           <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
@@ -4242,7 +4244,7 @@
       ctx.restore();
     }
 
-    // Background's frame: an iPhone 17 (the 17 Pro's screen in a 15pt bezel)
+    // The default position's frame: an iPhone 17 (the 17 Pro's screen in a 15pt bezel)
     // at Preview's scale, fixed on screen, and inside it the part of the
     // screen left to the map under the status bar and Safari's toolbar.
     const FRAME_DEVICE = DEVICES[0];
@@ -4253,7 +4255,7 @@
       showPathsToggle.blur();
       draw();
     });
-    // The panel's Set Default Position button turns the frame on and off.
+    // Preview's Set Default Position button turns the frame on and off.
     document.getElementById('background-show-frame-field').addEventListener('click', (e) => {
       e.currentTarget.blur();
       showFrameToggle.checked = !showFrameToggle.checked;
@@ -4341,7 +4343,7 @@
     // Cover and Contain sit in the phone's bottom bezel whenever the frame shows.
     function showFrameButtons() {
       const fits = document.getElementById('frame-fits');
-      fits.hidden = backgroundTools.hidden || !showFrameToggle.checked;
+      fits.hidden = !inPreview() || !showFrameToggle.checked;
       if (!fits.hidden) {
         const { x, y, w, h, view: area } = phoneScreen();
         fits.style.left = `${canvas.offsetLeft + x + w / 2}px`;
@@ -4494,6 +4496,7 @@
         layerSelect.value = 'Automatic';
         centerPreview();
       } else if (mode !== 'preview' && inPreview()) {
+        showFrameToggle.checked = false;
         Object.assign(view, beforePreview.view);
         layerSelect.value = beforePreview.layer;
         setSplit(splitOn());
@@ -5568,7 +5571,7 @@
     function draw() {
       if (inPreview()) showPreviewZoom();
       if (document.activeElement !== zoomInput) zoomInput.value = zoomPercent();
-      document.getElementById('frame-actions').hidden = backgroundTools.hidden || !showFrameToggle.checked || frameEditing;
+      document.getElementById('frame-actions').hidden = !inPreview() || !showFrameToggle.checked || frameEditing;
       showFrameButtons();
       showFitFrameButton();
       if (!backgroundTools.hidden) showMinResolution();
@@ -7772,10 +7775,13 @@
         if (!backgroundTools.hidden) {
           drawSketch();
           drawShapeSelection();
-          if (showFrameToggle.checked) drawPhoneFrame();
           if (frameEditing) drawFrameHandles();
         }
-        if (!modePanels.preview.hidden) drawDeviceFrame();
+        // Preview shows its device, or the frame the default position is set in.
+        if (!modePanels.preview.hidden) {
+          if (showFrameToggle.checked) drawPhoneFrame();
+          else drawDeviceFrame();
+        }
         drawMarquee();
         return;
       }

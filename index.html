@@ -3322,7 +3322,7 @@
         <div class="field-group">
           <label class="field">
             Water Color
-            <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"></span>
+            <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Water opacity">%</span>
           </label>
           <div class="field">
             Water Effect
@@ -3359,7 +3359,7 @@
         <div class="field-group">
           <label class="field">
             Dirt Color
-            <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"></span>
+            <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Dirt opacity">%</span>
           </label>
           <div class="field">
             Dirt Effect
@@ -3396,7 +3396,7 @@
         <div class="field-group">
           <label class="field">
             Grass Color
-            <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"></span>
+            <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Grass opacity">%</span>
           </label>
           <div class="field">
             Grass Effect
@@ -14465,7 +14465,7 @@
       if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
-      for (const [i, type] of Object.entries(terrain)) els[i]?.style.setProperty('fill', TERRAIN[type].color.value);
+      for (const [i, type] of Object.entries(terrain)) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
       keep(img, await terrainEffectImage(request));
     }

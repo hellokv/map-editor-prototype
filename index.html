@@ -1640,8 +1640,12 @@
       overflow: hidden;
     }
     .field-group > .field,
-    .field-group > .terrain-pattern > .field {
+    .field-group > .terrain-pattern > .field,
+    .field-group > .field-pair > .field {
       border-radius: 0;
+    }
+    .field-group > .field-pair {
+      gap: 1px;
     }
     /* A terrain's pattern fields sit in its group as if they were its own. */
     .terrain-pattern {
@@ -3276,28 +3280,32 @@
           <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
         </label>
         <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.</p>
-        <label class="field">
-          Size
-          <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
-        </label>
-        <label class="field">
-          Size Variation
-          <span class="slider"><span class="percent-field"><input id="tree-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Size variation"></span>
-        </label>
-        <div class="field-pair">
+        <div class="field-group">
           <label class="field">
-            Leaves
-            <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
+            Size
+            <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
           </label>
           <label class="field">
-            Trunks
-            <span class="color-field"><input id="tree-trunk-color" type="color" value="#4a3a2e"></span>
+            Size Variation
+            <span class="slider"><span class="percent-field"><input id="tree-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Size variation"></span>
           </label>
         </div>
-        <label class="field">
-          Color Variation
-          <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
-        </label>
+        <div class="field-group">
+          <div class="field-pair">
+            <label class="field">
+              Leaves
+              <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
+            </label>
+            <label class="field">
+              Trunks
+              <span class="color-field"><input id="tree-trunk-color" type="color" value="#4a3a2e"></span>
+            </label>
+          </div>
+          <label class="field">
+            Color Variation
+            <span class="slider"><span class="percent-field"><input id="tree-color-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Color variation"></span>
+          </label>
+        </div>
         <label id="tree-shadows-field" class="field">
           Shadows
           <input id="tree-shadows" class="switch" type="checkbox">

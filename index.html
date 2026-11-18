@@ -13542,23 +13542,40 @@
       const circle = (x, y, r) => (p) => p.arc(x, y, r, 0, Math.PI * 2);
       const ellipse = (x, y, rx, ry, turn = 0) => (p) => p.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
       const many = (...shapes) => path((p) => shapes.forEach((shape) => { p.moveTo(0, 0); shape(p); }));
-      const tiers = path((p) => {
-        for (const [top, bottom, half] of [[-60, -30, 11], [-48, -20, 15], [-36, -10, 18]]) {
-          p.moveTo(0, top);
-          p.lineTo(half, bottom);
-          p.lineTo(-half, bottom);
-          p.closePath();
-        }
+      // An evergreen as stacked triangles, [apex, base, half width] each, apex
+      // and base as heights; each tier's foot shows as a notch in its outline.
+      const evergreen = (layers) => ({
+        w: 2 * Math.max(...layers.map(([, , half]) => half)),
+        h: Math.max(...layers.map(([apex]) => apex)),
+        parts: [[trunk(6, 12), TRUNK], [path((p) => {
+          for (const [apex, base, half] of layers) {
+            p.moveTo(0, -apex);
+            p.lineTo(half, -base);
+            p.lineTo(-half, -base);
+            p.closePath();
+          }
+        }), LEAF]],
+        volume: [['trunk', 6, 12], ...layers.map((layer) => ['cone', ...layer])],
       });
+      // A broadleaf as a trunk under circles, [across, height, radius] each.
+      const broadleaf = (trunkW, trunkH, balls) => {
+        const xs = balls.flatMap(([x, , r]) => [x - r, x + r]);
+        return {
+          w: Math.max(...xs) - Math.min(...xs),
+          h: Math.max(...balls.map(([, z, r]) => z + r)),
+          parts: [[trunk(trunkW, trunkH), TRUNK], [many(...balls.map(([x, z, r]) => circle(x, -z, r))), LEAF]],
+          volume: [['trunk', trunkW, trunkH], ...balls.map(([x, z, r]) => ['ball', x, z, r, r])],
+        };
+      };
+      // In the panel's order: broadleaves of one to three circles, then
+      // evergreens with no notch to two.
       return {
-        pine: { w: 36, h: 60, parts: [[trunk(6, 12), TRUNK], [tiers, LEAF]],
-          volume: [['trunk', 6, 12], ['cone', 60, 30, 11], ['cone', 48, 20, 15], ['cone', 36, 10, 18]] },
-        round: { w: 40, h: 58, parts: [[trunk(6, 22), TRUNK], [many(circle(0, -38, 19)), LEAF]],
-          volume: [['trunk', 6, 22], ['ball', 0, 38, 19, 19]] },
-        oak: { w: 52, h: 56, parts: [[trunk(8, 20), TRUNK], [many(circle(-12, -30, 14), circle(12, -30, 14), circle(0, -42, 15), circle(0, -26, 13)), LEAF]],
-          volume: [['trunk', 8, 20], ['ball', -12, 30, 14, 14], ['ball', 12, 30, 14, 14], ['ball', 0, 42, 15, 15], ['ball', 0, 26, 13, 13]] },
-        cone: { w: 30, h: 62, parts: [[trunk(6, 12), TRUNK], [path((p) => { p.moveTo(0, -62); p.lineTo(15, -10); p.lineTo(-15, -10); p.closePath(); }), LEAF]],
-          volume: [['trunk', 6, 12], ['cone', 62, 10, 15]] },
+        round: broadleaf(6, 22, [[0, 38, 19]]),
+        duo: broadleaf(7, 20, [[-10, 30, 15], [10, 40, 15]]),
+        oak: broadleaf(8, 20, [[-12, 30, 14], [12, 30, 14], [0, 44, 15]]),
+        cone: evergreen([[62, 10, 15]]),
+        spruce: evergreen([[62, 28, 13], [44, 10, 18]]),
+        pine: evergreen([[60, 30, 11], [48, 20, 15], [36, 10, 18]]),
       };
     }
     const TREE_SHAPES = treeShapes();

@@ -10155,11 +10155,13 @@
       return fade.alpha;
     }
 
+    // Labels lower on screen stand in front of those above them.
+    const byScreenY = (list) => list.map((label) => [label, toScreen(label).y]).sort((a, b) => a[1] - b[1]).map(([label]) => label);
     function labelAt(p) {
-      for (let i = labels.length - 1; i >= 0; i--) {
-        if (!labelShown(labels[i])) continue;
-        const box = labelArea(labels[i]);
-        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return labels[i];
+      const inFront = byScreenY(labels.filter(labelShown)).reverse();
+      for (const label of inFront) {
+        const box = labelArea(label);
+        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return label;
       }
       return null;
     }
@@ -10383,7 +10385,7 @@
       ctx.lineJoin = 'round';
       drawLists();
       const typing = editingLabel && typingLabel();
-      const shown = labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0);
+      const shown = byScreenY(labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0));
       for (const label of typing ? [...shown, typing] : shown) {
         ctx.globalAlpha = label === typing ? 1 : labelAlpha(label);
         const style = styleOf(label);

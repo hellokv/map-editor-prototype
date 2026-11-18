@@ -13469,7 +13469,9 @@
         const p = toScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
         return canvasTilt ? leanSpin().transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
       };
-      const order = allBuildingParts().sort((a, b) => depth(a) - depth(b));
+      // Drawn building shapes always stand in front of the buildings image.
+      const byDepth = (a, b) => depth(a) - depth(b);
+      const order = [...[...buildingParts].sort(byDepth), ...allBuildingParts().filter((part) => part.shape).sort(byDepth)];
       for (const part of order) {
         const r = partRect(part);
         const top = tilted ? partLift(part) * view.scale : 0;

@@ -163,6 +163,20 @@
     #building-lift-pop output {
       min-width: 64px;
     }
+    #building-lift-pop .lift-percent {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    #building-lift-pop .lift-percent input {
+      width: 40px;
+      font: inherit;
+      text-align: right;
+      appearance: textfield;
+    }
+    #building-lift-pop .lift-percent input::-webkit-inner-spin-button {
+      appearance: none;
+    }
     :is(#panel, #style-panel, #settings-panel) #buildings-rotation-reset {
       display: flex;
       flex: none;
@@ -2199,7 +2213,7 @@
       <div class="pop-row">
         <span>Height</span>
         <input type="range" min="0" max="200" step="1" aria-label="Building height">
-        <output></output>
+        <span class="lift-percent"><input id="building-lift-percent" type="number" min="0" step="1" aria-label="Building height percent">%</span>
         <button id="building-lift-reset" type="button" aria-label="Use the panel's building height"><span class="material-symbols-rounded">restart_alt</span></button>
       </div>
       <div id="building-roof-height" class="pop-row">
@@ -13813,7 +13827,7 @@
     }
     const buildingPop = document.getElementById('building-lift-pop');
     const buildingPopSlider = buildingPop.querySelector('input');
-    const buildingPopValue = buildingPop.querySelector('output');
+    const buildingPopValue = document.getElementById('building-lift-percent');
     function selectBuilding(part) {
       selectedBuilding = part;
       showBuildingPop();
@@ -13829,7 +13843,7 @@
       if (buildingPop.hidden) return;
       const height = partHeight(selectedBuilding) ?? 100;
       buildingPopSlider.value = height;
-      buildingPopValue.value = `${height}%`;
+      if (document.activeElement !== buildingPopValue) buildingPopValue.value = height;
       for (const button of document.querySelectorAll('#building-tops button')) {
         button.setAttribute('aria-pressed', String(button.dataset.top === (selectedBuilding.roofStyle ?? 'flat')));
       }
@@ -13857,6 +13871,12 @@
       const q = toWindow.transformPoint(new DOMPoint(x + margin.x, y + margin.y, 0, 1));
       return { x: q.x / q.w - margin.x, y: q.y / q.w - margin.y };
     }
+    buildingPopValue.addEventListener('input', () => {
+      if (!selectedBuilding || buildingPopValue.value === '') return;
+      selectedBuilding.height = Math.max(0, Number(buildingPopValue.value) || 0);
+      draw();
+    });
+    buildingPopValue.addEventListener('change', () => buildingPopValue.blur());
     buildingPopSlider.addEventListener('input', () => {
       if (!selectedBuilding) return;
       selectedBuilding.height = Number(buildingPopSlider.value);

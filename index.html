@@ -2069,6 +2069,10 @@
     #background-panel #template-formats[hidden] {
       display: none;
     }
+    :is(#panel, #style-panel, #settings-panel) .field-group > button.new-style {
+      margin: 0;
+      border-radius: 0;
+    }
     #template-formats button.new-style {
       margin: 0;
     }
@@ -3500,6 +3504,24 @@
             <span class="material-symbols-rounded">delete</span>
           </button>
         </div>
+        <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
+        <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
+        <div class="field-group template-setting resolution-group">
+          <div id="resolution-field" class="field">
+            Resolution
+            <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
+          </div>
+          <div class="field">
+            Recommended
+            <output id="background-min-resolution"></output>
+          </div>
+          <button id="download-template" class="new-style" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
+        </div>
+        <div id="template-formats" class="field-pair template-setting" hidden>
+          <button class="new-style" type="button" data-format="png">PNG<span class="material-symbols-rounded">image</span></button>
+          <button class="new-style" type="button" data-format="svg">SVG<span class="material-symbols-rounded">polyline</span></button>
+        </div>
+        <p id="download-template-status" class="panel-note template-setting" hidden></p>
         <div class="field-group">
           <div class="field-pair">
             <label class="field">
@@ -3512,24 +3534,6 @@
             </label>
           </div>
         </div>
-        <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
-        <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
-        <div class="field-group template-setting resolution-group">
-          <div id="resolution-field" class="field">
-            Resolution
-            <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
-          </div>
-          <div class="field">
-            Recommended
-            <output id="background-min-resolution"></output>
-          </div>
-        </div>
-        <button id="download-template" class="new-style template-setting" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
-        <div id="template-formats" class="field-pair template-setting" hidden>
-          <button class="new-style" type="button" data-format="png">PNG<span class="material-symbols-rounded">image</span></button>
-          <button class="new-style" type="button" data-format="svg">SVG<span class="material-symbols-rounded">polyline</span></button>
-        </div>
-        <p id="download-template-status" class="panel-note template-setting" hidden></p>
         <label class="field">
           Padding
           <input id="board-padding" type="number" min="0" step="1" value="0">

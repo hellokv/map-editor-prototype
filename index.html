@@ -46,6 +46,9 @@
     .panel-tilt canvas {
       position: absolute;
     }
+    #background-panel:has(#map-light-on:not(:checked)) :is(#map-light-color-field, #map-light-spread-field) {
+      display: none;
+    }
     #label-plane {
       position: absolute;
       left: 0;
@@ -3482,10 +3485,14 @@
             <span class="slider"><input id="light-angle" type="number" min="0" max="360" step="1" value="315"><input type="range" min="0" max="360" step="1" value="315" aria-label="Light angle"></span>
           </label>
           <label class="field">
+            Show Light
+            <input id="map-light-on" class="switch" type="checkbox" checked>
+          </label>
+          <label id="map-light-color-field" class="field">
             Light Color
             <span class="color-field"><input id="map-light-color" type="color" value="#fff3d6"><input class="opacity" type="number" min="0" max="100" step="1" value="25" aria-label="Light opacity">%</span>
           </label>
-          <label class="field">
+          <label id="map-light-spread-field" class="field">
             Light Spread
             <span class="slider"><span class="percent-field"><input id="map-light-spread" type="number" min="10" max="200" step="1" value="100"></span><input type="range" min="10" max="200" step="1" value="100" aria-label="Light spread"></span>
           </label>
@@ -5311,7 +5318,10 @@
     const mapLightSpread = document.getElementById('map-light-spread');
     linkSlider(mapLightSpread);
     mapLightSpread.addEventListener('input', draw);
+    const mapLightOn = document.getElementById('map-light-on');
+    mapLightOn.addEventListener('change', draw);
     function drawMapLight(c, turn) {
+      if (!mapLightOn.checked) return;
       const color = colorOf(mapLightColor);
       const alpha = color.length > 7 ? parseInt(color.slice(7), 16) / 255 : 1;
       if (!alpha) return;
@@ -14863,7 +14873,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

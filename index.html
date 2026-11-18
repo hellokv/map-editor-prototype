@@ -2061,7 +2061,7 @@
     }
     /* The board's settings wait for a background or satellite reference to set them against. */
     #background-panel:not(.has-reference) #image-preview[hidden] ~ :not(.template-setting),
-    #background-panel #image-preview[hidden] ~ #resolution-field {
+    #background-panel #image-preview[hidden] ~ .resolution-group #resolution-field {
       display: none;
     }
     #background-panel #template-formats[hidden] {
@@ -3506,13 +3506,15 @@
         </div>
         <input id="board-width" type="number" min="100" step="1" value="1500" hidden>
         <input id="board-height" type="number" min="100" step="1" value="1500" hidden>
-        <div id="resolution-field" class="field">
-          Resolution
-          <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
-        </div>
-        <div class="field template-setting">
-          Recommended
-          <output id="background-min-resolution"></output>
+        <div class="field-group template-setting resolution-group">
+          <div id="resolution-field" class="field">
+            Resolution
+            <output id="background-resolution"><span id="resolution-low" title="Below the recommended resolution" hidden></span><span></span></output>
+          </div>
+          <div class="field">
+            Recommended
+            <output id="background-min-resolution"></output>
+          </div>
         </div>
         <button id="download-template" class="new-style template-setting" type="button" aria-expanded="false">Download Template<span class="material-symbols-rounded">download</span></button>
         <div id="template-formats" class="field-pair template-setting" hidden>

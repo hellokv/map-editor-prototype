@@ -1639,8 +1639,13 @@
       border-radius: 6px;
       overflow: hidden;
     }
-    .field-group > .field {
+    .field-group > .field,
+    .field-group > .terrain-pattern > .field {
       border-radius: 0;
+    }
+    /* A terrain's pattern fields sit in its group as if they were its own. */
+    .terrain-pattern {
+      display: contents;
     }
     /* An icon style's color, until one is picked, is the label's own. */
     #icon-color-field .original,
@@ -3297,95 +3302,101 @@
       </div>
       <div id="terrain-settings" class="label-section tab-landscape" hidden>
         <div class="field">Terrain</div>
-        <label class="field">
-          Water Color
-          <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"></span>
-        </label>
-        <div class="field">
-          Water Effect
-          <select id="water-effect">
-            <option value="none">None</option>
-            <option value="stripes">Stripes</option>
-            <option value="dots">Dots</option>
-          </select>
+        <div class="field-group">
+          <label class="field">
+            Water Color
+            <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"></span>
+          </label>
+          <div class="field">
+            Water Effect
+            <select id="water-effect">
+              <option value="none">None</option>
+              <option value="stripes">Stripes</option>
+              <option value="dots">Dots</option>
+            </select>
+          </div>
+          <div id="water-pattern" class="terrain-pattern" hidden>
+            <label class="field">
+              Water Pattern Color
+              <span class="color-field"><input id="water-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Water pattern opacity">%</span>
+            </label>
+            <label class="field">
+              <span class="pattern-size-label">Stripe Thickness</span>
+              <input id="water-pattern-size" type="number" min="0.5" step="0.5" value="4">
+            </label>
+            <label class="field">
+              <span class="pattern-gap-label">Stripe Spacing</span>
+              <input id="water-pattern-gap" type="number" min="0" step="0.5" value="8">
+            </label>
+            <label class="field">
+              <span class="pattern-angle-label">Stripe Angle</span>
+              <span class="slider"><input id="water-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Water pattern angle"></span>
+            </label>
+          </div>
         </div>
-        <div id="water-pattern" class="stripe-fields" hidden>
+        <div class="field-group">
           <label class="field">
-            Water Pattern Color
-            <span class="color-field"><input id="water-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Water pattern opacity">%</span>
+            Dirt Color
+            <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"></span>
           </label>
-          <label class="field">
-            <span class="pattern-size-label">Stripe Thickness</span>
-            <input id="water-pattern-size" type="number" min="0.5" step="0.5" value="4">
-          </label>
-          <label class="field">
-            <span class="pattern-gap-label">Stripe Spacing</span>
-            <input id="water-pattern-gap" type="number" min="0" step="0.5" value="8">
-          </label>
-          <label class="field">
-            <span class="pattern-angle-label">Stripe Angle</span>
-            <span class="slider"><input id="water-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Water pattern angle"></span>
-          </label>
+          <div class="field">
+            Dirt Effect
+            <select id="dirt-effect">
+              <option value="none">None</option>
+              <option value="stripes">Stripes</option>
+              <option value="dots">Dots</option>
+            </select>
+          </div>
+          <div id="dirt-pattern" class="terrain-pattern" hidden>
+            <label class="field">
+              Dirt Pattern Color
+              <span class="color-field"><input id="dirt-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Dirt pattern opacity">%</span>
+            </label>
+            <label class="field">
+              <span class="pattern-size-label">Stripe Thickness</span>
+              <input id="dirt-pattern-size" type="number" min="0.5" step="0.5" value="4">
+            </label>
+            <label class="field">
+              <span class="pattern-gap-label">Stripe Spacing</span>
+              <input id="dirt-pattern-gap" type="number" min="0" step="0.5" value="8">
+            </label>
+            <label class="field">
+              <span class="pattern-angle-label">Stripe Angle</span>
+              <span class="slider"><input id="dirt-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Dirt pattern angle"></span>
+            </label>
+          </div>
         </div>
-        <label class="field">
-          Dirt Color
-          <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"></span>
-        </label>
-        <div class="field">
-          Dirt Effect
-          <select id="dirt-effect">
-            <option value="none">None</option>
-            <option value="stripes">Stripes</option>
-            <option value="dots">Dots</option>
-          </select>
-        </div>
-        <div id="dirt-pattern" class="stripe-fields" hidden>
+        <div class="field-group">
           <label class="field">
-            Dirt Pattern Color
-            <span class="color-field"><input id="dirt-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Dirt pattern opacity">%</span>
+            Grass Color
+            <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"></span>
           </label>
-          <label class="field">
-            <span class="pattern-size-label">Stripe Thickness</span>
-            <input id="dirt-pattern-size" type="number" min="0.5" step="0.5" value="4">
-          </label>
-          <label class="field">
-            <span class="pattern-gap-label">Stripe Spacing</span>
-            <input id="dirt-pattern-gap" type="number" min="0" step="0.5" value="8">
-          </label>
-          <label class="field">
-            <span class="pattern-angle-label">Stripe Angle</span>
-            <span class="slider"><input id="dirt-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Dirt pattern angle"></span>
-          </label>
-        </div>
-        <label class="field">
-          Grass Color
-          <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"></span>
-        </label>
-        <div class="field">
-          Grass Effect
-          <select id="grass-effect">
-            <option value="none">None</option>
-            <option value="stripes">Stripes</option>
-            <option value="dots">Dots</option>
-          </select>
-        </div>
-        <div id="grass-pattern" class="stripe-fields" hidden>
-          <label class="field">
-            Grass Pattern Color
-            <span class="color-field"><input id="grass-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Grass pattern opacity">%</span>
-          </label>
-          <label class="field">
-            <span class="pattern-size-label">Stripe Thickness</span>
-            <input id="grass-pattern-size" type="number" min="0.5" step="0.5" value="4">
-          </label>
-          <label class="field">
-            <span class="pattern-gap-label">Stripe Spacing</span>
-            <input id="grass-pattern-gap" type="number" min="0" step="0.5" value="8">
-          </label>
-          <label class="field">
-            <span class="pattern-angle-label">Stripe Angle</span>
-            <span class="slider"><input id="grass-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Grass pattern angle"></span>
-          </label>
+          <div class="field">
+            Grass Effect
+            <select id="grass-effect">
+              <option value="none">None</option>
+              <option value="stripes">Stripes</option>
+              <option value="dots">Dots</option>
+            </select>
+          </div>
+          <div id="grass-pattern" class="terrain-pattern" hidden>
+            <label class="field">
+              Grass Pattern Color
+              <span class="color-field"><input id="grass-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Grass pattern opacity">%</span>
+            </label>
+            <label class="field">
+              <span class="pattern-size-label">Stripe Thickness</span>
+              <input id="grass-pattern-size" type="number" min="0.5" step="0.5" value="4">
+            </label>
+            <label class="field">
+              <span class="pattern-gap-label">Stripe Spacing</span>
+              <input id="grass-pattern-gap" type="number" min="0" step="0.5" value="8">
+            </label>
+            <label class="field">
+              <span class="pattern-angle-label">Stripe Angle</span>
+              <span class="slider"><input id="grass-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Grass pattern angle"></span>
+            </label>
+          </div>
         </div>
         <p class="panel-note">With no stamp chosen, click a shape in the base layer to set its terrain. Shift-click to select several.</p>
       </div>

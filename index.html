@@ -3275,6 +3275,20 @@
             <span class="color-field"><input id="buildings-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Building shadow opacity">%</span>
           </label>
         </div>
+        <div class="field-group">
+          <label id="buildings-outline-field" class="field" hidden>
+            Outline
+            <input id="buildings-outline" class="switch" type="checkbox">
+          </label>
+          <label id="buildings-outline-color-field" class="field" hidden>
+            Color
+            <span class="color-field"><input id="buildings-outline-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Building outline opacity">%</span>
+          </label>
+          <label id="buildings-outline-width-field" class="field" hidden>
+            Weight
+            <input id="buildings-outline-width" type="number" min="0" step="0.5" value="2">
+          </label>
+        </div>
       </div>
       <div id="tree-shapes" class="label-section tab-landscape" hidden>
         <div class="section-heading">Trees</div>
@@ -13143,6 +13157,55 @@
       shown('shadow-length-field', buildingShadows || stampShadows);
       shown('tree-shadow-color-field', treeShadowsOn.checked);
       shown('buildings-shadow-color-field', buildingShadows);
+      const outlined = buildings && buildingOutlineOn.checked;
+      shown('buildings-outline-field', buildings);
+      shown('buildings-outline-color-field', outlined);
+      shown('buildings-outline-width-field', outlined);
+    }
+    const buildingOutlineOn = document.getElementById('buildings-outline');
+    const buildingOutlineColor = document.getElementById('buildings-outline-color');
+    const buildingOutlineWidth = document.getElementById('buildings-outline-width');
+    buildingOutlineOn.addEventListener('change', () => {
+      showShadowFields();
+      draw();
+    });
+    for (const input of [buildingOutlineColor, buildingOutlineWidth]) input.addEventListener('input', draw);
+    // Half the outline's weight falls outside a part's edge, half inside, in map units.
+    const buildingOutlineHalf = () => (buildingOutlineOn.checked ? Math.max(0, Number(buildingOutlineWidth.value) || 0) / 2 : 0);
+    // A part's shape grown by half the outline's weight, or its rim that
+    // half the weight wide inside its edge, in the outline colour, on a
+    // canvas pad pixels larger all round than the part's own.
+    function partOutline(part, rim) {
+      const half = buildingOutlineHalf();
+      const color = colorOf(buildingOutlineColor);
+      const key = `${rim}|${half}|${color}`;
+      part.outlines ??= {};
+      if (part.outlines[key]) return part.outlines[key];
+      const k = part.aw / partRect(part).w;
+      const reach = half * k;
+      const pad = Math.ceil(reach) + 1;
+      const canvas = new OffscreenCanvas(part.aw + 2 * pad, part.ah + 2 * pad);
+      const c = canvas.getContext('2d');
+      const steps = 24;
+      const offsets = [[0, 0]];
+      for (let i = 0; i < steps; i++) offsets.push([Math.cos((2 * Math.PI * i) / steps) * reach, Math.sin((2 * Math.PI * i) / steps) * reach]);
+      if (rim) {
+        // The part less itself shrunk by the reach, which is what every shifted copy shares.
+        const shrunk = new OffscreenCanvas(canvas.width, canvas.height);
+        const sc = shrunk.getContext('2d');
+        sc.drawImage(part.roof, pad, pad);
+        sc.globalCompositeOperation = 'destination-in';
+        for (const [dx, dy] of offsets) sc.drawImage(part.roof, pad + dx, pad + dy);
+        c.drawImage(part.roof, pad, pad);
+        c.globalCompositeOperation = 'destination-out';
+        c.drawImage(shrunk, 0, 0);
+      } else {
+        for (const [dx, dy] of offsets) c.drawImage(part.roof, pad + dx, pad + dy);
+      }
+      c.globalCompositeOperation = 'source-in';
+      c.fillStyle = color;
+      c.fillRect(0, 0, canvas.width, canvas.height);
+      return (part.outlines[key] = { canvas, pad: pad / k });
     }
     const treeShadowsOn = document.getElementById('tree-shadows');
     const treeShadowColor = document.getElementById('tree-shadow-color');
@@ -13654,11 +13717,24 @@
         const r = partRect(part);
         const top = tilted ? partLift(part) * view.scale : 0;
         const slices = top ? Math.max(1, Math.ceil((top * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 1;
+        // The outline: every slice's grown shape behind the building, then the roof's rim on it.
+        const outlined = buildingOutlineHalf() > 0;
+        if (outlined) {
+          const { canvas: grown, pad } = partOutline(part, false);
+          for (let i = 0; i <= slices; i++) {
+            c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
+            c.drawImage(grown, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);
+          }
+        }
         for (let i = 1; i <= slices; i++) {
           c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
           // Under a dome, the roof is the dome's own first layer.
           const roof = i === slices && part.roofStyle !== 'dome';
           c.drawImage(roof ? partTop(part) : partWall(part), r.x, r.y, r.w, r.h);
+          if (roof && outlined) {
+            const { canvas: rimmed, pad } = partOutline(part, true);
+            c.drawImage(rimmed, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);
+          }
         }
         const shade = roofShadow(part);
         if (shade) c.drawImage(shade, r.x, r.y, r.w, r.h);
@@ -14898,7 +14974,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

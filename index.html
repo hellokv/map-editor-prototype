@@ -3241,7 +3241,7 @@
           </button>
         </div>
         <label id="buildings-lift-field" class="field" hidden>
-          Building Height
+          Height
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="300" step="1" value="0"><input type="range" min="0" max="300" step="1" value="0" aria-label="Building height"></span>
         </label>
         <div id="buildings-colors" class="field-group" hidden>
@@ -3262,14 +3262,16 @@
           <button id="buildings-rotation-reset" type="button" aria-label="Follow the map's rotation" hidden><span class="material-symbols-rounded">restart_alt</span></button>
           <input id="buildings-rotate" type="checkbox" hidden>
         </label>
-        <label id="buildings-shadows-field" class="field" hidden>
-          Building Shadows
-          <input id="buildings-shadows" class="switch" type="checkbox">
-        </label>
-        <label id="buildings-shadow-color-field" class="field" hidden>
-          Building Shadow Color
-          <span class="color-field"><input id="buildings-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Building shadow opacity">%</span>
-        </label>
+        <div class="field-group">
+          <label id="buildings-shadows-field" class="field" hidden>
+            Shadows
+            <input id="buildings-shadows" class="switch" type="checkbox">
+          </label>
+          <label id="buildings-shadow-color-field" class="field" hidden>
+            Color
+            <span class="color-field"><input id="buildings-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Building shadow opacity">%</span>
+          </label>
+        </div>
       </div>
       <div id="tree-shapes" class="label-section tab-landscape" hidden>
         <div class="section-heading">Trees</div>

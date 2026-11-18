@@ -64,7 +64,20 @@
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
     }
-    #area-pop[hidden], #terrain-pop[hidden] {
+    #shape-building-pop {
+      position: absolute;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      transform: translate(-50%, calc(-100% - 16px));
+      font: 12px system-ui, sans-serif;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    }
+    #area-pop[hidden], #terrain-pop[hidden], #shape-building-pop[hidden] {
       display: none;
     }
     #terrain-pop button {
@@ -2188,6 +2201,10 @@
       <button id="area-shuffle" type="button" aria-label="Shuffle placement"><span class="material-symbols-rounded">shuffle</span></button>
       <button id="area-delete" type="button" aria-label="Delete area"><span class="material-symbols-rounded">delete</span></button>
     </div>
+    <label id="shape-building-pop" hidden>
+      Building
+      <input class="switch" type="checkbox">
+    </label>
     <div id="terrain-pop" hidden>
       <button type="button" data-terrain="none">None</button>
       <button type="button" data-terrain="water">Water</button>
@@ -5409,6 +5426,7 @@
       showBuildingPop();
       showAreaPop();
       showTerrainPop();
+      showShapeBuildingPop();
       updatePanel();
     }
 
@@ -7531,7 +7549,7 @@
       }
       const stamps = allStamps();
       if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
-      if (buildingsImage && !noBackground) drawLiftedBuildings(ctx);
+      if ((buildingsImage || shapes.some(isBuildingShape)) && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
       if (!backgroundTools.hidden && backgroundTool === 'tree') {
         drawTerrainSelection(ctx);
@@ -7546,7 +7564,7 @@
         ctx.restore();
       }
       if (locationPart !== 'paths') {
-        drawShapes();
+        drawShapes(!noBackground);
         drawSketchFills();
       }
       if (board.outline && !noBackground) {
@@ -10565,16 +10583,16 @@
     }
     // Each corner is rounded with an arc that meets both its edges,
     // starting from the middle of the last edge.
-    function traceRoundedPolygon(corners, radius) {
+    function traceRoundedPolygon(corners, radius, c = ctx) {
       const last = corners.at(-1);
-      ctx.moveTo((last.x + corners[0].x) / 2, (last.y + corners[0].y) / 2);
+      c.moveTo((last.x + corners[0].x) / 2, (last.y + corners[0].y) / 2);
       corners.forEach((p, i) => {
         const next = corners[(i + 1) % corners.length];
         const prev = corners.at(i - 1);
         const room = Math.min(Math.hypot(next.x - p.x, next.y - p.y), Math.hypot(prev.x - p.x, prev.y - p.y)) / 2;
-        ctx.arcTo(p.x, p.y, next.x, next.y, Math.min(radius, room));
+        c.arcTo(p.x, p.y, next.x, next.y, Math.min(radius, room));
       });
-      ctx.closePath();
+      c.closePath();
     }
     // An uploaded image placed on the map: a shape of kind 'image' holding
     // the loaded <img>, stretched to its box, turned with it and cut to its
@@ -10625,7 +10643,8 @@
       };
       image.src = URL.createObjectURL(file);
     });
-    function drawShapes() {
+    // buildingsShown: building shapes are drawn raised with the buildings, so not here.
+    function drawShapes(buildingsShown = false) {
       const drawing = drag?.shapes && drag.drawing && drag.active ? [drag.drawing] : [];
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
@@ -10641,6 +10660,7 @@
           drawImageShape(shape);
           continue;
         }
+        if (buildingsShown && isBuildingShape(shape)) continue;
         // Canvas shadows are in device pixels, so they're scaled with the map.
         ctx.shadowColor = shape.shadow ?? 'transparent';
         ctx.shadowBlur = SHAPE_SHADOW_BLUR * view.scale * dpr;
@@ -12870,10 +12890,7 @@
       buildingsPreview.querySelector('img').src = img ? img.src : '';
       buildingsPreview.hidden = !img;
       document.getElementById('buildings-upload-field').hidden = !!img;
-      document.getElementById('buildings-lift-field').hidden = !img;
-      document.getElementById('buildings-colors').hidden = !img;
-      showBuildingRotation();
-      showShadowFields();
+      showBuildingFields();
       if (!img) buildingsUpload.value = '';
       draw();
     }
@@ -12915,8 +12932,15 @@
     // Building Rotation follows the map's until it's moved; buildings-rotate
     // records that it was, and the reset button goes back to following.
     const buildingsRotationReset = document.getElementById('buildings-rotation-reset');
+    // The buildings' fields show while there's a buildings image or a shape made a building.
+    function showBuildingFields() {
+      document.getElementById('buildings-lift-field').hidden = !hasBuildings();
+      document.getElementById('buildings-colors').hidden = !hasBuildings();
+      showBuildingRotation();
+      showShadowFields();
+    }
     function showBuildingRotation() {
-      document.getElementById('buildings-rotation-field').hidden = !buildingsImage;
+      document.getElementById('buildings-rotation-field').hidden = !hasBuildings();
       buildingsRotationReset.hidden = !buildingsRotate.checked;
       if (!buildingsRotate.checked) {
         buildingsRotationInput.value = Number(mapRotationInput.value) || 0;
@@ -12970,7 +12994,7 @@
     }
     const buildingsSideColor = document.getElementById('buildings-side-color');
     buildingsSideColor.addEventListener('input', () => {
-      for (const part of buildingParts) part.wall = null;
+      for (const part of allBuildingParts()) part.wall = null;
       draw();
     });
     const buildingShadowsOn = document.getElementById('buildings-shadows');
@@ -12980,7 +13004,7 @@
     buildingShadowColor.addEventListener('input', draw);
     function showShadowFields() {
       const shown = (id, on) => { document.getElementById(id).hidden = !on; };
-      const buildings = !!buildingsImage;
+      const buildings = hasBuildings();
       const buildingShadows = buildings && buildingShadowsOn.checked;
       shown('buildings-shadows-field', buildings);
       const stampShadows = treeShadowsOn.checked;
@@ -13159,11 +13183,14 @@
       const r = partRect(part);
       const key = `${r.x},${r.y},${r.w},${r.h}`;
       if (part.facesKey === key) return part.faces;
-      const W = buildingsImage.naturalWidth;
-      const H = buildingsImage.naturalHeight;
-      const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
-      const b = buildingsRect();
-      const poly = outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
+      const toMap = () => {
+        const W = buildingsImage.naturalWidth;
+        const H = buildingsImage.naturalHeight;
+        const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
+        const b = buildingsRect();
+        return outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
+      };
+      const poly = part.mapOutline ?? toMap();
       const n = poly.length;
       const edges = poly.map((a, i) => {
         const q = poly[(i + 1) % n];
@@ -13223,8 +13250,85 @@
       c.fillRect(0, 0, part.aw, part.ah);
       return (part.dark = dark);
     }
+    // Drawn shapes marked as buildings join the buildings layer, raised and
+    // shaded like its parts. Each keeps one part, redrawn when the shape changes.
+    const shapeParts = new WeakMap();
+    function canBeBuilding(shape) {
+      return !['compass', 'image'].includes(shape.kind);
+    }
+    function isBuildingShape(shape) {
+      return !!shape.building && canBeBuilding(shape);
+    }
+    function hasBuildings() {
+      return !!buildingsImage || shapes.some(isBuildingShape);
+    }
+    // A shape's outline as a path in map units, turned with it.
+    function shapePath(shape) {
+      const local = new Path2D();
+      if (shape.kind === 'circle') local.ellipse(shape.x + shape.w / 2, shape.y + shape.h / 2, shape.w / 2, shape.h / 2, 0, 0, Math.PI * 2);
+      else if (shape.kind === 'square') traceBox(local, shape, shape.radius ?? 0, shape.corners);
+      else traceRoundedPolygon(shapeCorners(shape), shape.radius ?? 0, local);
+      const c = shapeCentre(shape);
+      const out = new Path2D();
+      out.addPath(local, new DOMMatrix().translate(c.x, c.y).rotate(((shape.rotation ?? 0) * 180) / Math.PI).translate(-c.x, -c.y));
+      return out;
+    }
+    // The same outline as corner points, for an angled top.
+    function shapeOutline(shape) {
+      const c = shapeCentre(shape);
+      const local = shape.kind === 'circle'
+        ? Array.from({ length: 32 }, (_, i) => ({ x: c.x + (Math.cos((i * Math.PI) / 16) * shape.w) / 2, y: c.y + (Math.sin((i * Math.PI) / 16) * shape.h) / 2 }))
+        : shape.kind === 'square'
+          ? [{ x: shape.x, y: shape.y }, { x: shape.x + shape.w, y: shape.y }, { x: shape.x + shape.w, y: shape.y + shape.h }, { x: shape.x, y: shape.y + shape.h }]
+          : shapeCorners(shape);
+      return local.map((p) => {
+        const v = rotate({ x: p.x - c.x, y: p.y - c.y }, shape.rotation ?? 0);
+        return [c.x + v.x, c.y + v.y];
+      });
+    }
+    function shapeBuildingPart(shape) {
+      const placed = shownBox(shape);
+      const key = JSON.stringify([placed.kind, placed.x, placed.y, placed.w, placed.h, placed.rotation, placed.sides, placed.radius, placed.corners, shape.color]);
+      const old = shapeParts.get(shape);
+      if (old?.key === key) return old;
+      const box = shapesBox([shape]);
+      const k = Math.min(4, 2048 / Math.max(box.w, box.h, 1));
+      const aw = Math.max(1, Math.ceil(box.w * k));
+      const ah = Math.max(1, Math.ceil(box.h * k));
+      const roof = new OffscreenCanvas(aw, ah);
+      const c = roof.getContext('2d');
+      c.setTransform(k, 0, 0, k, -box.x * k, -box.y * k);
+      c.fillStyle = shape.color;
+      c.fill(shapePath(placed));
+      const part = { key, shape, roof, aw, ah, k, mapRect: box, mapOutline: shapeOutline(placed), wall: null, lift: null, roofStyle: 'flat', roofHeight: 100 };
+      shapeParts.set(shape, part);
+      return part;
+    }
+    const allBuildingParts = () => [...buildingParts, ...shapes.filter(isBuildingShape).map(shapeBuildingPart)];
+    // Selected shapes get a switch above them to make them buildings.
+    const shapeBuildingPop = document.getElementById('shape-building-pop');
+    const shapeBuildingSwitch = shapeBuildingPop.querySelector('input');
+    function showShapeBuildingPop() {
+      const eligible = selectedShapes.filter(canBeBuilding);
+      shapeBuildingPop.hidden = !eligible.length || backgroundTools.hidden || !!drag;
+      if (shapeBuildingPop.hidden) return;
+      shapeBuildingSwitch.checked = eligible.every(isBuildingShape);
+      const box = shapesBox(eligible);
+      const s = toScreen({ x: box.x + box.w / 2, y: box.y });
+      const at = windowPoint(s.x, s.y);
+      shapeBuildingPop.style.left = `${Math.min(Math.max(at.x, 60), canvas.clientWidth - 60)}px`;
+      shapeBuildingPop.style.top = `${Math.max(at.y, 60)}px`;
+    }
+    shapeBuildingSwitch.addEventListener('change', () => {
+      recordUndo();
+      for (const shape of selectedShapes.filter(canBeBuilding)) shape.building = shapeBuildingSwitch.checked;
+      shapeBuildingSwitch.blur();
+      showBuildingFields();
+      draw();
+    });
     // A part's place on the map.
     function partRect(part) {
+      if (part.mapRect) return part.mapRect;
       const r = buildingsRect();
       const sx = r.w / buildingsImage.naturalWidth;
       const sy = r.h / buildingsImage.naturalHeight;
@@ -13255,7 +13359,8 @@
     // by its lift times the shadow length.
     let shadowLayer = null;
     function drawBuildingShadows(c) {
-      if (!buildingShadowsOn.checked || !buildingParts.length) return;
+      const parts = allBuildingParts();
+      if (!buildingShadowsOn.checked || !parts.length) return;
       const { dx, dy } = lightFall();
       const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       const { width, height } = c.canvas;
@@ -13264,7 +13369,7 @@
       s.setTransform(1, 0, 0, 1, 0, 0);
       s.clearRect(0, 0, width, height);
       s.setTransform(c.getTransform());
-      for (const part of buildingParts) {
+      for (const part of parts) {
         const length = partLift(part) * stretch;
         if (!length) continue;
         const r = partRect(part);
@@ -13311,7 +13416,7 @@
       if (!buildingShadowsOn.checked) return null;
       const stretch = Math.max(0, Number(shadowLengthInput.value) || 0) / 100;
       const height = partLift(part);
-      const taller = buildingParts.filter((other) => other !== part && partLift(other) > height);
+      const taller = allBuildingParts().filter((other) => other !== part && partLift(other) > height);
       if (!stretch || !taller.length) return null;
       const { dx, dy } = lightFall();
       const r = partRect(part);
@@ -13357,7 +13462,7 @@
         const p = toScreen({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
         return canvasTilt ? leanSpin().transformPoint(new DOMPoint(p.x, p.y)).y : p.y;
       };
-      const order = [...buildingParts].sort((a, b) => depth(a) - depth(b));
+      const order = allBuildingParts().sort((a, b) => depth(a) - depth(b));
       for (const part of order) {
         const r = partRect(part);
         const top = tilted ? partLift(part) * view.scale : 0;

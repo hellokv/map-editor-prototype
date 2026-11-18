@@ -13932,7 +13932,6 @@
         p.ellipse(0, 0, w / 2, w * TRUNK_FOOT, 0, 0, Math.PI);
         p.closePath();
       });
-      const circle = (x, y, r) => (p) => p.arc(x, y, r, 0, Math.PI * 2);
       const ellipse = (x, y, rx, ry, turn = 0) => (p) => p.ellipse(x, y, rx, ry, turn, 0, Math.PI * 2);
       const many = (...shapes) => path((p) => shapes.forEach((shape) => { p.moveTo(0, 0); shape(p); }));
       // An evergreen as stacked triangles, [apex, base, half width] each, apex
@@ -13955,23 +13954,23 @@
           volume: [['trunk', 6, trunkH], ...layers.map((layer) => ['cone', ...layer])],
         };
       };
-      // A broadleaf as a trunk under circles, [across, height, radius] each.
+      // A broadleaf as a trunk under ovals, [across, height, half width, half height] each.
       const broadleaf = (trunkW, balls) => {
         const trunkH = Math.min(...balls.map(([, z]) => z));
         const xs = balls.flatMap(([x, , r]) => [x - r, x + r]);
         return {
           w: Math.max(...xs) - Math.min(...xs),
-          h: Math.max(...balls.map(([, z, r]) => z + r)),
-          parts: [[trunk(trunkW, trunkH), TRUNK], [many(...balls.map(([x, z, r]) => circle(x, -z, r))), LEAF]],
-          volume: [['trunk', trunkW, trunkH], ...balls.map(([x, z, r]) => ['ball', x, z, r, r])],
+          h: Math.max(...balls.map(([, z, , half]) => z + half)),
+          parts: [[trunk(trunkW, trunkH), TRUNK], [many(...balls.map(([x, z, r, half]) => ellipse(x, -z, r, half))), LEAF]],
+          volume: [['trunk', trunkW, trunkH], ...balls.map((ball) => ['ball', ...ball])],
         };
       };
-      // In the panel's order: broadleaves of one to three circles, then
+      // In the panel's order: broadleaves wide, round and tall, then
       // evergreens with no notch to two.
       return {
-        round: broadleaf(6, [[0, 38, 19]]),
-        duo: broadleaf(7, [[-10, 30, 15], [10, 40, 15]]),
-        oak: broadleaf(8, [[-12, 30, 14], [12, 30, 14], [0, 44, 15]]),
+        wide: broadleaf(7, [[0, 30, 24, 15]]),
+        round: broadleaf(6, [[0, 38, 19, 19]]),
+        tall: broadleaf(6, [[0, 42, 13, 23]]),
         cone: evergreen([[62, 10, 15]]),
         spruce: evergreen([[62, 28, 13], [44, 10, 18]]),
         pine: evergreen([[60, 30, 11], [48, 20, 15], [36, 10, 18]]),
@@ -14024,7 +14023,7 @@
       return treeTrunkInput.value;
     }
     // Stamps from shapes since dropped take the nearest ones still offered.
-    const OLD_STAMPS = { cypress: 'pine', palm: 'round', bush: 'oak' };
+    const OLD_STAMPS = { cypress: 'pine', palm: 'round', bush: 'round', duo: 'wide', oak: 'round' };
     const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     // Null when no stamp is chosen: clicks then only select fill areas.
     let treeShape = null;

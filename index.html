@@ -14876,6 +14876,23 @@
           edgeNode = null;
         }
       }
+      // A press inside an area, with nothing to stamp, selects it and drags it whole.
+      let inside = null;
+      if (!point && !treeShape && !(treeSet === 'brushes' && brushChoice)) inside = fillAreaAt(toBackground(s.x, s.y));
+      if (inside) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        selectedArea = inside;
+        selectedTerrain = [];
+        if (inside.wash) showWashFields(inside);
+        stampChoice = new Set(inside.shapes);
+        showStampChoice();
+        areaDrag = { mode: 'move', area: inside, start: toBackground(s.x, s.y), original: inside.points.map(({ x, y }) => ({ x, y })) };
+        washDraft = true;
+        draw();
+        return;
+      }
       if (!point) return;
       e.stopImmediatePropagation();
       e.preventDefault();
@@ -14911,7 +14928,12 @@
       const at = toBackground(s.x, s.y);
       const { point, mode, area, centre, start, original } = areaDrag;
       if (mode === 'point') Object.assign(point, at);
-      else {
+      else if (mode === 'move') {
+        area.points.forEach((q, i) => {
+          q.x = original[i].x + at.x - start.x;
+          q.y = original[i].y + at.y - start.y;
+        });
+      } else {
         const from = { x: start.x - centre.x, y: start.y - centre.y };
         const to = { x: at.x - centre.x, y: at.y - centre.y };
         const k = mode === 'scale' ? Math.hypot(to.x, to.y) / (Math.hypot(from.x, from.y) || 1) : 1;

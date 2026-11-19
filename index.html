@@ -11119,14 +11119,23 @@
         // With a stamp chosen, a click on a tree takes it away and anywhere else
         // plants one, fill areas included. With none, a click in a fill area
         // selects it, and anywhere else selects a base shape; Shift adds or drops one.
+        // The Watercolor brush stamps a five-sided wash, its corners 60 pixels
+        // out at this zoom, editable afterwards like any fill area.
+        if (treeSet === 'brushes' && brushChoice) {
+          const r = 60 / view.scale;
+          const points = Array.from({ length: 5 }, (_, i) => {
+            const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+            return { x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r };
+          });
+          fillAreas = [...fillAreas, { points, shapes: [], density: 25, seed: Math.floor(Math.random() * 2 ** 31), wash: true, edge: 50, ...washFields() }];
+          selectedArea = null;
+          selectedTerrain = [];
+          return draw();
+        }
         const area = treeShape ? null : fillAreaAt(p);
         const hadSelection = selectedArea || selectedTerrain.length;
         selectedArea = area;
-        if (area?.wash) {
-          showWashFields(area);
-          brushChoice = 'watercolor';
-          showBrushChoice();
-        }
+        if (area?.wash) showWashFields(area);
         const shape = area || treeShape ? null : baseShapeAt(p);
         if (!e.shiftKey || area || treeShape) selectedTerrain = shape === null ? [] : [shape];
         else if (shape !== null) selectedTerrain = selectedTerrain.includes(shape) ? selectedTerrain.filter((i) => i !== shape) : [...selectedTerrain, shape];
@@ -14287,7 +14296,7 @@
       }
     }
     // The Brushes tile, chosen and let go like a tree stamp, showing a wash
-    // in the panel's colours. A selected wash shows it chosen.
+    // in the panel's colours.
     let brushChoice = null;
     const brushButton = document.createElement('button');
     brushButton.type = 'button';
@@ -14833,7 +14842,8 @@
       return null;
     }
     canvas.addEventListener('pointermove', (e) => {
-      const live = backgroundTool === 'tree' && !backgroundTools.hidden && !fillingArea && !areaDrag && !treeShape && fillAreas.length;
+      const stamping = treeShape || (treeSet === 'brushes' && brushChoice);
+      const live = backgroundTool === 'tree' && !backgroundTools.hidden && !fillingArea && !areaDrag && !stamping && fillAreas.length;
       const node = live ? edgeNodeAt(canvasPoint(e)) : null;
       if (node?.area === edgeNode?.area && node?.index === edgeNode?.index) return;
       edgeNode = node;

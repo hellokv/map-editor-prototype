@@ -3436,6 +3436,17 @@
           </div>
         </div>
       </div>
+      <div class="label-section tab-base">
+        <div class="field">
+          Presentation
+          <div id="presentation-toggle" class="toggle-group">
+            <button type="button" data-presentation="2d" aria-pressed="false">2D</button>
+            <button type="button" data-presentation="3d" aria-pressed="false">3D</button>
+            <button type="button" data-presentation="both" aria-pressed="false">Both</button>
+          </div>
+        </div>
+        <p id="presentation-note" class="panel-note">Not set. Choose whether this map is meant to be shown in 2D, 3D or both.</p>
+      </div>
       <div class="label-section background-settings tab-base">
         <label id="image-upload-field" class="field">
           Background Image
@@ -4088,6 +4099,21 @@
     const soleShape = () => (selectedShapes.length === 1 ? selectedShapes[0] : null);
 
     // The shape options sit just right of the Shapes tool button.
+    // How the map is meant to be shown: '2d', '3d' or 'both'. It starts
+    // unset, so a map only says one once someone has chosen it.
+    let presentation = null;
+    const presentationButtons = document.querySelectorAll('#presentation-toggle button');
+    function setPresentation(value) {
+      presentation = value;
+      for (const button of presentationButtons) button.setAttribute('aria-pressed', String(button.dataset.presentation === value));
+      document.getElementById('presentation-note').hidden = !!value;
+    }
+    for (const button of presentationButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        setPresentation(button.dataset.presentation);
+      });
+    }
     function showBackgroundTab(tab) {
       document.getElementById('background-panel').dataset.tab = tab;
       if (tab === 'buildings' && frameEditing) setFrameEditing(false);
@@ -15604,6 +15630,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
+      file.presentation = presentation;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
@@ -15673,6 +15700,7 @@
         input.dispatchEvent(new Event('change'));
       }
       terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
+      setPresentation(file.presentation ?? null);
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();

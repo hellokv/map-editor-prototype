@@ -498,6 +498,25 @@
     #view-menu button:hover {
       background: rgba(0, 0, 0, 0.06);
     }
+    #dimension-toggle {
+      display: flex;
+      gap: 2px;
+      padding: 2px;
+      background: #f4f1ee;
+      border-radius: 6px;
+    }
+    #dimension-toggle[hidden] {
+      display: none;
+    }
+    #view-menu #dimension-toggle button {
+      padding: 6px 10px;
+      font: 600 12px 'National Park', system-ui, sans-serif;
+      border-radius: 4px;
+    }
+    #view-menu #dimension-toggle button[aria-pressed="true"] {
+      color: #fff;
+      background: #000;
+    }
     #view-menu .percent-field input {
       box-sizing: border-box;
       width: 64px;
@@ -2424,6 +2443,10 @@
         <option>Automatic</option>
         <option>Split Screen</option>
       </select>
+      <div id="dimension-toggle" hidden>
+        <button type="button" data-dimension="2d" aria-pressed="false">2D</button>
+        <button type="button" data-dimension="3d" aria-pressed="true">3D</button>
+      </div>
       <span class="percent-field"><input id="zoom-input" type="number" step="1" aria-label="Zoom"></span>
       <button id="turn-button" type="button" aria-label="Rotate 90°"><span class="material-symbols-rounded">rotate_90_degrees_cw</span></button>
       <button id="fit-button" type="button" aria-label="Scale to fit"><span class="material-symbols-rounded">fit_screen</span></button>
@@ -4107,6 +4130,21 @@
       presentation = value;
       for (const button of presentationButtons) button.setAttribute('aria-pressed', String(button.dataset.presentation === value));
       document.getElementById('presentation-note').hidden = !!value;
+      document.getElementById('dimension-toggle').hidden = value !== 'both';
+      draw();
+    }
+    // A map shown both ways gets a 2D/3D switch by the zoom. 2D shows it
+    // top down with buildings flat, whatever its tilt, turn and lift.
+    let viewDimension = '3d';
+    const flatView = () => presentation === 'both' && viewDimension === '2d';
+    const dimensionButtons = document.querySelectorAll('#dimension-toggle button');
+    for (const button of dimensionButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        viewDimension = button.dataset.dimension;
+        for (const other of dimensionButtons) other.setAttribute('aria-pressed', String(other === button));
+        draw();
+      });
     }
     for (const button of presentationButtons) {
       button.addEventListener('click', () => {
@@ -13709,7 +13747,7 @@
       const sy = r.h / buildingsImage.naturalHeight;
       return { x: r.x + part.x * sx, y: r.y + part.y * sy, w: part.w * sx, h: part.h * sy };
     }
-    const panelLift = () => Math.max(0, Number(buildingsLiftInput.value) || 0);
+    const panelLift = () => (flatView() ? 0 : Math.max(0, Number(buildingsLiftInput.value) || 0));
     // A part's own height is a percentage of the panel's. Older maps kept a
     // height in pixels, taken over as a percentage the first time it's needed.
     function partHeight(part) {
@@ -15310,7 +15348,7 @@
       // Buildings Only leans at 45°, so a building rises on screen exactly as far as its lift.
       const flat = mapView.value === 'buildings';
       // Paths and Location show the map top down, whatever its tilt and rotation.
-      const topDown = blank || !pathTools.hidden || inLocation();
+      const topDown = blank || !pathTools.hidden || inLocation() || flatView();
       const deg = topDown ? 0 : flat ? 45 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
       const turn = topDown ? 0 : (Number(mapRotationInput.value) || 0) % 360;
       canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);

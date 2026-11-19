@@ -3255,7 +3255,8 @@
             <button type="button" data-set="brushes" aria-pressed="false">Brushes</button>
           </div>
         </div>
-        <div class="tree-shape-grid"></div>
+        <div class="tree-shape-grid" data-set="shapes"></div>
+        <div class="tree-shape-grid" data-set="brushes" hidden></div>
         <label id="tree-depth-field" class="field">
           Depth
           <span class="slider"><span class="percent-field"><input id="tree-depth" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Tree depth"></span>
@@ -11121,7 +11122,11 @@
         const area = fillAreaAt(p);
         const hadSelection = selectedArea || selectedTerrain.length;
         selectedArea = area;
-        if (area?.wash) showWashFields(area);
+        if (area?.wash) {
+          showWashFields(area);
+          brushChoice = 'watercolor';
+          showBrushChoice();
+        }
         const shape = area || treeShape ? null : baseShapeAt(p);
         if (!e.shiftKey || area || treeShape) selectedTerrain = shape === null ? [] : [shape];
         else if (shape !== null) selectedTerrain = selectedTerrain.includes(shape) ? selectedTerrain.filter((i) => i !== shape) : [...selectedTerrain, shape];
@@ -14281,6 +14286,62 @@
         c.drawImage(canvas, x, y, w, h);
       }
     }
+    // The Brushes tile, chosen and let go like a tree stamp, showing a wash
+    // in the panel's colours. A selected wash shows it chosen.
+    let brushChoice = null;
+    const brushButton = document.createElement('button');
+    brushButton.type = 'button';
+    brushButton.dataset.brush = 'watercolor';
+    brushButton.setAttribute('aria-label', 'Watercolor');
+    brushButton.setAttribute('aria-pressed', 'false');
+    const brushPreview = document.createElement('canvas');
+    const showBrushChoice = () => brushButton.setAttribute('aria-pressed', String(brushChoice === 'watercolor'));
+    {
+      const size = 44;
+      const dpr = window.devicePixelRatio || 1;
+      brushPreview.width = brushPreview.height = size * dpr;
+      const sample = {
+        points: Array.from({ length: 9 }, (_, i) => {
+          const a = (i / 9) * Math.PI * 2;
+          const r = 18 * (1 + 0.15 * Math.sin(i * 2.3));
+          return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+        }),
+        edge: 60,
+        seed: 20261119,
+        wash: true,
+      };
+      brushPreview.paint = () => {
+        const c = brushPreview.getContext('2d');
+        const { canvas, x, y, w, h } = washImage(sample);
+        // Fitted by where the paint is, not the image's padded box, with the
+        // trees' 4-pixel margin.
+        const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        let [left, top, right, bottom] = [canvas.width, canvas.height, 0, 0];
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 64) continue;
+          const px = ((i - 3) / 4) % canvas.width;
+          const py = Math.floor((i - 3) / 4 / canvas.width);
+          [left, top, right, bottom] = [Math.min(left, px), Math.min(top, py), Math.max(right, px), Math.max(bottom, py)];
+        }
+        const unit = w / canvas.width;
+        const k = ((size - 8) * dpr) / (Math.max(right - left, bottom - top, 1) * unit);
+        const cx = x + ((left + right) / 2) * unit;
+        const cy = y + ((top + bottom) / 2) * unit;
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.clearRect(0, 0, brushPreview.width, brushPreview.height);
+        c.setTransform(k, 0, 0, k, (size * dpr) / 2 - cx * k, (size * dpr) / 2 - cy * k);
+        c.drawImage(canvas, x, y, w, h);
+      };
+    }
+    brushPreview.paint();
+    brushButton.append(brushPreview);
+    brushButton.addEventListener('click', () => {
+      brushButton.blur();
+      brushChoice = brushChoice ? null : 'watercolor';
+      showBrushChoice();
+    });
+    document.querySelector('#tree-shapes .tree-shape-grid[data-set="brushes"]').append(brushButton);
+    for (const input of [washFrom, washTo, washAngle]) input.addEventListener('input', () => brushPreview.paint());
     const treeSizeInput = document.getElementById('tree-size');
     const treeSizeVariation = document.getElementById('tree-size-variation');
     const treeColorInput = document.getElementById('tree-color');
@@ -14339,7 +14400,7 @@
     // The panel's pickers, each button showing its tree.
     const stampButtons = [];
     for (const [name, shape] of Object.entries(TREE_SHAPES)) {
-      const grid = document.querySelector('#tree-shapes .tree-shape-grid');
+      const grid = document.querySelector('#tree-shapes .tree-shape-grid[data-set="shapes"]');
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.tree = name;
@@ -14394,7 +14455,7 @@
       for (const button of treeSetButtons) button.setAttribute('aria-pressed', String(button.dataset.set === treeSet));
       for (const id of ['tree-depth-field', 'tree-trunk-field', 'tree-size-group', 'tree-color-group']) document.getElementById(id).hidden = brushes;
       document.getElementById('wash-color-group').hidden = !brushes;
-      document.querySelector('#tree-shapes .tree-shape-grid').hidden = brushes;
+      for (const grid of document.querySelectorAll('#tree-shapes .tree-shape-grid')) grid.hidden = (grid.dataset.set === 'brushes') !== brushes;
       // Washes lie in the paper, so they cast no shadow to set.
       document.getElementById('tree-shadows-field').closest('.field-group').hidden = brushes;
       document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes;

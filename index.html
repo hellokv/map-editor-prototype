@@ -184,7 +184,7 @@
     #building-lift-pop .lift-percent input::-webkit-inner-spin-button {
       appearance: none;
     }
-    :is(#panel, #style-panel, #settings-panel) #buildings-rotation-reset {
+    :is(#panel, #style-panel, #settings-panel) :is(#buildings-rotation-reset, #map-scale-3d-reset) {
       display: flex;
       flex: none;
       margin-left: 6px;
@@ -193,10 +193,10 @@
       border: 0;
       cursor: pointer;
     }
-    #buildings-rotation-reset[hidden] {
+    :is(#buildings-rotation-reset, #map-scale-3d-reset)[hidden] {
       display: none;
     }
-    #buildings-rotation-reset .material-symbols-rounded {
+    :is(#buildings-rotation-reset, #map-scale-3d-reset) .material-symbols-rounded {
       font-size: 18px;
     }
     #building-lift-pop button {
@@ -2718,10 +2718,18 @@
           </div>
         </div>
         <div class="label-section">
+          <div class="field-group">
           <label id="map-scale-field" class="field">
             Scale
             <span class="slider"><span class="percent-field"><input id="map-scale" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Scale"></span>
           </label>
+          <label id="map-scale-3d-field" class="field" hidden>
+            3D Scale
+            <span class="slider"><span class="percent-field"><input id="map-scale-3d" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="3D scale"></span>
+            <button id="map-scale-3d-reset" type="button" aria-label="Follow Scale" hidden><span class="material-symbols-rounded">restart_alt</span></button>
+            <input id="map-scale-3d-set" type="checkbox" hidden>
+          </label>
+          </div>
         </div>
         <div id="label-style-browser" class="label-section">
           <div class="section-heading">Label Styles<button id="new-label-style" type="button" aria-label="New label style"><span class="material-symbols-rounded">add</span></button></div>
@@ -4132,6 +4140,7 @@
       presentation = value;
       for (const button of presentationButtons) button.setAttribute('aria-pressed', String(button.dataset.presentation === value));
       document.getElementById('dimension-toggle').hidden = value !== 'both';
+      document.getElementById('map-scale-3d-field').hidden = value === '2d';
       showProjectionFields();
       draw();
     }
@@ -5590,20 +5599,51 @@
     const MAX_SCALE = 6;
     // Labels' Scale: how large labels, their pins and lists are drawn about
     // their own positions, leaving every size field as it is.
+    // Shown in 3D, labels take 3D Scale, which follows Scale until it's
+    // moved; map-scale-3d-set records that it was, and its reset button
+    // goes back to following.
     const mapScaleInput = document.getElementById('map-scale');
-    const mapScale = () => Math.min(300, Math.max(10, Number(mapScaleInput.value) || 100)) / 100;
-    {
-      const slider = mapScaleInput.closest('.slider').querySelector('input[type="range"]');
+    const mapScale3dInput = document.getElementById('map-scale-3d');
+    const mapScale3dSet = document.getElementById('map-scale-3d-set');
+    const mapScale3dReset = document.getElementById('map-scale-3d-reset');
+    const showing3d = () => presentation === '3d' || (presentation === 'both' && viewDimension === '3d');
+    const mapScale = () => {
+      const input = showing3d() && mapScale3dSet.checked ? mapScale3dInput : mapScaleInput;
+      return Math.min(300, Math.max(10, Number(input.value) || 100)) / 100;
+    };
+    const scaleSliders = [mapScaleInput, mapScale3dInput].map((input) => {
+      const slider = input.closest('.slider').querySelector('input[type="range"]');
       slider.addEventListener('input', () => {
-        mapScaleInput.value = slider.value;
-        draw();
+        input.value = slider.value;
+        input.dispatchEvent(new Event('input'));
+        if (input === mapScale3dInput) take3dScale();
       });
       slider.addEventListener('change', () => slider.blur());
-      mapScaleInput.addEventListener('input', () => {
-        slider.value = mapScaleInput.value;
+      input.addEventListener('input', (e) => {
+        slider.value = input.value;
+        if (e.isTrusted && input === mapScale3dInput) take3dScale();
+        if (input === mapScaleInput) follow3dScale();
         draw();
       });
+      return slider;
+    });
+    function take3dScale() {
+      mapScale3dSet.checked = true;
+      mapScale3dReset.hidden = false;
     }
+    function follow3dScale() {
+      mapScale3dReset.hidden = !mapScale3dSet.checked;
+      if (mapScale3dSet.checked) return;
+      mapScale3dInput.value = scaleSliders[1].value = mapScaleInput.value;
+    }
+    mapScale3dSet.addEventListener('change', follow3dScale);
+    mapScale3dReset.addEventListener('click', (e) => {
+      e.preventDefault();
+      mapScale3dReset.blur();
+      mapScale3dSet.checked = false;
+      follow3dScale();
+      draw();
+    });
     // The view scale the map counts as 100%, which Set Background moves.
     let zoomBase = 1;
     // The map point Set Background put at the phone frame's centre.
@@ -15622,7 +15662,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

@@ -4107,11 +4107,29 @@
         draw();
       });
     }
+    // Select keeps Landscape open, putting down whatever was chosen to stamp,
+    // so clicks there pick fill areas and shapes instead of planting.
+    function chooseSelectTool() {
+      if (backgroundTool !== 'tree') {
+        setBackgroundTool('select');
+        if (fillingArea) setFilling(false);
+        draw();
+        return;
+      }
+      treeShape = null;
+      brushChoice = null;
+      stampChoice = selectedArea ? new Set(selectedArea.shapes) : new Set();
+      showStampChoice();
+      showBrushChoice();
+      if (fillingArea) setFilling(false);
+      draw();
+    }
     function setBackgroundTool(name) {
       backgroundTool = name;
       sketchActive = null;
+      // In Landscape, picking without a stamp is its select tool.
       for (const button of backgroundToolButtons) {
-        button.setAttribute('aria-pressed', button.dataset.backgroundTool === name);
+        button.setAttribute('aria-pressed', button.dataset.backgroundTool === name || (name === 'tree' && button.dataset.backgroundTool === 'select'));
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
       document.getElementById('terrain-settings').hidden = name !== 'tree';
@@ -4140,6 +4158,11 @@
           const done = () => { if (backgroundTool === 'image') setBackgroundTool('select'); };
           placeImageInput.addEventListener('change', done, { once: true });
           placeImageInput.addEventListener('cancel', done, { once: true });
+          return;
+        }
+        if (button.dataset.backgroundTool === 'select') {
+          button.blur();
+          chooseSelectTool();
           return;
         }
         setBackgroundTool(button.dataset.backgroundTool);
@@ -11610,7 +11633,7 @@
       const command = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
       const nudge = NUDGE_DIRECTIONS[e.key];
       if (plain && e.key === '1') {
-        setBackgroundTool('select');
+        chooseSelectTool();
       } else if (plain && e.key === '2') {
         setBackgroundTool('shapes');
       } else if (command && e.key.toLowerCase() === 'c' && selectedShapes.length) {
@@ -11659,7 +11682,7 @@
       } else if (e.key === 'Escape') {
         e.preventDefault();
         // A first Esc clears the selection; with nothing selected it returns to the cursor tool.
-        if (!selectedShapes.length && !sketchSelected) setBackgroundTool('select');
+        if (!selectedShapes.length && !sketchSelected) chooseSelectTool();
         selectedShapes = [];
         sketchSelected = null;
       } else {

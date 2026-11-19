@@ -1301,8 +1301,8 @@
     .style-swatch canvas {
       flex: none;
     }
-    /* A soft shade where the preview is cut off. */
-    .style-swatch:not(.centered, .fits)::after {
+    /* A soft shade down the swatch's right edge, where it meets the card. */
+    .style-swatch::after {
       content: '';
       position: absolute;
       top: 0;
@@ -1328,7 +1328,7 @@
       width: min(calc(100% + 4px), var(--open-width));
       border-radius: 6px;
     }
-    .style-swatch:hover::after {
+    .style-swatch:not(.fits):hover::after {
       opacity: 0;
     }
     :is(#panel, #style-panel, #settings-panel) .style-card .style-menu > button:hover {

@@ -10995,18 +10995,19 @@
     // is drawn and pressed only while working on that plane.
     const onItsPlane = (shape) => !canvasTilt || !!shape.screenPlane === onPlane;
     const selectionOnItsPlane = () => !canvasTilt || selectedShapes.every((shape) => !!shape.screenPlane) === onPlane;
+    function insideShape(shape, p) {
+      const shown = shownBox(shape);
+      const q = unrotated(shape, p);
+      const dx = (q.x - shown.x - shown.w / 2) / (shown.w / 2);
+      const dy = (q.y - shown.y - shown.h / 2) / (shown.h / 2);
+      return shape.kind === 'circle' ? dx * dx + dy * dy <= 1
+        : shape.kind === 'square' || shape.kind === 'compass' || shape.kind === 'image' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
+        : insidePolygon(shapeCorners(shape), q);
+    }
     function shapeAt(p) {
       for (let i = shapes.length - 1; i >= 0; i--) {
         const shape = shapes[i];
-        if (!onShownLayer(shape) || !editableShape(shape)) continue;
-        const shown = shownBox(shape);
-        const q = unrotated(shape, p);
-        const dx = (q.x - shown.x - shown.w / 2) / (shown.w / 2);
-        const dy = (q.y - shown.y - shown.h / 2) / (shown.h / 2);
-        const inside = shape.kind === 'circle' ? dx * dx + dy * dy <= 1
-          : shape.kind === 'square' || shape.kind === 'compass' || shape.kind === 'image' ? Math.abs(dx) <= 1 && Math.abs(dy) <= 1
-          : insidePolygon(shapeCorners(shape), q);
-        if (inside) return shape;
+        if (onShownLayer(shape) && editableShape(shape) && insideShape(shape, p)) return shape;
       }
       return null;
     }
@@ -13828,18 +13829,27 @@
       c.setTransform(base);
     }
     // The part under a canvas point, looking down through roofs and walls.
+    // Whether a background point lies on an image part's own pixels.
+    function onPart(part, p, r = buildingsRect(), W = buildingsImage.naturalWidth, H = buildingsImage.naturalHeight) {
+      const u = ((p.x - r.x) * W) / r.w - part.x;
+      const v = ((p.y - r.y) * H) / r.h - part.y;
+      const x = Math.floor(u * part.k);
+      const y = Math.floor(v * part.k);
+      return x >= 0 && y >= 0 && x < part.aw && y < part.ah && part.alpha[y * part.aw + x] > 20;
+    }
+    // Area fills leave out water and the ground under buildings.
+    function treeBlocked(p) {
+      const base = baseShapeAt(p);
+      if (base !== null && terrain[base] === 'water') return true;
+      if (buildingsImage && buildingParts.some((part) => onPart(part, p))) return true;
+      return shapes.some((shape) => isBuildingShape(shape) && insideShape(shape, p));
+    }
     function buildingAt(s) {
       if (!buildingsImage) return null;
       const W = buildingsImage.naturalWidth;
       const H = buildingsImage.naturalHeight;
       const r = buildingsRect();
-      const hit = (part, p) => {
-        const u = ((p.x - r.x) * W) / r.w - part.x;
-        const v = ((p.y - r.y) * H) / r.h - part.y;
-        const x = Math.floor(u * part.k);
-        const y = Math.floor(v * part.k);
-        return x >= 0 && y >= 0 && x < part.aw && y < part.ah && part.alpha[y * part.aw + x] > 20;
-      };
+      const hit = (part, p) => onPart(part, p, r, W, H);
       const tilted = !!canvasTilt?.angle;
       const near = [...buildingParts].reverse();
       for (const t of tilted ? [1, 0.75, 0.5, 0.25, 0] : [0]) {
@@ -14363,7 +14373,8 @@
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
       if (!area.shapes.length) return [];
-      const key = JSON.stringify([area.points, area.density, area.shapes, area.seed]);
+      const blockers = [terrain, !!baseShapes, buildingParts.length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation])];
+      const key = JSON.stringify([area.points, area.density, area.shapes, area.seed, blockers]);
       if (area.stampsKey === key) return area.stamps;
       let state = area.seed;
       const random = () => {
@@ -14380,7 +14391,7 @@
       for (let y = Math.min(...ys); y <= Math.max(...ys); y += gap) {
         for (let x = Math.min(...xs); x <= Math.max(...xs); x += gap) {
           const at = { x: x + (random() - 0.5) * 0.8 * gap, y: y + (random() - 0.5) * 0.8 * gap, shape: area.shapes[Math.floor(random() * area.shapes.length)] };
-          if (areaProbe.isPointInPath(outline, at.x, at.y)) stamps.push(at);
+          if (areaProbe.isPointInPath(outline, at.x, at.y) && !treeBlocked(at)) stamps.push(at);
         }
       }
       area.stampsKey = key;

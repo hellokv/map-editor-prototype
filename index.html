@@ -15536,27 +15536,37 @@
       const upright = labels.filter((label) => !label.basePlane);
       const moved = [...upright, ...upright.flatMap((label) => label.pins), ...lists, ...shapes.filter((shape) => shape.screenPlane)];
       if (editingLabel && !editingLabel.label?.basePlane) moved.push(editingLabel);
-      // An image stands at its centre's spot.
-      const anchor = (item) => (item.kind === 'image' ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : { x: item.x, y: item.y });
-      const setAnchor = (item, p) => Object.assign(item, item.kind === 'image' ? { x: p.x - item.w / 2, y: p.y - item.h / 2 } : p);
+      // An image stands at its centre's spot. A label stands at the spot it
+      // keeps when zooming, its pointer's end or its pin's point, so it
+      // points at the same thing in 2D and 3D.
+      const standing = new Set(upright);
+      const anchor = (item) => {
+        if (item.kind === 'image') return { x: item.x + item.w / 2, y: item.y + item.h / 2 };
+        const a = standing.has(item) ? zoomAnchor(item) : item;
+        return { x: a.x, y: a.y };
+      };
+      const setAnchor = (item, p) => {
+        if (item.kind === 'image') return Object.assign(item, { x: p.x - item.w / 2, y: p.y - item.h / 2 });
+        const a = anchor(item);
+        return Object.assign(item, { x: item.x + p.x - a.x, y: item.y + p.y - a.y });
+      };
       const saved = moved.map((item) => {
-        const real = anchor(item);
-        const f = toScreen(real);
+        const before = { x: item.x, y: item.y };
+        const f = toScreen(anchor(item));
         const w = windowPoint(f.x, f.y);
-        const shown = toBackground(w.x, w.y);
-        setAnchor(item, shown);
-        return [item, real, shown];
+        setAnchor(item, toBackground(w.x, w.y));
+        return [item, before, { x: item.x, y: item.y }];
       });
       onPlane = true;
       try {
         return fn();
       } finally {
         onPlane = false;
-        for (const [item, real, shown] of saved) {
-          const now = anchor(item);
-          if (now.x === shown.x && now.y === shown.y) setAnchor(item, real);
+        // Untouched items go back exactly; moved ones are taken back off the tilt.
+        for (const [item, before, placed] of saved) {
+          if (item.x === placed.x && item.y === placed.y) Object.assign(item, before);
           else {
-            const s = toScreen(now);
+            const s = toScreen(anchor(item));
             const flat = untilt(s.x, s.y);
             setAnchor(item, toBackground(flat.x, flat.y));
           }

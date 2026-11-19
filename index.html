@@ -14343,6 +14343,8 @@
       for (const button of treeSetButtons) button.setAttribute('aria-pressed', String(button.dataset.set === treeSet));
       for (const id of ['tree-depth-field', 'tree-trunk-field', 'tree-size-group']) document.getElementById(id).hidden = brushes;
       document.querySelector('#tree-shapes .tree-shape-grid').hidden = brushes;
+      // Washes lie in the paper, so they cast no shadow to set.
+      document.getElementById('tree-shadows-field').closest('.field-group').hidden = brushes;
       document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes;
       document.getElementById('landscape-fill-hint').textContent = brushes
         ? 'Click around the area; click the first point, or press Enter, to paint it. Escape cancels. Click an area later to change it.'

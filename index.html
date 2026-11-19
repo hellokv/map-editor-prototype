@@ -2339,10 +2339,6 @@
         <button type="button" data-label-tool="list" aria-label="List" aria-pressed="false">
           <span class="material-symbols-rounded">list_alt_add</span>
         </button>
-        <button type="button" data-label-tool="image" aria-label="Image" aria-pressed="false">
-          <span class="material-symbols-rounded">add_photo_alternate</span>
-        </button>
-        <input id="place-image" type="file" accept="image/*" hidden>
       </div>
       <div id="background-tools" hidden>
         <button type="button" data-background-tool="select" data-shortcut="S" aria-label="Select" aria-pressed="true">
@@ -2357,6 +2353,10 @@
         <button type="button" data-background-tool="compass" aria-label="Compass" aria-pressed="false">
           <span class="material-symbols-rounded">explore</span>
         </button>
+        <button type="button" data-background-tool="image" aria-label="Image" aria-pressed="false">
+          <span class="material-symbols-rounded">add_photo_alternate</span>
+        </button>
+        <input id="place-image" type="file" accept="image/*" hidden>
 
       </div>
       <div id="path-tools">
@@ -2523,6 +2523,15 @@
             <span class="slider"><span class="percent-field"><input id="label-icon-offset" type="number" step="1"></span><input type="range" min="-200" max="200" step="1" value="0" aria-label="Icon offset"></span>
           </label>
         </div>
+        <div class="label-section">
+          <div class="field">
+            Plane
+            <div id="label-plane-toggle" class="toggle-group">
+              <button type="button" data-plane="screen" aria-pressed="true">Screen</button>
+              <button type="button" data-plane="base" aria-pressed="false">Base</button>
+            </div>
+          </div>
+        </div>
         <div class="label-section label-columns">
           <div class="label-single">
             <div class="section-label">Pointer</div>
@@ -2666,84 +2675,6 @@
                 <input id="list-y" type="number" step="1">
               </label>
             </div>
-          </div>
-        </div>
-      </div>
-      <div id="image-properties" hidden>
-        <div class="label-section">
-          <div class="field-group">
-            <label class="field">
-              Place
-              <select id="image-place"></select>
-            </label>
-            <button id="image-change" class="new-style" type="button">Change Image<span class="material-symbols-rounded">image</span></button>
-          </div>
-          <div class="field">
-            Plane
-            <div id="image-plane-toggle" class="toggle-group">
-              <button type="button" data-plane="base" aria-pressed="true">Base</button>
-              <button type="button" data-plane="screen" aria-pressed="false">Screen</button>
-            </div>
-            <select id="image-plane" hidden>
-              <option value="base">Base</option>
-              <option value="screen">Screen</option>
-            </select>
-          </div>
-          <div class="field">
-            Layers
-            <div class="toggle-group">
-              <button type="button" data-layer="sky" aria-pressed="false">Sky</button>
-              <button type="button" data-layer="canopy" aria-pressed="false">Canopy</button>
-              <button type="button" data-layer="ground" aria-pressed="false">Ground</button>
-            </div>
-          </div>
-        </div>
-        <div class="label-section">
-          <div class="field-group">
-            <div class="field">
-              Corners
-              <select id="image-corners">
-                <option value="square">Square</option>
-                <option value="round">Rounded</option>
-                <option value="chamfer">Chamfered</option>
-              </select>
-            </div>
-            <label class="field">
-              Corner Radius
-              <input id="image-radius" type="number" min="0" step="1">
-            </label>
-          </div>
-          <label class="field">
-            Scale Factor
-            <span class="slider"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
-          </label>
-        </div>
-        <div class="label-section">
-          <div class="field-group">
-            <div class="field-pair">
-              <label class="field">
-                X
-                <input id="image-x" type="number" step="1">
-              </label>
-              <label class="field">
-                Y
-                <input id="image-y" type="number" step="1">
-              </label>
-            </div>
-            <div class="field-pair">
-              <label class="field">
-                Width
-                <input id="image-w" type="number" min="1" step="1">
-              </label>
-              <label class="field">
-                Height
-                <input id="image-h" type="number" min="1" step="1">
-              </label>
-            </div>
-            <label class="field">
-              Rotation
-              <input id="image-rotation" type="number" step="1">
-            </label>
           </div>
         </div>
       </div>
@@ -3639,6 +3570,76 @@
           </div>
         </div>
       </div>
+      <div id="image-properties" hidden>
+        <div class="label-section">
+          <div class="field-group">
+            <label class="field">
+              Place
+              <select id="image-place"></select>
+            </label>
+            <button id="image-change" class="new-style" type="button">Change Image<span class="material-symbols-rounded">image</span></button>
+          </div>
+          <div class="field">
+            Plane
+            <div id="image-plane-toggle" class="toggle-group">
+              <button type="button" data-plane="base" aria-pressed="true">Base</button>
+              <button type="button" data-plane="screen" aria-pressed="false">Screen</button>
+            </div>
+            <select id="image-plane" hidden>
+              <option value="base">Base</option>
+              <option value="screen">Screen</option>
+            </select>
+          </div>
+        </div>
+        <div class="label-section">
+          <div class="field-group">
+            <div class="field">
+              Corners
+              <select id="image-corners">
+                <option value="square">Square</option>
+                <option value="round">Rounded</option>
+                <option value="chamfer">Chamfered</option>
+              </select>
+            </div>
+            <label class="field">
+              Corner Radius
+              <input id="image-radius" type="number" min="0" step="1">
+            </label>
+          </div>
+          <label class="field">
+            Scale Factor
+            <span class="slider"><span class="percent-field"><input id="image-zoom-scale" type="number" min="0" step="1"></span><input type="range" min="0" max="100" step="1" aria-label="Scale factor"></span>
+          </label>
+        </div>
+        <div class="label-section">
+          <div class="field-group">
+            <div class="field-pair">
+              <label class="field">
+                X
+                <input id="image-x" type="number" step="1">
+              </label>
+              <label class="field">
+                Y
+                <input id="image-y" type="number" step="1">
+              </label>
+            </div>
+            <div class="field-pair">
+              <label class="field">
+                Width
+                <input id="image-w" type="number" min="1" step="1">
+              </label>
+              <label class="field">
+                Height
+                <input id="image-h" type="number" min="1" step="1">
+              </label>
+            </div>
+            <label class="field">
+              Rotation
+              <input id="image-rotation" type="number" step="1">
+            </label>
+          </div>
+        </div>
+      </div>
       <div id="shape-properties" class="label-section" hidden>
         <label id="shape-color-field" class="field">
           <span id="shape-color-name">Fill Color</span>
@@ -3884,17 +3885,6 @@
     });
     for (const button of labelToolButtons) {
       button.addEventListener('click', () => {
-        // The Image tool shows as in use while its file dialog is open, then
-        // hands back to the cursor whether a file was picked or not.
-        if (button.dataset.labelTool === 'image') {
-          setLabelTool('image');
-          button.blur();
-          placeImageInput.click();
-          const done = () => { if (labelTool === 'image') setLabelTool('select'); };
-          placeImageInput.addEventListener('change', done, { once: true });
-          placeImageInput.addEventListener('cancel', done, { once: true });
-          return;
-        }
         setLabelTool(button.dataset.labelTool);
         button.blur();
         // Adding a label starts from the main panel, with nothing selected.
@@ -4110,6 +4100,17 @@
     }
     for (const button of backgroundToolButtons) {
       button.addEventListener('click', () => {
+        // The Image tool shows as in use while its file dialog is open, then
+        // hands back to the cursor whether a file was picked or not.
+        if (button.dataset.backgroundTool === 'image') {
+          setBackgroundTool('image');
+          button.blur();
+          placeImageInput.click();
+          const done = () => { if (backgroundTool === 'image') setBackgroundTool('select'); };
+          placeImageInput.addEventListener('change', done, { once: true });
+          placeImageInput.addEventListener('cancel', done, { once: true });
+          return;
+        }
         setBackgroundTool(button.dataset.backgroundTool);
         if (fillingArea && button.dataset.backgroundTool !== 'tree') setFilling(false);
         draw();
@@ -7747,7 +7748,7 @@
         }
         if (!layerOverride) captureLabelBackdrop();
         if (canvasTilt) labelPlaneWanted = true;
-        else drawLabelLayer();
+        drawLabelLayer();
         if (!labelTools.hidden) drawShapeSelection();
         if (!backgroundTools.hidden) {
           drawSketch();
@@ -8995,7 +8996,7 @@
       field.addEventListener('input', () => { slider.value = field.value; });
       return slider;
     }
-    // A placed image's fields, in label mode, where images are selected.
+    // A placed image's fields, in place of the other shapes' while one is selected alone.
     const imageProperties = document.getElementById('image-properties');
     const soleImage = () => (selectedShapes.length === 1 && selectedShapes[0].kind === 'image' ? selectedShapes[0] : null);
     const imagePlace = document.getElementById('image-place');
@@ -9012,6 +9013,19 @@
       imagePlace.blur();
       draw();
     });
+    // A label stands upright on the screen, or with Base lies on the map and tilts and turns with it.
+    for (const button of document.querySelectorAll('#label-plane-toggle button')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        if (!selectedLabels.length) return;
+        recordUndo();
+        for (const label of selectedLabels) {
+          if (button.dataset.plane === 'base') label.basePlane = true;
+          else delete label.basePlane;
+        }
+        draw();
+      });
+    }
     const imagePlane = document.getElementById('image-plane');
     for (const button of document.querySelectorAll('#image-plane-toggle button')) {
       button.addEventListener('click', () => {
@@ -9049,7 +9063,7 @@
     });
     function showImagePanel() {
       const image = soleImage();
-      imageProperties.hidden = labelTools.hidden || !image;
+      imageProperties.hidden = backgroundTools.hidden || !image;
       if (imageProperties.hidden) return;
       const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
       show(imagePlace, image.place ?? '');
@@ -9064,9 +9078,6 @@
       for (const key of ['x', 'y', 'w', 'h']) show(imageInputs[key], Math.round(image[key]));
       const degrees = Math.round(((image.rotation ?? 0) * 180) / Math.PI);
       show(imageInputs.rotation, ((degrees % 360) + 360) % 360);
-      for (const button of imageProperties.querySelectorAll('[data-layer]')) {
-        button.setAttribute('aria-pressed', !image.layers || !!image.layers[button.dataset.layer]);
-      }
     }
 
     // The selected list's fields. Each applies as it changes and is one undo step.
@@ -9341,7 +9352,7 @@
           button.setAttribute('aria-pressed', items.every((item) => !item.layers || item.layers[button.dataset.layer]));
         }
       }
-      shapeProperties.hidden = !selectedShapes.length;
+      shapeProperties.hidden = !selectedShapes.length || !!soleImage();
       if (selectedShapes.length) {
         const first = selectedShapes[0];
         const colored = selectedShapes.find((shape) => shape.color);
@@ -9395,13 +9406,16 @@
       }
       const anyLabels = selectedLabels.length > 0;
       labelProperties.hidden = !anyLabels;
-      labelStylesSection.hidden = anyLabels || !!selectedList || !!soleImage();
+      labelStylesSection.hidden = anyLabels || !!selectedList;
       showListPanel();
       showImagePanel();
       // A style form opened for a selection goes once nothing is selected.
       if (stylePanelOpen() && styleFormForSelection && !anyLabels && !selectedList) closeStyleForm();
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
+        for (const button of document.querySelectorAll('#label-plane-toggle button')) {
+          button.setAttribute('aria-pressed', String(selectedLabels.every((label) => !!label.basePlane === (button.dataset.plane === 'base'))));
+        }
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
         }
@@ -9835,8 +9849,9 @@
       if (editingLabel) onScreenPlane(placeLabelInputFlat);
     }
     function placeLabelInputFlat() {
-      labelInput.style.left = `${editingLabel.x * view.scale + view.x}px`;
-      labelInput.style.top = `${editingLabel.y * view.scale + view.y}px`;
+      const at = canvasTilt && editingLabel.label?.basePlane ? windowPoint(editingLabel.x * view.scale + view.x, editingLabel.y * view.scale + view.y) : { x: editingLabel.x * view.scale + view.x, y: editingLabel.y * view.scale + view.y };
+      labelInput.style.left = `${at.x}px`;
+      labelInput.style.top = `${at.y}px`;
       if (!placeSuggestions.hidden) {
         const typed = typingLabel();
         const box = zoomedRect(typed, labelBox(typed));
@@ -9926,7 +9941,8 @@
     canvas.addEventListener('dblclick', (e) => {
       if (labelTools.hidden || labelTool !== 'select') return;
       const q = screenPlanePoint(e);
-      const label = onScreenPlane(() => labelAt(q));
+      const s = canvasPoint(e);
+      const label = onScreenPlane(() => labelAt(q)) ?? (canvasTilt ? labelAt(toBackground(s.x, s.y)) : null);
       if (label) startLabel(label, label);
     });
     labelInput.addEventListener('blur', () => finishLabel(true));
@@ -10197,7 +10213,7 @@
     // Labels lower on screen stand in front of those above them.
     const byScreenY = (list) => list.map((label) => [label, toScreen(label).y]).sort((a, b) => a[1] - b[1]).map(([label]) => label);
     function labelAt(p) {
-      const inFront = byScreenY(labels.filter(labelShown)).reverse();
+      const inFront = byScreenY(labels.filter(labelShown).filter(onItsLabelPlane)).reverse();
       for (const label of inFront) {
         const box = labelArea(label);
         if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return label;
@@ -10422,9 +10438,10 @@
       // which leaves text sitting high in most fonts.
       ctx.textBaseline = 'alphabetic';
       ctx.lineJoin = 'round';
-      drawLists();
-      const typing = editingLabel && typingLabel();
-      const shown = byScreenY(labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0));
+      // Lists stand on the screen plane.
+      if (!canvasTilt || onPlane) drawLists();
+      const typing = editingLabel && onItsLabelPlane(editingLabel.label) ? typingLabel() : null;
+      const shown = byScreenY(labels.filter((label) => label !== editingLabel?.label && labelAlpha(label) > 0 && onItsLabelPlane(label)));
       for (const label of typing ? [...shown, typing] : shown) {
         ctx.globalAlpha = label === typing ? 1 : labelAlpha(label);
         const style = styleOf(label);
@@ -10462,9 +10479,9 @@
       ctx.strokeStyle = SELECTED_COLOR;
       ctx.lineWidth = SELECTED_LINE / view.scale;
       const pad = 4 / view.scale;
-      const boxed = selectedLabels.map((label) => (label === editingLabel?.label ? typing : label));
+      const boxed = selectedLabels.filter(onItsLabelPlane).map((label) => (label === editingLabel?.label ? typing : label));
       if (typing && !editingLabel.label) boxed.push(typing);
-      if (selectedList && !labelTools.hidden) {
+      if (selectedList && !labelTools.hidden && (!canvasTilt || onPlane)) {
         const box = listArea(selectedList);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
       }
@@ -10474,7 +10491,7 @@
       }
       ctx.restore();
       // In split screen, the text box follows the label in the active panel.
-      if (!panelViews || layerOverride === SPLIT_PANELS[activePanel]) placeLabelInput();
+      if ((!panelViews || layerOverride === SPLIT_PANELS[activePanel]) && (!canvasTilt || onPlane)) placeLabelInput();
     }
 
     // Pins grow with zoom by view.scale raised to PIN_SCALING: at 0 they'd
@@ -10491,7 +10508,7 @@
       return { x: pin.x - 8 * unit, y: pin.y - 20 * unit, w: 16 * unit, h: 20 * unit };
     }
     function pinAt(p) {
-      for (const label of [...labels].reverse().filter(labelShown)) {
+      for (const label of [...labels].reverse().filter(labelShown).filter(onItsLabelPlane)) {
         for (const pin of [...label.pins].reverse()) {
           const box = pinBox(pin);
           if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return pin;
@@ -10504,7 +10521,7 @@
       selectedPins = selectedPins.filter((pin) => selectedLabels.some((label) => label.pins.includes(pin)));
       ctx.save();
       const unit = pinUnit();
-      for (const label of labels.filter((label) => labelAlpha(label) > 0)) {
+      for (const label of labels.filter((label) => labelAlpha(label) > 0 && onItsLabelPlane(label))) {
         const style = styleOf(label);
         ctx.fillStyle = style.background ?? style.color;
         ctx.globalAlpha = (selectedLabels.includes(label) ? 1 : 0.35) * labelAlpha(label);
@@ -10770,7 +10787,7 @@
       ctx.restore();
     }
     const placeImageInput = document.getElementById('place-image');
-    // The Image tool, in label mode, asks for a file, and the image lands in
+    // The Image tool asks for a file, and the image lands in
     // the middle of the view, a third of its width across, then is selected.
     placeImageInput.addEventListener('change', () => {
       const file = placeImageInput.files[0];
@@ -10989,11 +11006,11 @@
       rotateCursor = `url(${icon.toDataURL()}) 12 12, grab`;
       updateCursor();
     });
-    // Images are placed and edited in label mode, other shapes in background mode.
-    const editableShape = (shape) => (shape.kind === 'image') === !labelTools.hidden && onItsPlane(shape);
+    const editableShape = (shape) => !backgroundTools.hidden && onItsPlane(shape);
     // Over a tilted map, a Screen image stands upright with the labels, and
     // is drawn and pressed only while working on that plane.
     const onItsPlane = (shape) => !canvasTilt || !!shape.screenPlane === onPlane;
+    const onItsLabelPlane = (label) => !canvasTilt || !label?.basePlane === onPlane;
     const selectionOnItsPlane = () => !canvasTilt || selectedShapes.every((shape) => !!shape.screenPlane) === onPlane;
     function insideShape(shape, p) {
       const shown = shownBox(shape);
@@ -11057,19 +11074,17 @@
       const p = toBackground(s.x, s.y);
       if (frameEditing) setFrameEditing(false);
       const base = { shapes: true, startX: e.clientX, startY: e.clientY, before: snapshot() };
-      // In label mode only images are pressed here, whatever background tool is set.
-      const inLabels = !labelTools.hidden;
-      if (!inLabels && backgroundTool === 'segments') {
+      if (backgroundTool === 'segments') {
         drawSketchPoint(sketchTarget(s));
         return;
       }
-      if (!inLabels && backgroundTool === 'tree' && fillingArea) {
+      if (backgroundTool === 'tree' && fillingArea) {
         const first = fillDraft[0];
         if (fillDraft.length >= 3 && first && Math.hypot((first.x - p.x) * view.scale, (first.y - p.y) * view.scale) < 10) fillArea();
         else fillDraft.push({ x: p.x, y: p.y });
         return;
       }
-      if (!inLabels && backgroundTool === 'tree') {
+      if (backgroundTool === 'tree') {
         // A click in a filled area selects it and a click off one lets it go; otherwise,
         // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
         // With no stamp, a click selects a base shape; Shift adds or drops one.
@@ -11086,7 +11101,7 @@
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
       }
-      if (!inLabels && backgroundTool === 'compass') {
+      if (backgroundTool === 'compass') {
         // A click places one compass there and hands back to the cursor tool.
         recordUndo();
         const compass = { layers: newLayers(), kind: 'compass', x: p.x - COMPASS_SIZE / 2, y: p.y - COMPASS_SIZE / 2, w: COMPASS_SIZE, h: COMPASS_SIZE, color: '#000000', backColor: COMPASS_BACK_COLOR, textColor: '#000000', directions: 'north', font: 'National Park', weight: 600, size: 24 };
@@ -11096,7 +11111,7 @@
         setBackgroundTool('select');
         return;
       }
-      if (!inLabels && backgroundTool === 'shapes') {
+      if (backgroundTool === 'shapes') {
         const drawing = { kind: shapeKind, x: p.x, y: p.y, w: 0, h: 0, color: colorOf(shapeColorInput), layers: newLayers() };
         if (shapeKind === 'polygon') drawing.sides = POLYGON_SIDES;
         drag = { ...base, anchor: p, drawing };
@@ -11114,10 +11129,10 @@
         return;
       }
       // Only the nodes on show can be picked out of their figure.
-      const sketchPoint = inLabels ? null : sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
-      const sketchSegment = inLabels || sketchPoint ? null : sketchSegmentAt(s);
+      const sketchPoint = sketchPointAt(s, SKETCH_HIT_DISTANCE, null, shownSketchPoints());
+      const sketchSegment = sketchPoint ? null : sketchSegmentAt(s);
       const pressed = sketchPoint || sketchSegment ? null : shapeAt(p);
-      const sketchArea = inLabels || sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]).filter((area) => onShownLayer([...area.points][0])), s.x, s.y);
+      const sketchArea = sketchPoint || sketchSegment || pressed ? null : areaAt(computeAreas([sketch]).filter((area) => onShownLayer([...area.points][0])), s.x, s.y);
       if (sketchPoint || sketchSegment || sketchArea) {
         selectedShapes = [];
         if (sketchPoint) {
@@ -11144,7 +11159,7 @@
         if (!member) selectedShapes = [pressed];
         // A click on one of several without moving narrows to it.
         drag = { ...base, moving: [...selectedShapes], last: p, narrowTo: member ? pressed : null };
-      } else if (!inLabels && !shiftHeld && frameSelectable() && p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h) {
+      } else if (!shiftHeld && frameSelectable() && p.x >= 0 && p.y >= 0 && p.x <= board.w && p.y <= board.h) {
         selectedShapes = [];
         setFrameEditing(true);
         canvas.setPointerCapture(e.pointerId);
@@ -12287,7 +12302,14 @@
         return;
       }
       if (!backgroundTools.hidden) {
-        shapePointerDown(e, s);
+        // A Screen image, or its handles, is pressed where it shows.
+        const raw = windowLocal(e.clientX, e.clientY);
+        const q = screenPlanePoint(e);
+        if (canvasTilt && backgroundTool === 'select' && onScreenPlane(() => handleAt(raw) || shapeAt(q))) {
+          const before = snapshot();
+          onScreenPlane(() => shapePointerDown(e, raw));
+          if (drag) Object.assign(drag, { before, onPlane: true });
+        } else shapePointerDown(e, s);
         draw();
         updateCursor();
         return;
@@ -12295,32 +12317,10 @@
       if (!labelTools.hidden && labelTool === 'select') {
         const p = toBackground(s.x, s.y);
         const q = screenPlanePoint(e);
-        const [pinHit, labelHit, listHit] = onScreenPlane(() => [pinAt(q), labelAt(q), listAt(q)]);
-        // A Screen image, or its handles, under the pointer.
-        const raw = windowLocal(e.clientX, e.clientY);
-        if (canvasTilt && onScreenPlane(() => handleAt(raw) || (!pinHit && !labelHit && !listHit && shapeAt(q)))) {
-          selectedLabels = [];
-          selectedPins = [];
-          selectedList = null;
-          const before = snapshot();
-          onScreenPlane(() => shapePointerDown(e, raw));
-          if (drag) Object.assign(drag, { before, onPlane: true });
-          draw();
-          updateCursor();
-          return;
-        }
-        // A selected image's handles, then any image not under a label, pin
-        // or list, are handled as shapes are.
-        if (handleAt(s) || (!pinHit && !labelHit && !listHit && shapeAt(p))) {
-          selectedLabels = [];
-          selectedPins = [];
-          selectedList = null;
-          shapePointerDown(e, s);
-          draw();
-          updateCursor();
-          return;
-        }
-        selectedShapes = [];
+        const [planePin, planeLabel, listHit] = onScreenPlane(() => [pinAt(q), labelAt(q), listAt(q)]);
+        // Base labels lie on the map under the upright ones.
+        const pinHit = planePin ?? (canvasTilt ? pinAt(p) : null);
+        const labelHit = planeLabel ?? (canvasTilt ? labelAt(p) : null);
         const pressedPin = pinHit;
         if (pressedPin) {
           selectedList = null;
@@ -14880,6 +14880,7 @@
       labelPlaneWanted = false;
       paintTiltedOn(canvasTilt, paint);
       if (labelPlaneWanted) paintLabelPlane();
+      if (editingLabel?.label?.basePlane) placeLabelInput();
     }
     // Paints onto the tilt's canvas, with the view shifted by its margin.
     function paintTiltedOn(tilt, paint) {
@@ -14906,17 +14907,15 @@
     let labelPlaneWanted = false;
     function drawLabelLayer() {
       for (const shape of shapes) {
-        if (shape.kind !== 'image' || !shape.screenPlane) continue;
+        if (shape.kind !== 'image' || !shape.screenPlane || !onItsPlane(shape)) continue;
         ctx.save();
         ctx.globalAlpha = labelAlpha(shape);
         if (ctx.globalAlpha) drawImageShape(shape);
         ctx.restore();
       }
       if (backgroundTools.hidden || showLabelsToggle.checked) drawLabels();
-      if (!labelTools.hidden) {
-        drawPins();
-        drawShapeSelection();
-      }
+      if (!labelTools.hidden) drawPins();
+      if (onPlane) drawShapeSelection();
     }
     function clearLabelPlane() {
       const dpr = window.devicePixelRatio || 1;
@@ -14956,8 +14955,9 @@
     // Anything fn moves there is taken back to the spot under where it ends up.
     function onScreenPlane(fn) {
       if (!canvasTilt || onPlane) return fn();
-      const moved = [...labels, ...labels.flatMap((label) => label.pins), ...lists, ...shapes.filter((shape) => shape.screenPlane)];
-      if (editingLabel) moved.push(editingLabel);
+      const upright = labels.filter((label) => !label.basePlane);
+      const moved = [...upright, ...upright.flatMap((label) => label.pins), ...lists, ...shapes.filter((shape) => shape.screenPlane)];
+      if (editingLabel && !editingLabel.label?.basePlane) moved.push(editingLabel);
       // An image stands at its centre's spot.
       const anchor = (item) => (item.kind === 'image' ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : { x: item.x, y: item.y });
       const setAnchor = (item, p) => Object.assign(item, item.kind === 'image' ? { x: p.x - item.w / 2, y: p.y - item.h / 2 } : p);

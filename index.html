@@ -14752,6 +14752,16 @@
           c.stroke();
         }
       }
+      if (edgeNode) {
+        const { area, x, y } = edgeNode;
+        c.strokeStyle = area.wash ? washLook(area).colors[0] : treeColorInput.value;
+        c.beginPath();
+        c.arc(x, y, 4 / view.scale, 0, Math.PI * 2);
+        c.fillStyle = '#fff';
+        c.fill();
+        c.lineWidth = 1.5 / view.scale;
+        c.stroke();
+      }
       c.restore();
     }
     const areaPop = document.getElementById('area-pop');
@@ -14801,15 +14811,57 @@
       if (e.key === 'Escape') deselectArea();
       if (e.key === 'Delete' || e.key === 'Backspace') deleteArea();
     });
+    // Hovering near a fill area's side shows a node at its middle; dragging
+    // that node adds a corner there. The selected area is tried first.
+    let edgeNode = null;
+    function edgeNodeAt(s) {
+      const areas = [selectedArea, ...[...fillAreas].reverse().filter((area) => area !== selectedArea)].filter(Boolean);
+      for (const area of areas) {
+        const pts = area.points;
+        for (let i = 0; i < pts.length; i++) {
+          const a = toScreen(pts[i]);
+          const b = toScreen(pts[(i + 1) % pts.length]);
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const t = Math.min(1, Math.max(0, ((s.x - a.x) * dx + (s.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+          if (Math.hypot(a.x + dx * t - s.x, a.y + dy * t - s.y) > 6) continue;
+          const p = pts[i];
+          const n = pts[(i + 1) % pts.length];
+          return { area, index: i + 1, x: (p.x + n.x) / 2, y: (p.y + n.y) / 2 };
+        }
+      }
+      return null;
+    }
+    canvas.addEventListener('pointermove', (e) => {
+      const live = backgroundTool === 'tree' && !backgroundTools.hidden && !fillingArea && !areaDrag && fillAreas.length;
+      const node = live ? edgeNodeAt(canvasPoint(e)) : null;
+      if (node?.area === edgeNode?.area && node?.index === edgeNode?.index) return;
+      edgeNode = node;
+      draw();
+    });
     // Dragging a corner handle of the selected area reshapes it.
     let areaDrag = null;
     canvas.addEventListener('pointerdown', (e) => {
-      if (!selectedArea || backgroundTool !== 'tree' || backgroundTools.hidden || fillingArea || e.button !== 0 || spaceHeld) return;
+      if (backgroundTool !== 'tree' || backgroundTools.hidden || fillingArea || e.button !== 0 || spaceHeld) return;
       const s = canvasPoint(e);
-      const point = selectedArea.points.find((q) => {
+      let point = selectedArea?.points.find((q) => {
         const at = toScreen(q);
         return Math.hypot(at.x - s.x, at.y - s.y) < 8;
       });
+      if (!point && edgeNode) {
+        const at = toScreen(edgeNode);
+        if (Math.hypot(at.x - s.x, at.y - s.y) < 8) {
+          point = { x: edgeNode.x, y: edgeNode.y };
+          edgeNode.area.points.splice(edgeNode.index, 0, point);
+          if (selectedArea !== edgeNode.area) {
+            selectedArea = edgeNode.area;
+            if (selectedArea.wash) showWashFields(selectedArea);
+            stampChoice = new Set(selectedArea.shapes);
+            showStampChoice();
+          }
+          edgeNode = null;
+        }
+      }
       if (!point) return;
       e.stopImmediatePropagation();
       e.preventDefault();

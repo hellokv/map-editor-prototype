@@ -14737,7 +14737,7 @@
       c.save();
       for (const area of fillAreas) {
         const selected = area === selectedArea;
-        c.strokeStyle = treeColorInput.value;
+        c.strokeStyle = area.wash ? washLook(area).colors[0] : treeColorInput.value;
         c.lineWidth = (selected ? 2 : 1.5) / view.scale;
         c.setLineDash([6 / view.scale, 4 / view.scale]);
         c.stroke(areaPath(area));
@@ -14837,12 +14837,13 @@
       c.save();
       c.beginPath();
       fillDraft.forEach(({ x, y }, i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-      c.strokeStyle = treeColorInput.value;
+      const color = treeSet === 'brushes' ? washFrom.value : treeColorInput.value;
+      c.strokeStyle = color;
       c.lineWidth = 2 / view.scale;
       c.setLineDash([6 / view.scale, 4 / view.scale]);
       c.stroke();
       c.setLineDash([]);
-      c.fillStyle = treeColorInput.value;
+      c.fillStyle = color;
       for (const { x, y } of fillDraft) {
         c.beginPath();
         c.arc(x, y, 4 / view.scale, 0, Math.PI * 2);

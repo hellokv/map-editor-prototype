@@ -3255,8 +3255,7 @@
             <button type="button" data-set="brushes" aria-pressed="false">Brushes</button>
           </div>
         </div>
-        <div class="tree-shape-grid" data-set="shapes"></div>
-        <div class="tree-shape-grid" data-set="brushes" hidden></div>
+        <div class="tree-shape-grid"></div>
         <label id="tree-depth-field" class="field">
           Depth
           <span class="slider"><span class="percent-field"><input id="tree-depth" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Tree depth"></span>
@@ -3266,8 +3265,8 @@
           Density
           <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
         </label>
-        <p id="landscape-fill-hint" class="panel-note" hidden>Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.</p>
-        <div class="field-group">
+        <p id="landscape-fill-hint" class="panel-note" hidden></p>
+        <div id="tree-size-group" class="field-group">
           <label class="field">
             Size
             <span class="slider"><span class="percent-field"><input id="tree-size" type="number" min="10" max="300" step="1" value="100"></span><input type="range" min="10" max="300" step="1" value="100" aria-label="Tree size"></span>
@@ -7711,10 +7710,9 @@
         if (terrainEffect) ctx.drawImage(terrainEffect, x, y, w, h);
         ctx.restore();
       }
-      const allOfThem = allStamps();
-      const stamps = allOfThem.filter((t) => !isBrush(t));
-      const brushStamps = allOfThem.filter(isBrush);
-      if (brushStamps.length && !noBackground) drawBrushes(ctx, brushStamps);
+      const stamps = allStamps();
+      const washes = fillAreas.filter((area) => area.wash);
+      if (washes.length && !noBackground) drawWashes(ctx, washes);
       if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
       if ((buildingsImage || shapes.some(isBuildingShape)) && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
@@ -14048,56 +14046,95 @@
       };
     }
     const TREE_SHAPES = treeShapes();
-    // Brushes are watercolour washes lying flat on the map, unlike trees,
-    // which stand up off it. Each is blots [x, y, half width, half height]
-    // in map units about its point.
-    function treeBrushes() {
-      const brush = (small) => {
-        const blots = small.map((blot) => blot.map((n) => n * 1.5));
-        const reach = Math.max(...blots.map(([x, y, rx, ry]) => Math.max(Math.abs(x) + rx, Math.abs(y) + ry)));
-        return { flat: true, blots, w: reach * 2, h: reach * 2 };
-      };
-      return {
-        blot: brush([[0, 0, 20, 18]]),
-        wash: brush([[0, 0, 28, 14]]),
-        pair: brush([[-10, 2, 15, 13], [11, -3, 13, 12]]),
-        cluster: brush([[-12, 4, 13, 11], [10, 5, 12, 11], [0, -9, 13, 12]]),
-        drift: brush([[-16, 4, 11, 8], [0, 0, 13, 9], [16, -4, 11, 8]]),
-        dabs: brush([[-14, -6, 8, 7], [2, 8, 9, 8], [13, -8, 7, 6], [-3, -12, 6, 5]]),
+    // The same seed always gives the same run of numbers in 0..1.
+    function seededRandom(seed) {
+      let state = seed;
+      return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let r = Math.imul(state ^ (state >>> 15), 1 | state);
+        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
       };
     }
-    const BRUSHES = treeBrushes();
-    const STAMPS = { ...TREE_SHAPES, ...BRUSHES };
-    const isBrush = (t) => !!BRUSHES[t.shape];
-    // A blot is an oval ringed with bumps of mixed sizes, so its edge
-    // scallops like a cloud and no two blots match.
-    function cloudBlot(x, y, rx, ry, random) {
-      const p = new Path2D();
-      p.ellipse(x, y, rx * 0.8, ry * 0.8, 0, 0, Math.PI * 2);
-      const bump = Math.min(rx, ry) * 0.42;
-      const n = Math.max(6, Math.round((Math.PI * (rx + ry)) / (bump * 2)));
-      for (let i = 0; i < n; i++) {
-        const a = ((i + random(i) * 0.3) / n) * Math.PI * 2;
-        const r = bump * (1 + random(i + 50) * 0.35);
-        const cx = x + Math.cos(a) * (rx - bump * 0.9);
-        const cy = y + Math.sin(a) * (ry - bump * 0.9);
-        p.moveTo(cx + r, cy);
-        p.arc(cx, cy, r, 0, Math.PI * 2);
+    // A brush area is one wash of paint over its outline: corners rounded
+    // off, the sides wandering in and out in long sweeps and short wobbles,
+    // and the edge ringed with bumps of mixed sizes, so it reads as brushed.
+    // Edge (0–100) sets how far it strays, as a share of the area's size.
+    function washShape(area) {
+      const key = JSON.stringify([area.points, area.edge, area.seed]);
+      if (area.washKey === key) return area.washCache;
+      const random = seededRandom(area.seed);
+      const e = (area.edge ?? 50) / 100;
+      let ring = area.points.map(({ x, y }) => ({ x, y }));
+      const xs0 = ring.map((q) => q.x);
+      const ys0 = ring.map((q) => q.y);
+      const size = Math.sqrt((Math.max(...xs0) - Math.min(...xs0)) * (Math.max(...ys0) - Math.min(...ys0))) || 1;
+      for (let pass = 0; pass < 3; pass++) {
+        ring = ring.flatMap((q, i) => {
+          const n = ring[(i + 1) % ring.length];
+          return [{ x: q.x * 0.75 + n.x * 0.25, y: q.y * 0.75 + n.y * 0.25 }, { x: q.x * 0.25 + n.x * 0.75, y: q.y * 0.25 + n.y * 0.75 }];
+        });
       }
-      return p;
+      const phase = [0, 1, 2].map(() => random() * Math.PI * 2);
+      const wander = (d) => size * e * (0.07 * Math.sin(d / (size * 0.25) + phase[0]) + 0.035 * Math.sin(d / (size * 0.09) + phase[1]) + 0.015 * Math.sin(d / (size * 0.035) + phase[2]));
+      const turning = ring.reduce((sum, q, i) => {
+        const n = ring[(i + 1) % ring.length];
+        return sum + q.x * n.y - n.x * q.y;
+      }, 0);
+      const side = Math.sign(turning) || 1;
+      const step = Math.max(1, size / 150);
+      const edge = [];
+      let along = 0;
+      ring.forEach((q, i) => {
+        const n = ring[(i + 1) % ring.length];
+        const len = Math.hypot(n.x - q.x, n.y - q.y);
+        if (!len) return;
+        // Inward, whichever way round the outline was clicked.
+        const inX = (-(n.y - q.y) / len) * side;
+        const inY = ((n.x - q.x) / len) * side;
+        const steps = Math.max(1, Math.ceil(len / step));
+        for (let k = 0; k < steps; k++) {
+          const f = k / steps;
+          const w = wander(along + f * len);
+          edge.push({ x: q.x + (n.x - q.x) * f + inX * w, y: q.y + (n.y - q.y) * f + inY * w, inX, inY, at: along + f * len });
+        }
+        along += len;
+      });
+      const body = new Path2D();
+      edge.forEach((q, i) => (i ? body.lineTo(q.x, q.y) : body.moveTo(q.x, q.y)));
+      body.closePath();
+      // Bumps are filled apart from the body: wound the other way, they'd cut holes in it.
+      const bumps = new Path2D();
+      const bump = size * (0.012 + 0.03 * e);
+      let next = 0;
+      let reach = 0;
+      for (const q of edge) {
+        if (q.at < next) continue;
+        const r = bump * (0.5 + random());
+        reach = Math.max(reach, r);
+        const cx = q.x + q.inX * r * 0.6;
+        const cy = q.y + q.inY * r * 0.6;
+        bumps.moveTo(cx + r, cy);
+        bumps.arc(cx, cy, r, 0, Math.PI * 2);
+        next = q.at + r * (0.9 + 0.8 * random());
+      }
+      const xs = edge.map((q) => q.x);
+      const ys = edge.map((q) => q.y);
+      const box = { x0: Math.min(...xs) - reach, y0: Math.min(...ys) - reach, x1: Math.max(...xs) + reach, y1: Math.max(...ys) + reach };
+      area.washKey = key;
+      return (area.washCache = { body, bumps, box });
     }
-    // Every brush paints solid into one layer, so overlapping blots merge
-    // into one shape and other shades sit over it like layered paint. The
-    // layer then gets faint streaks and a darker rim where the paint pools,
-    // and is laid on the map whole, so overlaps never darken.
-    function drawBrushes(c, stamps, colorOf = treeLeaf) {
+    // Washes paint solid into one layer, so where they overlap, the later
+    // sits on the earlier like another coat. The layer then gets faint
+    // streaks and a darker rim where the paint pools, and goes on the map
+    // whole, so nothing darkens where washes overlap.
+    function drawWashes(c, areas) {
       const base = c.getTransform();
-      const placed = stamps.map((t) => ({ t, brush: BRUSHES[t.shape], at: base.translate(t.x, t.y).rotate(treeRandom(t, 4) * 180).scale(treeScale(t)) }));
       let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-      for (const { brush, at } of placed) {
-        const r = brush.w * 0.65;
-        for (const [dx, dy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
-          const q = at.transformPoint(new DOMPoint(dx, dy));
+      for (const area of areas) {
+        const { box } = washShape(area);
+        for (const [x, y] of [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]) {
+          const q = base.transformPoint(new DOMPoint(x, y));
           [x0, y0, x1, y1] = [Math.min(x0, q.x), Math.min(y0, q.y), Math.max(x1, q.x), Math.max(y1, q.y)];
         }
       }
@@ -14106,33 +14143,36 @@
       x1 = Math.min(c.canvas.width, Math.ceil(x1));
       y1 = Math.min(c.canvas.height, Math.ceil(y1));
       if (x1 <= x0 || y1 <= y0) return;
-      // Kept to 8 million pixels, so brushes spread over a big map stay quick.
+      // Kept to 8 million pixels, so washes over a big map stay quick.
       const res = Math.min(1, Math.sqrt(8e6 / ((x1 - x0) * (y1 - y0))));
       const width = Math.ceil((x1 - x0) * res);
       const height = Math.ceil((y1 - y0) * res);
       const layer = new OffscreenCanvas(width, height);
       const l = layer.getContext('2d');
-      const toLayer = new DOMMatrix().scale(res).translate(-x0, -y0);
-      for (const { t, brush, at } of placed) {
-        l.setTransform(toLayer.multiply(at));
-        l.fillStyle = colorOf(t);
-        brush.blots.forEach(([x, y, rx, ry], i) => l.fill(cloudBlot(x, y, rx, ry, (salt) => treeRandom(t, 10 + i * 97 + salt))));
+      l.setTransform(new DOMMatrix().scale(res).translate(-x0, -y0).multiply(base));
+      const unit = Math.hypot(base.a, base.b) * res;
+      for (const area of areas) {
+        const { body, bumps } = washShape(area);
+        l.fillStyle = varyColor(treeColorInput.value, { x: area.seed % 997, y: area.seed % 991 }, treeColorVariation);
+        l.fill(body);
+        l.fill(bumps);
       }
       l.globalCompositeOperation = 'source-atop';
       l.lineCap = 'round';
-      const unit = Math.hypot(base.a, base.b) * res;
-      l.filter = `blur(${Math.max(1, 2 * unit)}px)`;
-      for (const { t, brush, at } of placed) {
-        l.setTransform(toLayer.multiply(at));
-        const half = brush.w / 2;
-        for (let i = 0; i < 6; i++) {
-          const y = (treeRandom(t, 200 + i) * half);
-          l.strokeStyle = i % 2 ? '#fff' : '#000';
-          l.globalAlpha = 0.03 + 0.03 * Math.abs(treeRandom(t, 300 + i));
-          l.lineWidth = half * (0.2 + 0.2 * Math.abs(treeRandom(t, 400 + i)));
+      l.filter = `blur(${Math.max(1, 3 * unit)}px)`;
+      for (const area of areas) {
+        const { box } = washShape(area);
+        const random = seededRandom(area.seed + 1);
+        const reach = box.x1 - box.x0 + box.y1 - box.y0;
+        const tall = box.y1 - box.y0;
+        for (let d = 0; d < reach; d += 25 + 60 * random()) {
+          l.strokeStyle = random() < 0.5 ? '#fff' : '#000';
+          l.globalAlpha = 0.015 + 0.035 * random();
+          l.lineWidth = 15 + 35 * random();
+          const lean = tall * (0.8 + 0.4 * random());
           l.beginPath();
-          l.moveTo(-half, y - half * 0.5);
-          l.lineTo(half, y + half * 0.5);
+          l.moveTo(box.x0 + d, box.y0);
+          l.lineTo(box.x0 + d - lean, box.y1);
           l.stroke();
         }
       }
@@ -14143,7 +14183,7 @@
       const r = rim.getContext('2d');
       r.drawImage(layer, 0, 0);
       r.globalCompositeOperation = 'destination-out';
-      r.filter = `blur(${Math.max(1, 3 * unit)}px)`;
+      r.filter = `blur(${Math.max(1, 4 * unit)}px)`;
       r.drawImage(layer, 0, 0);
       l.setTransform(1, 0, 0, 1, 0, 0);
       l.globalCompositeOperation = 'multiply';
@@ -14202,7 +14242,7 @@
     }
     // Stamps from shapes since dropped take the nearest ones still offered.
     const OLD_STAMPS = { cypress: 'pine', palm: 'round', bush: 'round', duo: 'wide', oak: 'round' };
-    const shapeOf = (t) => STAMPS[t.shape] ?? TREE_SHAPES.pine;
+    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
     // Null when no stamp is chosen: clicks then only select fill areas.
     let treeShape = null;
     let stampChoice = new Set();
@@ -14212,8 +14252,8 @@
     }
     // The panel's pickers, each button showing its tree.
     const stampButtons = [];
-    for (const [name, shape] of Object.entries(STAMPS)) {
-      const grid = document.querySelector(`#tree-shapes .tree-shape-grid[data-set="${shape.flat ? 'brushes' : 'shapes'}"]`);
+    for (const [name, shape] of Object.entries(TREE_SHAPES)) {
+      const grid = document.querySelector('#tree-shapes .tree-shape-grid');
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.tree = name;
@@ -14229,12 +14269,6 @@
         const k = (size - 8) / Math.max(...Object.values(TREE_SHAPES).flatMap((s) => [s.w, s.h]));
         c.setTransform(1, 0, 0, 1, 0, 0);
         c.clearRect(0, 0, preview.width, preview.height);
-        if (shape.flat) {
-          const fit = (size - 6) / Math.max(...Object.values(BRUSHES).map((b) => b.w * 1.2));
-          c.setTransform(fit * dpr, 0, 0, fit * dpr, (size / 2) * dpr, (size / 2) * dpr);
-          drawBrushes(c, [{ x: 0, y: 0, shape: name }], () => treeColorInput.value);
-          return;
-        }
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
           c.fillStyle = partColor(color);
@@ -14257,7 +14291,7 @@
           draw();
         }
         showStampChoice();
-        if (selectedArea) {
+        if (selectedArea && !selectedArea.wash) {
           selectedArea.shapes = [...stampChoice];
           draw();
         }
@@ -14265,15 +14299,29 @@
       stampButtons.push(button);
       grid.append(button);
     }
+    // Shapes plants standing trees; Brushes paints areas flat on the map,
+    // so the stamp settings don't apply to it.
+    let treeSet = 'shapes';
     const treeSetButtons = document.querySelectorAll('#tree-set-toggle button');
+    function showTreeSet() {
+      const brushes = treeSet === 'brushes';
+      for (const button of treeSetButtons) button.setAttribute('aria-pressed', String(button.dataset.set === treeSet));
+      for (const id of ['tree-depth-field', 'tree-trunk-field', 'tree-size-group']) document.getElementById(id).hidden = brushes;
+      document.querySelector('#tree-shapes .tree-shape-grid').hidden = brushes;
+      document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes;
+      document.getElementById('landscape-fill-hint').textContent = brushes
+        ? 'Click around the area; click the first point, or press Enter, to paint it. Escape cancels. Click an area later to change it.'
+        : 'Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.';
+    }
     for (const button of treeSetButtons) {
       button.addEventListener('click', () => {
-        const set = button.dataset.set;
-        for (const other of treeSetButtons) other.setAttribute('aria-pressed', String(other === button));
-        for (const grid of document.querySelectorAll('#tree-shapes .tree-shape-grid')) grid.hidden = grid.dataset.set !== set;
-        // Depth and trunks belong to standing trees only.
-        document.getElementById('tree-depth-field').hidden = set === 'brushes';
-        document.getElementById('tree-trunk-field').hidden = set === 'brushes';
+        treeSet = button.dataset.set;
+        if (treeSet === 'brushes') {
+          treeShape = null;
+          stampChoice = new Set();
+          showStampChoice();
+        }
+        showTreeSet();
       });
     }
     // Where a canvas point shows in the window, under the turn and tilt.
@@ -14483,8 +14531,8 @@
         showStampChoice();
       }
       fillButton.setAttribute('aria-pressed', String(on));
-      document.getElementById('landscape-fill-spacing-field').hidden = !on;
       document.getElementById('landscape-fill-hint').hidden = !on;
+      showTreeSet();
       draw();
     }
     fillButton.addEventListener('click', () => {
@@ -14497,7 +14545,8 @@
       if (e.key === 'Enter' && fillDraft.length >= 3) fillArea();
     });
     function fillArea() {
-      const area = { points: fillDraft, shapes: [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
+      const area = { points: fillDraft, shapes: treeSet === 'brushes' ? [] : [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
+      if (treeSet === 'brushes') Object.assign(area, { wash: true, edge: 50 });
       fillAreas = [...fillAreas, area];
       selectedArea = area;
       setFilling(false);
@@ -14516,13 +14565,7 @@
       const blockers = [terrain, !!baseShapes, buildingParts.length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation])];
       const key = JSON.stringify([area.points, area.density, area.shapes, area.seed, blockers]);
       if (area.stampsKey === key) return area.stamps;
-      let state = area.seed;
-      const random = () => {
-        state = (state + 0x6d2b79f5) | 0;
-        let r = Math.imul(state ^ (state >>> 15), 1 | state);
-        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-      };
+      const random = seededRandom(area.seed);
       const outline = areaPath(area);
       const xs = area.points.map((q) => q.x);
       const ys = area.points.map((q) => q.y);
@@ -14567,8 +14610,13 @@
     function showAreaPop() {
       areaPop.hidden = !selectedArea || backgroundTools.hidden || backgroundTool !== 'tree';
       if (areaPop.hidden) return;
-      areaPopSlider.value = selectedArea.density;
-      areaPop.querySelector('output').value = selectedArea.density;
+      // A brush area has no stamps to space out; its slider sets how rough its edge is.
+      const setting = selectedArea.wash ? 'edge' : 'density';
+      areaPop.querySelector('span').textContent = selectedArea.wash ? 'Edge' : 'Density';
+      areaPopSlider.setAttribute('aria-label', selectedArea.wash ? 'Area edge' : 'Area density');
+      areaPopSlider.min = selectedArea.wash ? 0 : 1;
+      areaPopSlider.value = selectedArea[setting];
+      areaPop.querySelector('output').value = selectedArea[setting];
       const top = selectedArea.points.reduce((a, b) => (toScreen(b).y < toScreen(a).y ? b : a));
       const s = toScreen(top);
       const at = windowPoint(s.x, s.y);
@@ -14577,7 +14625,7 @@
     }
     areaPopSlider.addEventListener('input', () => {
       if (!selectedArea) return;
-      selectedArea.density = Number(areaPopSlider.value);
+      selectedArea[selectedArea.wash ? 'edge' : 'density'] = Number(areaPopSlider.value);
       draw();
     });
     function deselectArea() {
@@ -14912,7 +14960,6 @@
     function treeAt(s) {
       return [...trees].reverse().find((t) => {
         const foot = toScreen(t);
-        if (isBrush(t)) return Math.hypot(s.x - foot.x, s.y - foot.y) <= (shapeOf(t).w / 2) * treeScale(t) * view.scale;
         const q = uprightAt(foot, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);
         const k = treeScale(t);
@@ -15253,7 +15300,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
-      file.fillAreas = fillAreas.map(({ points, shapes, density, seed }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed }));
+      file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }
@@ -15326,7 +15373,7 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? []);
-      const known = (name) => !!STAMPS[OLD_STAMPS[name] ?? name];
+      const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));
       selectedArea = null;

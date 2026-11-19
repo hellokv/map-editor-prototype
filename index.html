@@ -1190,6 +1190,12 @@
     #background-tabs .toggle-group button {
       flex: 1;
     }
+    #tree-set-toggle {
+      flex: 1;
+    }
+    #tree-set-toggle button {
+      flex: 1;
+    }
     :is(#panel, #style-panel, #settings-panel) .toggle-group button {
       padding: 3px 8px;
     }
@@ -1388,7 +1394,7 @@
     #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #terrain-settings) {
       display: none !important;
     }
-    .tree-shape-grid {
+    .tree-shape-grid:not([hidden]) {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
@@ -3243,8 +3249,15 @@
       </div>
       <div id="tree-shapes" class="label-section tab-landscape" hidden>
         <div class="section-heading">Trees</div>
-        <div class="tree-shape-grid"></div>
-        <label class="field">
+        <div class="field">
+          <div id="tree-set-toggle" class="toggle-group">
+            <button type="button" data-set="shapes" aria-pressed="true">Shapes</button>
+            <button type="button" data-set="brushes" aria-pressed="false">Brushes</button>
+          </div>
+        </div>
+        <div class="tree-shape-grid" data-set="shapes"></div>
+        <div class="tree-shape-grid" data-set="brushes" hidden></div>
+        <label id="tree-depth-field" class="field">
           Depth
           <span class="slider"><span class="percent-field"><input id="tree-depth" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Tree depth"></span>
         </label>
@@ -3270,7 +3283,7 @@
               Leaves
               <span class="color-field"><input id="tree-color" type="color" value="#3f6b35"></span>
             </label>
-            <label class="field">
+            <label id="tree-trunk-field" class="field">
               Trunks
               <span class="color-field"><input id="tree-trunk-color" type="color" value="#4a3a2e"></span>
             </label>
@@ -7698,7 +7711,10 @@
         if (terrainEffect) ctx.drawImage(terrainEffect, x, y, w, h);
         ctx.restore();
       }
-      const stamps = allStamps();
+      const allOfThem = allStamps();
+      const stamps = allOfThem.filter((t) => !isBrush(t));
+      const brushStamps = allOfThem.filter(isBrush);
+      if (brushStamps.length && !noBackground) drawBrushes(ctx, brushStamps);
       if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
       if ((buildingsImage || shapes.some(isBuildingShape)) && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
@@ -14032,6 +14048,73 @@
       };
     }
     const TREE_SHAPES = treeShapes();
+    // Brushes are watercolour washes lying flat on the map, unlike trees,
+    // which stand up off it. Each is blots [x, y, half width, half height]
+    // in map units about its point.
+    function treeBrushes() {
+      const brush = (blots) => {
+        const reach = Math.max(...blots.map(([x, y, rx, ry]) => Math.max(Math.abs(x) + rx, Math.abs(y) + ry)));
+        return { flat: true, blots, w: reach * 2, h: reach * 2 };
+      };
+      return {
+        blot: brush([[0, 0, 20, 18]]),
+        wash: brush([[0, 0, 28, 14]]),
+        pair: brush([[-10, 2, 15, 13], [11, -3, 13, 12]]),
+        cluster: brush([[-12, 4, 13, 11], [10, 5, 12, 11], [0, -9, 13, 12]]),
+        drift: brush([[-16, 4, 11, 8], [0, 0, 13, 9], [16, -4, 11, 8]]),
+        dabs: brush([[-14, -6, 8, 7], [2, 8, 9, 8], [13, -8, 7, 6], [-3, -12, 6, 5]]),
+      };
+    }
+    const BRUSHES = treeBrushes();
+    const STAMPS = { ...TREE_SHAPES, ...BRUSHES };
+    const isBrush = (t) => !!BRUSHES[t.shape];
+    // A blot's edge wanders by up to a fifth of its size, from the stamp's
+    // own randomness, so no two washes match.
+    function wobblyBlot(x, y, rx, ry, random) {
+      const phase = [1, 2, 3].map((i) => random(i) * Math.PI);
+      const n = 28;
+      const points = Array.from({ length: n }, (_, i) => {
+        const a = (i / n) * Math.PI * 2;
+        const k = 1 + 0.1 * Math.sin(3 * a + phase[0]) + 0.06 * Math.sin(5 * a + phase[1]) + 0.04 * Math.sin(9 * a + phase[2]);
+        return [x + Math.cos(a) * rx * k, y + Math.sin(a) * ry * k];
+      });
+      const p = new Path2D();
+      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      p.moveTo(...mid(points[n - 1], points[0]));
+      points.forEach((q, i) => p.quadraticCurveTo(...q, ...mid(q, points[(i + 1) % n])));
+      p.closePath();
+      return p;
+    }
+    // Thin washes laid over each other, each a little off the last, pool
+    // into a darker rim where their edges part, as watercolour does.
+    function paintBrush(c, brush, t, color) {
+      const rim = tint(color, -0.3);
+      brush.blots.forEach(([x, y, rx, ry], i) => {
+        for (let layer = 0; layer < 3; layer++) {
+          const p = wobblyBlot(x, y, rx, ry, (salt) => treeRandom(t, 10 + i * 7 + layer * 3 + salt));
+          c.globalAlpha = 0.26;
+          c.fillStyle = color;
+          c.fill(p);
+          c.globalAlpha = 0.2;
+          c.strokeStyle = rim;
+          c.lineWidth = Math.min(rx, ry) * 0.08;
+          c.stroke(p);
+        }
+      });
+      c.globalAlpha = 1;
+    }
+    // Brushes are drawn in map units, so they lie on the map under any tilt.
+    function drawBrushes(c, stamps) {
+      for (const t of stamps) {
+        c.save();
+        c.translate(t.x, t.y);
+        c.rotate(treeRandom(t, 4) * Math.PI);
+        const scale = treeScale(t);
+        c.scale(scale, scale);
+        paintBrush(c, BRUSHES[t.shape], t, treeLeaf(t));
+        c.restore();
+      }
+    }
     const treeSizeInput = document.getElementById('tree-size');
     const treeSizeVariation = document.getElementById('tree-size-variation');
     const treeColorInput = document.getElementById('tree-color');
@@ -14079,7 +14162,7 @@
     }
     // Stamps from shapes since dropped take the nearest ones still offered.
     const OLD_STAMPS = { cypress: 'pine', palm: 'round', bush: 'round', duo: 'wide', oak: 'round' };
-    const shapeOf = (t) => TREE_SHAPES[t.shape] ?? TREE_SHAPES.pine;
+    const shapeOf = (t) => STAMPS[t.shape] ?? TREE_SHAPES.pine;
     // Null when no stamp is chosen: clicks then only select fill areas.
     let treeShape = null;
     let stampChoice = new Set();
@@ -14089,8 +14172,8 @@
     }
     // The panel's pickers, each button showing its tree.
     const stampButtons = [];
-    for (const [name, shape] of Object.entries(TREE_SHAPES)) {
-      const grid = document.querySelector('#tree-shapes .tree-shape-grid');
+    for (const [name, shape] of Object.entries(STAMPS)) {
+      const grid = document.querySelector(`#tree-shapes .tree-shape-grid[data-set="${shape.flat ? 'brushes' : 'shapes'}"]`);
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.tree = name;
@@ -14106,6 +14189,12 @@
         const k = (size - 8) / Math.max(...Object.values(TREE_SHAPES).flatMap((s) => [s.w, s.h]));
         c.setTransform(1, 0, 0, 1, 0, 0);
         c.clearRect(0, 0, preview.width, preview.height);
+        if (shape.flat) {
+          const fit = (size - 6) / Math.max(...Object.values(BRUSHES).map((b) => b.w));
+          c.setTransform(fit * dpr, 0, 0, fit * dpr, (size / 2) * dpr, (size / 2) * dpr);
+          paintBrush(c, shape, { x: 0.37, y: 0.71 }, treeColorInput.value);
+          return;
+        }
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);
         for (const [part, color] of shape.parts) {
           c.fillStyle = partColor(color);
@@ -14135,6 +14224,17 @@
       });
       stampButtons.push(button);
       grid.append(button);
+    }
+    const treeSetButtons = document.querySelectorAll('#tree-set-toggle button');
+    for (const button of treeSetButtons) {
+      button.addEventListener('click', () => {
+        const set = button.dataset.set;
+        for (const other of treeSetButtons) other.setAttribute('aria-pressed', String(other === button));
+        for (const grid of document.querySelectorAll('#tree-shapes .tree-shape-grid')) grid.hidden = grid.dataset.set !== set;
+        // Depth and trunks belong to standing trees only.
+        document.getElementById('tree-depth-field').hidden = set === 'brushes';
+        document.getElementById('tree-trunk-field').hidden = set === 'brushes';
+      });
     }
     // Where a canvas point shows in the window, under the turn and tilt.
     function tiltForward(p) {
@@ -14772,6 +14872,7 @@
     function treeAt(s) {
       return [...trees].reverse().find((t) => {
         const foot = toScreen(t);
+        if (isBrush(t)) return Math.hypot(s.x - foot.x, s.y - foot.y) <= (shapeOf(t).w / 2) * treeScale(t) * view.scale;
         const q = uprightAt(foot, view.scale).inverse().transformPoint(new DOMPoint(s.x, s.y));
         const { w, h } = shapeOf(t);
         const k = treeScale(t);
@@ -15185,7 +15286,7 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? []);
-      const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
+      const known = (name) => !!STAMPS[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));
       selectedArea = null;

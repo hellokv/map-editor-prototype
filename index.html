@@ -49,6 +49,11 @@
     #background-panel:has(#map-light-on:not(:checked)) :is(#map-light-color-field, #map-light-spread-field) {
       display: none;
     }
+    #preview-veil {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
     #label-plane {
       position: absolute;
       left: 0;
@@ -2191,6 +2196,7 @@
     </div>
     <canvas id="canvas"></canvas>
     <canvas id="tilt-view" hidden></canvas>
+    <div id="preview-veil" hidden></div>
     <canvas id="label-plane" hidden></canvas>
     <div id="area-pop" hidden>
       <span>Density</span>
@@ -4228,15 +4234,19 @@
       // takes in nothing past it and lets the sharp map show through.
       const blur = Math.max(0, Number(previewBlurInput.value) || 0) * dpr;
       const m = Math.ceil(blur * 3);
-      const w = canvas.width;
-      const h = canvas.height;
+      // Over a tilted map the frame is on the label plane, and the map under
+      // it is blurred by the veil between them.
+      const source = ctx.canvas;
+      if (source === labelPlane) showPreviewVeil(frame, radius, blur / dpr);
+      const w = source.width;
+      const h = source.height;
       blurCopy.width = w + 2 * m;
       blurCopy.height = h + 2 * m;
       const copy = blurCopy.getContext('2d');
-      copy.drawImage(canvas, m, m);
+      copy.drawImage(source, m, m);
       if (m) {
-        copy.drawImage(canvas, 0, 0, w, 1, m, 0, w, m);
-        copy.drawImage(canvas, 0, h - 1, w, 1, m, m + h, w, m);
+        copy.drawImage(source, 0, 0, w, 1, m, 0, w, m);
+        copy.drawImage(source, 0, h - 1, w, 1, m, m + h, w, m);
         copy.drawImage(blurCopy, m, 0, 1, h + 2 * m, 0, 0, m, h + 2 * m);
         copy.drawImage(blurCopy, m + w - 1, 0, 1, h + 2 * m, m + w, 0, m, h + 2 * m);
       }
@@ -4245,8 +4255,9 @@
       ctx.rect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
       ctx.clip('evenodd');
-      ctx.filter = `blur(${blur}px)`;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      ctx.filter = `blur(${blur}px)`;
       ctx.drawImage(blurCopy, -m, -m);
       ctx.restore();
       ctx.beginPath();
@@ -4443,6 +4454,22 @@
         x: board.w / 2 - (area.x + area.w / 2 - canvas.clientWidth / 2) / zoomBase,
         y: board.h / 2 - (area.y + area.h / 2 - canvas.clientHeight / 2) / zoomBase,
       };
+    }
+    function drawPreviewFrame() {
+      if (showFrameToggle.checked) drawPhoneFrame();
+      else drawDeviceFrame();
+    }
+    const previewVeil = document.getElementById('preview-veil');
+    // Blurs what lies under it outside the phone's rounded screen.
+    function showPreviewVeil(frame, radius, blur) {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      const { x, y, w, h } = frame;
+      const r = Math.min(radius, w / 2, h / 2);
+      const phone = `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
+      previewVeil.hidden = false;
+      previewVeil.style.backdropFilter = `blur(${blur}px)`;
+      previewVeil.style.clipPath = `path(evenodd, 'M0 0H${W}V${H}H0Z ${phone}')`;
     }
     function drawPhoneFrame() {
       const { x, y, w, h, k, view: area } = phoneScreen();
@@ -7727,11 +7754,9 @@
           drawShapeSelection();
           if (frameEditing) drawFrameHandles();
         }
-        // Preview shows its device, or the frame the default position is set in.
-        if (!modePanels.preview.hidden) {
-          if (showFrameToggle.checked) drawPhoneFrame();
-          else drawDeviceFrame();
-        }
+        // Preview shows its device, or the frame the default position is set
+        // in; over a tilted map, on the label plane.
+        if (!modePanels.preview.hidden && !canvasTilt) drawPreviewFrame();
         drawMarquee();
         return;
       }
@@ -14833,6 +14858,7 @@
     // shifted by the margin it reaches past the window.
     function paintTilted(paint) {
       labelPlane.hidden = !canvasTilt;
+      previewVeil.hidden = true;
       if (!canvasTilt) {
         paint();
         return;
@@ -14907,6 +14933,7 @@
         ctx.scale(view.scale, view.scale);
         placeMap(ctx);
         onScreenPlane(drawLabelLayer);
+        if (!clip && !modePanels.preview.hidden) drawPreviewFrame();
       } finally {
         ctx.restore();
         ctx = screenCtx;

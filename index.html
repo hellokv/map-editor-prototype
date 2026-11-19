@@ -14179,8 +14179,7 @@
     };
     // A wash as paint soaking into paper: the shape is blurred as if it bled,
     // then cut back where noise says the paper drank less, which frays the
-    // edge. Pigment pools darker just inside the edge, lies unevenly within,
-    // and a faint bloom spreads past it. Painted once per area and colour,
+    // edge. Pigment lies unevenly within, and a faint bloom spreads past it. Painted once per area and colour,
     // in map units, so panning and zooming reuse it.
     // Each wash keeps its own two colours and direction. The panel's fields
     // show the selected wash's, and are what a new wash starts from.
@@ -14254,9 +14253,8 @@
         if (wet < 0.01) continue;
         const t = wet + (fray[i] - 0.5) * rough;
         const paint = smoothstep(0.42, 0.5, t);
-        const rim = paint * (1 - smoothstep(0.5, 0.75, t));
         const bloom = smoothstep(0.05, 0.5, wet) * 0.22 * fray[i];
-        const depth = 0.5 + 0.35 * pigment[i] + 0.1 * grain[i] + 0.3 * rim;
+        const depth = 0.55 + 0.35 * pigment[i] + 0.1 * grain[i];
         const alpha = Math.min(1, Math.max(bloom, paint * depth));
         const x = i % w;
         const y = (i - x) / w;
@@ -14264,7 +14262,7 @@
         const mix = smoothstep(0.2, 0.8, run);
         // Where the colours meet, pigment piles up a little, as in a real bleed.
         const meet = Math.exp(-(((mix - 0.5) / 0.18) ** 2));
-        const shade = 1 - 0.25 * rim - 0.12 * (pigment[i] - 0.5) - 0.08 * meet;
+        const shade = 1 - 0.12 * (pigment[i] - 0.5) - 0.08 * meet;
         px[i * 4] = (from[0] + (to[0] - from[0]) * mix) * shade;
         px[i * 4 + 1] = (from[1] + (to[1] - from[1]) * mix) * shade;
         px[i * 4 + 2] = (from[2] + (to[2] - from[2]) * mix) * shade;

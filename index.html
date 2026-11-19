@@ -11116,10 +11116,10 @@
         return;
       }
       if (backgroundTool === 'tree') {
-        // A click in a filled area selects it and a click off one lets it go; otherwise,
-        // with a stamp chosen, a click on a tree takes it away and anywhere else plants one.
-        // With no stamp, a click selects a base shape; Shift adds or drops one.
-        const area = fillAreaAt(p);
+        // With a stamp chosen, a click on a tree takes it away and anywhere else
+        // plants one, fill areas included. With none, a click in a fill area
+        // selects it, and anywhere else selects a base shape; Shift adds or drops one.
+        const area = treeShape ? null : fillAreaAt(p);
         const hadSelection = selectedArea || selectedTerrain.length;
         selectedArea = area;
         if (area?.wash) {
@@ -14833,7 +14833,7 @@
       return null;
     }
     canvas.addEventListener('pointermove', (e) => {
-      const live = backgroundTool === 'tree' && !backgroundTools.hidden && !fillingArea && !areaDrag && fillAreas.length;
+      const live = backgroundTool === 'tree' && !backgroundTools.hidden && !fillingArea && !areaDrag && !treeShape && fillAreas.length;
       const node = live ? edgeNodeAt(canvasPoint(e)) : null;
       if (node?.area === edgeNode?.area && node?.index === edgeNode?.index) return;
       edgeNode = node;

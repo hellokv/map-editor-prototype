@@ -4134,7 +4134,14 @@
       for (const button of presentationButtons) button.setAttribute('aria-pressed', String(button.dataset.presentation === value));
       document.getElementById('presentation-note').hidden = !!value;
       document.getElementById('dimension-toggle').hidden = value !== 'both';
+      showProjectionFields();
       draw();
+    }
+    // Projection and tilt only mean something for a map meant to be seen in 3D.
+    function showProjectionFields() {
+      const deep = presentation === '3d' || presentation === 'both';
+      document.getElementById('map-projection').closest('.field').hidden = !deep;
+      document.getElementById('map-tilt-field').hidden = !deep || buildingsOnlyInput.checked;
     }
     // A map shown both ways gets a 2D/3D switch by the zoom. 2D shows it
     // top down with buildings flat, whatever its tilt, turn and lift.
@@ -13252,10 +13259,11 @@
       draw();
     });
     buildingsOnlyInput.addEventListener('change', () => {
-      document.getElementById('map-tilt-field').hidden = buildingsOnly();
+      showProjectionFields();
       showBuildingRotation();
       draw();
     });
+    showProjectionFields();
     for (const button of projectionButtons) {
       button.addEventListener('click', () => {
         button.blur();

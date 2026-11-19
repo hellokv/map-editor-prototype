@@ -3276,7 +3276,23 @@
             <span class="slider"><span class="percent-field"><input id="tree-size-variation" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Size variation"></span>
           </label>
         </div>
-        <div class="field-group">
+        <div id="wash-color-group" class="field-group" hidden>
+          <div class="field-pair">
+            <label class="field">
+              From
+              <span class="color-field"><input id="wash-color-from" type="color" value="#3f7f3a"></span>
+            </label>
+            <label class="field">
+              To
+              <span class="color-field"><input id="wash-color-to" type="color" value="#b5cf6a"></span>
+            </label>
+          </div>
+          <label class="field">
+            Direction
+            <span class="slider"><input id="wash-angle" type="number" min="0" max="360" step="1" value="135"><input type="range" min="0" max="360" step="1" value="135" aria-label="Gradient direction"></span>
+          </label>
+        </div>
+        <div id="tree-color-group" class="field-group">
           <div class="field-pair">
             <label class="field">
               Leaves
@@ -11105,6 +11121,7 @@
         const area = fillAreaAt(p);
         const hadSelection = selectedArea || selectedTerrain.length;
         selectedArea = area;
+        if (area?.wash) showWashFields(area);
         const shape = area || treeShape ? null : baseShapeAt(p);
         if (!e.shiftKey || area || treeShape) selectedTerrain = shape === null ? [] : [shape];
         else if (shape !== null) selectedTerrain = selectedTerrain.includes(shape) ? selectedTerrain.filter((i) => i !== shape) : [...selectedTerrain, shape];
@@ -14165,12 +14182,37 @@
     // edge. Pigment pools darker just inside the edge, lies unevenly within,
     // and a faint bloom spreads past it. Painted once per area and colour,
     // in map units, so panning and zooming reuse it.
+    // Each wash keeps its own two colours and direction. The panel's fields
+    // show the selected wash's, and are what a new wash starts from.
+    const washFrom = document.getElementById('wash-color-from');
+    const washTo = document.getElementById('wash-color-to');
+    const washAngle = document.getElementById('wash-angle');
+    const washAngleSlider = linkSlider(washAngle);
+    const washFields = () => ({ colors: [washFrom.value, washTo.value], angle: Number(washAngle.value) || 0 });
+    const washLook = (area) => ({ colors: area.colors ?? washFields().colors, angle: area.angle ?? washFields().angle });
+    function showWashFields(area) {
+      const { colors, angle } = washLook(area);
+      [washFrom.value, washTo.value] = colors;
+      washAngle.value = washAngleSlider.value = angle;
+    }
+    for (const input of [washFrom, washTo, washAngle]) {
+      input.addEventListener('input', () => {
+        if (selectedArea?.wash) Object.assign(selectedArea, washFields());
+        washDraft = true;
+        draw();
+      });
+      input.addEventListener('change', () => {
+        washDraft = false;
+        draw();
+      });
+    }
     // While an area is reshaped or its slider dragged, washes paint coarse,
     // since a full one takes a good fraction of a second.
     let washDraft = false;
-    function washImage(area, color) {
+    function washImage(area) {
       const { body, bumps, box, size } = washShape(area);
-      const key = JSON.stringify([area.washKey, color, washDraft]);
+      const { colors, angle } = washLook(area);
+      const key = JSON.stringify([area.washKey, colors, angle, washDraft]);
       if (area.imageKey === key) return area.image;
       const random = seededRandom(area.seed + 7);
       const e = (area.edge ?? 50) / 100;
@@ -14194,10 +14236,16 @@
       const fray = noiseField(w, h, size * 0.06 * k, 6, random);
       const pigment = noiseField(w, h, size * 0.25 * k, 3, random);
       const grain = noiseField(w, h, 3, 2, random);
-      colorProbe.fillStyle = '#000';
-      colorProbe.fillStyle = color;
-      const hex = colorProbe.fillStyle;
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const [from, to] = colors.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+      // The blend runs across the area in the direction's heading (0° up,
+      // 90° right), its front pushed about by the noise so it wanders like
+      // two wet colours running into each other, never a clean ramp.
+      const turn = (angle * Math.PI) / 180;
+      const ux = Math.sin(turn);
+      const uy = -Math.cos(turn);
+      const ends = [[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => x * ux + y * uy);
+      const lo = Math.min(...ends);
+      const span = Math.max(...ends) - lo || 1;
       const image = new ImageData(w, h);
       const px = image.data;
       const rough = 0.25 + 0.6 * e;
@@ -14210,10 +14258,16 @@
         const bloom = smoothstep(0.05, 0.5, wet) * 0.22 * fray[i];
         const depth = 0.5 + 0.35 * pigment[i] + 0.1 * grain[i] + 0.3 * rim;
         const alpha = Math.min(1, Math.max(bloom, paint * depth));
-        const shade = 1 - 0.25 * rim - 0.12 * (pigment[i] - 0.5);
-        px[i * 4] = r * shade;
-        px[i * 4 + 1] = g * shade;
-        px[i * 4 + 2] = b * shade;
+        const x = i % w;
+        const y = (i - x) / w;
+        const run = (x * ux + y * uy - lo) / span + (pigment[i] - 0.5) * 0.6 + (fray[i] - 0.5) * 0.25;
+        const mix = smoothstep(0.2, 0.8, run);
+        // Where the colours meet, pigment piles up a little, as in a real bleed.
+        const meet = Math.exp(-(((mix - 0.5) / 0.18) ** 2));
+        const shade = 1 - 0.25 * rim - 0.12 * (pigment[i] - 0.5) - 0.08 * meet;
+        px[i * 4] = (from[0] + (to[0] - from[0]) * mix) * shade;
+        px[i * 4 + 1] = (from[1] + (to[1] - from[1]) * mix) * shade;
+        px[i * 4 + 2] = (from[2] + (to[2] - from[2]) * mix) * shade;
         px[i * 4 + 3] = alpha * 255;
       }
       const canvas = new OffscreenCanvas(w, h);
@@ -14225,8 +14279,7 @@
     // darkens it a little, as a second coat of watercolour does.
     function drawWashes(c, areas) {
       for (const area of areas) {
-        const color = varyColor(treeColorInput.value, { x: area.seed % 997, y: area.seed % 991 }, treeColorVariation);
-        const { canvas, x, y, w, h } = washImage(area, color);
+        const { canvas, x, y, w, h } = washImage(area);
         c.drawImage(canvas, x, y, w, h);
       }
     }
@@ -14341,7 +14394,8 @@
     function showTreeSet() {
       const brushes = treeSet === 'brushes';
       for (const button of treeSetButtons) button.setAttribute('aria-pressed', String(button.dataset.set === treeSet));
-      for (const id of ['tree-depth-field', 'tree-trunk-field', 'tree-size-group']) document.getElementById(id).hidden = brushes;
+      for (const id of ['tree-depth-field', 'tree-trunk-field', 'tree-size-group', 'tree-color-group']) document.getElementById(id).hidden = brushes;
+      document.getElementById('wash-color-group').hidden = !brushes;
       document.querySelector('#tree-shapes .tree-shape-grid').hidden = brushes;
       // Washes lie in the paper, so they cast no shadow to set.
       document.getElementById('tree-shadows-field').closest('.field-group').hidden = brushes;
@@ -14583,7 +14637,7 @@
     });
     function fillArea() {
       const area = { points: fillDraft, shapes: treeSet === 'brushes' ? [] : [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
-      if (treeSet === 'brushes') Object.assign(area, { wash: true, edge: 50 });
+      if (treeSet === 'brushes') Object.assign(area, { wash: true, edge: 50 }, washFields());
       fillAreas = [...fillAreas, area];
       selectedArea = area;
       setFilling(false);
@@ -15346,7 +15400,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
-      file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge }) }));
+      file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }

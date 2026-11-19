@@ -14052,7 +14052,8 @@
     // which stand up off it. Each is blots [x, y, half width, half height]
     // in map units about its point.
     function treeBrushes() {
-      const brush = (blots) => {
+      const brush = (small) => {
+        const blots = small.map((blot) => blot.map((n) => n * 1.5));
         const reach = Math.max(...blots.map(([x, y, rx, ry]) => Math.max(Math.abs(x) + rx, Math.abs(y) + ry)));
         return { flat: true, blots, w: reach * 2, h: reach * 2 };
       };
@@ -14068,52 +14069,91 @@
     const BRUSHES = treeBrushes();
     const STAMPS = { ...TREE_SHAPES, ...BRUSHES };
     const isBrush = (t) => !!BRUSHES[t.shape];
-    // A blot's edge wanders by up to a fifth of its size, from the stamp's
-    // own randomness, so no two washes match.
-    function wobblyBlot(x, y, rx, ry, random) {
-      const phase = [1, 2, 3].map((i) => random(i) * Math.PI);
-      const n = 28;
-      const points = Array.from({ length: n }, (_, i) => {
-        const a = (i / n) * Math.PI * 2;
-        const k = 1 + 0.1 * Math.sin(3 * a + phase[0]) + 0.06 * Math.sin(5 * a + phase[1]) + 0.04 * Math.sin(9 * a + phase[2]);
-        return [x + Math.cos(a) * rx * k, y + Math.sin(a) * ry * k];
-      });
+    // A blot is an oval ringed with bumps of mixed sizes, so its edge
+    // scallops like a cloud and no two blots match.
+    function cloudBlot(x, y, rx, ry, random) {
       const p = new Path2D();
-      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      p.moveTo(...mid(points[n - 1], points[0]));
-      points.forEach((q, i) => p.quadraticCurveTo(...q, ...mid(q, points[(i + 1) % n])));
-      p.closePath();
+      p.ellipse(x, y, rx * 0.8, ry * 0.8, 0, 0, Math.PI * 2);
+      const bump = Math.min(rx, ry) * 0.42;
+      const n = Math.max(6, Math.round((Math.PI * (rx + ry)) / (bump * 2)));
+      for (let i = 0; i < n; i++) {
+        const a = ((i + random(i) * 0.3) / n) * Math.PI * 2;
+        const r = bump * (1 + random(i + 50) * 0.35);
+        const cx = x + Math.cos(a) * (rx - bump * 0.9);
+        const cy = y + Math.sin(a) * (ry - bump * 0.9);
+        p.moveTo(cx + r, cy);
+        p.arc(cx, cy, r, 0, Math.PI * 2);
+      }
       return p;
     }
-    // Thin washes laid over each other, each a little off the last, pool
-    // into a darker rim where their edges part, as watercolour does.
-    function paintBrush(c, brush, t, color) {
-      const rim = tint(color, -0.3);
-      brush.blots.forEach(([x, y, rx, ry], i) => {
-        for (let layer = 0; layer < 3; layer++) {
-          const p = wobblyBlot(x, y, rx, ry, (salt) => treeRandom(t, 10 + i * 7 + layer * 3 + salt));
-          c.globalAlpha = 0.26;
-          c.fillStyle = color;
-          c.fill(p);
-          c.globalAlpha = 0.2;
-          c.strokeStyle = rim;
-          c.lineWidth = Math.min(rx, ry) * 0.08;
-          c.stroke(p);
+    // Every brush paints solid into one layer, so overlapping blots merge
+    // into one shape and other shades sit over it like layered paint. The
+    // layer then gets faint streaks and a darker rim where the paint pools,
+    // and is laid on the map whole, so overlaps never darken.
+    function drawBrushes(c, stamps, colorOf = treeLeaf) {
+      const base = c.getTransform();
+      const placed = stamps.map((t) => ({ t, brush: BRUSHES[t.shape], at: base.translate(t.x, t.y).rotate(treeRandom(t, 4) * 180).scale(treeScale(t)) }));
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const { brush, at } of placed) {
+        const r = brush.w * 0.65;
+        for (const [dx, dy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+          const q = at.transformPoint(new DOMPoint(dx, dy));
+          [x0, y0, x1, y1] = [Math.min(x0, q.x), Math.min(y0, q.y), Math.max(x1, q.x), Math.max(y1, q.y)];
         }
-      });
-      c.globalAlpha = 1;
-    }
-    // Brushes are drawn in map units, so they lie on the map under any tilt.
-    function drawBrushes(c, stamps) {
-      for (const t of stamps) {
-        c.save();
-        c.translate(t.x, t.y);
-        c.rotate(treeRandom(t, 4) * Math.PI);
-        const scale = treeScale(t);
-        c.scale(scale, scale);
-        paintBrush(c, BRUSHES[t.shape], t, treeLeaf(t));
-        c.restore();
       }
+      x0 = Math.max(0, Math.floor(x0));
+      y0 = Math.max(0, Math.floor(y0));
+      x1 = Math.min(c.canvas.width, Math.ceil(x1));
+      y1 = Math.min(c.canvas.height, Math.ceil(y1));
+      if (x1 <= x0 || y1 <= y0) return;
+      // Kept to 8 million pixels, so brushes spread over a big map stay quick.
+      const res = Math.min(1, Math.sqrt(8e6 / ((x1 - x0) * (y1 - y0))));
+      const width = Math.ceil((x1 - x0) * res);
+      const height = Math.ceil((y1 - y0) * res);
+      const layer = new OffscreenCanvas(width, height);
+      const l = layer.getContext('2d');
+      const toLayer = new DOMMatrix().scale(res).translate(-x0, -y0);
+      for (const { t, brush, at } of placed) {
+        l.setTransform(toLayer.multiply(at));
+        l.fillStyle = colorOf(t);
+        brush.blots.forEach(([x, y, rx, ry], i) => l.fill(cloudBlot(x, y, rx, ry, (salt) => treeRandom(t, 10 + i * 97 + salt))));
+      }
+      l.globalCompositeOperation = 'source-atop';
+      l.lineCap = 'round';
+      const unit = Math.hypot(base.a, base.b) * res;
+      l.filter = `blur(${Math.max(1, 2 * unit)}px)`;
+      for (const { t, brush, at } of placed) {
+        l.setTransform(toLayer.multiply(at));
+        const half = brush.w / 2;
+        for (let i = 0; i < 6; i++) {
+          const y = (treeRandom(t, 200 + i) * half);
+          l.strokeStyle = i % 2 ? '#fff' : '#000';
+          l.globalAlpha = 0.03 + 0.03 * Math.abs(treeRandom(t, 300 + i));
+          l.lineWidth = half * (0.2 + 0.2 * Math.abs(treeRandom(t, 400 + i)));
+          l.beginPath();
+          l.moveTo(-half, y - half * 0.5);
+          l.lineTo(half, y + half * 0.5);
+          l.stroke();
+        }
+      }
+      l.filter = 'none';
+      // The rim is the layer less a blurred copy of itself: nothing inside,
+      // most at the edge. Multiplied over the paint, it darkens it in its own hue.
+      const rim = new OffscreenCanvas(width, height);
+      const r = rim.getContext('2d');
+      r.drawImage(layer, 0, 0);
+      r.globalCompositeOperation = 'destination-out';
+      r.filter = `blur(${Math.max(1, 3 * unit)}px)`;
+      r.drawImage(layer, 0, 0);
+      l.setTransform(1, 0, 0, 1, 0, 0);
+      l.globalCompositeOperation = 'multiply';
+      l.globalAlpha = 0.8;
+      l.drawImage(rim, 0, 0);
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalAlpha = 0.92;
+      c.drawImage(layer, x0, y0, x1 - x0, y1 - y0);
+      c.restore();
     }
     const treeSizeInput = document.getElementById('tree-size');
     const treeSizeVariation = document.getElementById('tree-size-variation');
@@ -14190,9 +14230,9 @@
         c.setTransform(1, 0, 0, 1, 0, 0);
         c.clearRect(0, 0, preview.width, preview.height);
         if (shape.flat) {
-          const fit = (size - 6) / Math.max(...Object.values(BRUSHES).map((b) => b.w));
+          const fit = (size - 6) / Math.max(...Object.values(BRUSHES).map((b) => b.w * 1.2));
           c.setTransform(fit * dpr, 0, 0, fit * dpr, (size / 2) * dpr, (size / 2) * dpr);
-          paintBrush(c, shape, { x: 0.37, y: 0.71 }, treeColorInput.value);
+          drawBrushes(c, [{ x: 0, y: 0, shape: name }], () => treeColorInput.value);
           return;
         }
         c.setTransform(k * dpr, 0, 0, k * dpr, (size / 2) * dpr, (size - 4 - (size - 8 - shape.h * k) / 2) * dpr);

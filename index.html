@@ -16367,7 +16367,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-lift-2d-set', 'buildings-lift-2d', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-lift-2d-set', 'buildings-lift-2d', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'landscape-fill-spacing', 'wash-color-from', 'wash-color-to', 'wash-angle', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -16453,7 +16453,67 @@
       file.presentation = presentation;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle, terrain: type }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }), ...(type && { terrain: type }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
+      file.location = locationOut();
       return file;
+    }
+    // Location's fit of the map to the satellite: the satellite's scale and
+    // turn, the mesh warp and everything placed on it, and the paths' edits.
+    // Its opacities and colours for viewing aren't the map's, so stay out.
+    const LOCATION_FILE_FIELDS = [
+      'satellite-scale', 'satellite-rotation', 'mesh-on', 'mesh-warp', 'mesh-spacing', 'mesh-color', 'mesh-thickness', 'mesh-border',
+      'mesh-rotation', 'mesh-rubber', 'mesh-gravity', 'mesh-wall-width', 'gravity-rubber', 'gravity-width', 'gravity-back-width',
+    ];
+    const opacityOf = (input) => input.nextElementSibling;
+    function locationOut() {
+      const fields = {};
+      for (const id of LOCATION_FILE_FIELDS) {
+        const input = document.getElementById(id);
+        fields[id] = input.type === 'checkbox' ? input.checked : input.value;
+        if (input.type === 'color') fields[`${id}-opacity`] = opacityOf(input).value;
+      }
+      const withMoves = (item) => ({ ...item, moves: [...item.moves] });
+      return {
+        fields,
+        satelliteOffset: { ...satelliteOffset },
+        place: { ...mapPlace },
+        offsets: [...meshOffsets],
+        erased: [...meshErased],
+        pulls: meshPulls.map(withMoves),
+        circles: meshCircles.map(withMoves),
+        walls: meshWalls.map(withMoves),
+        pins: meshPins.map((pin) => ({ ...pin })),
+        pathEdits: locationEditsOut(),
+      };
+    }
+    function locationIn(saved) {
+      for (const [id, value] of Object.entries(saved.fields ?? {})) {
+        const input = id.endsWith('-opacity') ? opacityOf(document.getElementById(id.slice(0, -'-opacity'.length))) : document.getElementById(id);
+        if (!input) continue;
+        if (input.type === 'checkbox') input.checked = value;
+        else input.value = value;
+        const range = input.closest('.slider')?.querySelector('input[type="range"]');
+        if (range) range.value = value;
+      }
+      for (const input of locationFields()) if (input.type === 'checkbox') input.dispatchEvent(new Event('change'));
+      showLocationPathFields();
+      locationEditsIn(saved.pathEdits);
+      locationSelected = new Set();
+      showMatchMesh();
+      Object.assign(satelliteOffset, saved.satelliteOffset);
+      // A changed Mesh Spacing clears the mesh, so it's taken in before the mesh is put back.
+      meshLattice();
+      const withMoves = (item) => ({ ...item, moves: new Map(item.moves) });
+      meshOffsets.clear();
+      for (const [key, offset] of saved.offsets ?? []) meshOffsets.set(key, offset);
+      meshErased.clear();
+      for (const [key, erased] of saved.erased ?? []) meshErased.set(key, erased);
+      meshPulls.splice(0, meshPulls.length, ...(saved.pulls ?? []).map(withMoves));
+      meshCircles.splice(0, meshCircles.length, ...(saved.circles ?? []).map(withMoves));
+      meshWalls.splice(0, meshWalls.length, ...(saved.walls ?? []).map(withMoves));
+      meshPins.splice(0, meshPins.length, ...(saved.pins ?? []));
+      Object.assign(mapPlace, saved.place);
+      meshPullSelected = meshCircleSelected = meshWallSelected = meshPinSelected = null;
+      mapBoxSelected = false;
     }
     // A map file's paths, with their fills and groups, in place of the current ones.
     function loadPaths(file) {
@@ -16556,6 +16616,7 @@
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));
       selectedArea = null;
       await setSatelliteReference(file.satelliteReference ?? null);
+      if (file.location) locationIn(file.location);
       undoState = null;
       selected = null;
       selectedLabels = [];
@@ -17433,7 +17494,7 @@
           background: mapStarts[next]?.background ?? null,
           buildings: mapStarts[next]?.buildings ?? null,
           points: [], paths: [], fills: [], groups: [], labels: [], lists: [], shapes: [], images: [], sketch: null, trees: [], fillAreas: [],
-          zoomBase: 1, frameCentre: null, satelliteReference: null, backgroundPlace: null, satellitePlace: null,
+          zoomBase: 1, frameCentre: null, satelliteReference: null, backgroundPlace: null, satellitePlace: null, location: null,
           ...mapStarts[next]?.paths,
         },
         mesh: { offsets: new Map(), erased: new Map(), pulls: [], circles: [], walls: [], pins: [], place: { turn: 0, scale: 1, ...start?.place } },

@@ -1738,6 +1738,19 @@
       padding: 11px 0 9px;
       resize: none;
     }
+    .tab-hint {
+      flex: none;
+      padding: 1px 6px 0;
+      border: 1px solid #d4d0ca;
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      color: #8a857e;
+      font: 600 11px system-ui, sans-serif;
+      text-transform: lowercase;
+    }
+    .tab-hint[hidden] {
+      display: none;
+    }
     :is(#panel, #style-panel, #settings-panel) .field-pair .field > input[type="number"] {
       flex: 1;
       width: auto;
@@ -8248,6 +8261,20 @@
       Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
       ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: placeName(place) })),
     ];
+    // In an empty text field, Tab takes the name shown greyed out instead of moving on.
+    function tabFillsPlaceholder(input) {
+      const hint = Object.assign(document.createElement('kbd'), { className: 'tab-hint', textContent: 'tab', hidden: true });
+      input.after(hint);
+      const update = () => { hint.hidden = document.activeElement !== input || !!input.value || !input.placeholder; };
+      for (const type of ['focus', 'blur', 'input']) input.addEventListener(type, update);
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab' || e.shiftKey || input.value || !input.placeholder) return;
+        e.preventDefault();
+        input.value = input.placeholder;
+        input.dispatchEvent(new Event('input'));
+        input.dispatchEvent(new Event('change'));
+      });
+    }
     function liveField(id, key, read, target = () => selected?.group) {
       const input = document.getElementById(id);
       let before = null;
@@ -9411,6 +9438,8 @@
     const listItemPlace = document.getElementById('list-item-place');
     const listItemText = liveField('list-item-text', textKey, (input) => input.value, theItem);
     const listItemIcon = document.getElementById('list-item-icon');
+    tabFillsPlaceholder(labelTextInput);
+    tabFillsPlaceholder(listItemText);
     listItemPlace.replaceChildren(...placeOptions());
     // As on a label, picking a place names the item after it.
     listItemPlace.addEventListener('change', () => {

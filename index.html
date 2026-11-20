@@ -15402,6 +15402,8 @@
           if (stroke) els[i]?.style.setProperty('stroke-width', String(stroke.width * perUnit));
         }
         else if (TERRAIN[type]) els[i]?.style.setProperty('display', 'none');
+        // The terrain's stroke stands in for the outline the artwork drew.
+        if (TERRAIN[type]) for (const j of outlinesOf(Number(i))) els[j]?.style.setProperty('display', 'none');
       }
       for (const i of removedBase) els[i]?.style.setProperty('display', 'none');
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
@@ -15762,6 +15764,31 @@
           return [field, input.type === 'color' ? colorOf(input) : input.type === 'checkbox' ? input.checked : input.value];
         })),
       }));
+    }
+    // Artwork often outlines a shape with a second one rather than a stroke:
+    // a ring or fill just larger than it, or a stroke-only copy of its edge.
+    // Either counts as the shape's own outline.
+    const outlineCache = new WeakMap();
+    function outlinesOf(i) {
+      if (!outlineCache.has(baseShapes)) outlineCache.set(baseShapes, new Map());
+      const cache = outlineCache.get(baseShapes);
+      if (cache.has(i)) return cache.get(i);
+      const { box } = baseShapes.shapes[i];
+      const found = [];
+      if (box) {
+        const reach = Math.max(4, 0.04 * Math.max(box.x1 - box.x0, box.y1 - box.y0));
+        const near = (a, b) => Math.abs(a - b) <= reach;
+        baseShapes.shapes.forEach((other, j) => {
+          if (j === i || !other.box) return;
+          const o = other.box;
+          const around = near(o.x0, box.x0) && near(o.y0, box.y0) && near(o.x1, box.x1) && near(o.y1, box.y1);
+          if (!around) return;
+          const encloses = o.x0 <= box.x0 && o.y0 <= box.y0 && o.x1 >= box.x1 && o.y1 >= box.y1;
+          if ((other.filled && encloses) || (!other.filled && other.stroke > 0)) found.push(j);
+        });
+      }
+      cache.set(i, found);
+      return found;
     }
     // Reset puts the background back as it came: every shape, no terrain on any.
     const imageReset = document.getElementById('image-reset');

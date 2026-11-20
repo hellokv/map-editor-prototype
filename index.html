@@ -2555,6 +2555,7 @@
           </label>
         </div>
         <div class="label-section">
+          <div class="field-group">
           <div class="field">
             Plane
             <div id="label-plane-toggle" class="toggle-group">
@@ -2562,6 +2563,11 @@
               <button type="button" data-plane="building" aria-pressed="false">Building</button>
               <button type="button" data-plane="base" aria-pressed="false">Base</button>
             </div>
+          </div>
+          <label id="label-building-height-field" class="field" hidden>
+            Height
+            <span class="slider"><span class="percent-field"><input id="label-building-height" type="number" min="0" max="200" step="1" value="100"></span><input type="range" min="0" max="200" step="1" value="100" aria-label="Label height"></span>
+          </label>
           </div>
         </div>
         <div class="label-section label-columns">
@@ -9200,6 +9206,19 @@
         draw();
       });
     }
+    // A Building label's height as a share of the tallest building's, as a
+    // building's own height is a share of the panel's.
+    const labelBuildingHeight = document.getElementById('label-building-height');
+    const labelBuildingHeightSlider = linkSlider(labelBuildingHeight);
+    let labelHeightUndone = false;
+    labelBuildingHeight.addEventListener('input', () => {
+      if (!labelHeightUndone) recordUndo();
+      labelHeightUndone = true;
+      const value = Math.max(0, Number(labelBuildingHeight.value) || 0);
+      for (const label of selectedLabels) if (label.buildingPlane) label.buildingHeight = value;
+      draw();
+    });
+    labelBuildingHeight.addEventListener('change', () => { labelHeightUndone = false; });
     const imagePlane = document.getElementById('image-plane');
     for (const button of document.querySelectorAll('#image-plane-toggle button')) {
       button.addEventListener('click', () => {
@@ -9589,6 +9608,11 @@
       if (anyLabels) {
         for (const button of document.querySelectorAll('#label-plane-toggle button')) {
           button.setAttribute('aria-pressed', String(selectedLabels.every((label) => planeOf(label) === button.dataset.plane)));
+        }
+        const onBuildings = selectedLabels.every((label) => label.buildingPlane);
+        document.getElementById('label-building-height-field').hidden = !onBuildings;
+        if (onBuildings && document.activeElement !== labelBuildingHeight) {
+          labelBuildingHeight.value = labelBuildingHeightSlider.value = selectedLabels[0].buildingHeight ?? 100;
         }
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
@@ -15596,11 +15620,11 @@
         const a = anchor(item);
         return Object.assign(item, { x: item.x + p.x - a.x, y: item.y + p.y - a.y });
       };
-      // Building labels are raised as the roofs of the tallest building are.
+      // Building labels are raised as roofs are, by their height's share of the tallest building's.
       const top = Math.max(0, ...allBuildingParts().map(partLift)) * view.scale;
-      const rise = top ? liftMatrix(top) : null;
-      const lift = (item, p) => (rise && standing.has(item) && item.buildingPlane ? rise.transformPoint(new DOMPoint(p.x, p.y)) : p);
-      const drop = (item, p) => (rise && standing.has(item) && item.buildingPlane ? rise.inverse().transformPoint(new DOMPoint(p.x, p.y)) : p);
+      const riseOf = (item) => (top && standing.has(item) && item.buildingPlane ? liftMatrix((top * (item.buildingHeight ?? 100)) / 100) : null);
+      const lift = (item, p) => riseOf(item)?.transformPoint(new DOMPoint(p.x, p.y)) ?? p;
+      const drop = (item, p) => riseOf(item)?.inverse().transformPoint(new DOMPoint(p.x, p.y)) ?? p;
       const saved = moved.map((item) => {
         const before = { x: item.x, y: item.y };
         const f = lift(item, toScreen(anchor(item)));

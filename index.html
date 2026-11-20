@@ -2615,6 +2615,7 @@
             Alignment
             <div id="label-text-align" class="icon-buttons">
               <button type="button" data-text-align="left" aria-label="Align text left"><span class="material-symbols-rounded">format_align_left</span></button>
+              <button type="button" data-text-align="center" aria-label="Centre text"><span class="material-symbols-rounded">format_align_center</span></button>
               <button type="button" data-text-align="right" aria-label="Align text right"><span class="material-symbols-rounded">format_align_right</span></button>
             </div>
           </div>
@@ -5540,7 +5541,7 @@
       const h = sizes.reduce((sum, size) => sum + size.h, 0) + gap * Math.max(0, rows.length - 1) + 2 * list.padding;
       let top = list.y + list.padding;
       const placed = rows.map((row, i) => {
-        const label = { ...row, x: list.x + list.padding + sizes[i].w / 2, y: top + sizes[i].h / 2 };
+        const label = { ...row, centred: true, x: list.x + list.padding + sizes[i].w / 2, y: top + sizes[i].h / 2 };
         top += sizes[i].h + gap;
         return label;
       });
@@ -9104,7 +9105,7 @@
         const pointer = button.dataset.pointer && button.dataset.pointer !== label.pointer ? button.dataset.pointer : null;
         if (pointer === (label.pointer ?? null)) return;
         recordUndo();
-        label.pointer = pointer;
+        keepBox(label, () => { label.pointer = pointer; });
         draw();
       });
     }
@@ -9138,7 +9139,12 @@
         draw();
       });
     }
-    // Pressing the alignment in use again centres the lines.
+    // A text-only label's alignment is its iconSide too, so it carries over
+    // when an icon comes or goes: centred text keeps an icon above or below.
+    const setIconSide = (label, side) => keepBox(label, () => {
+      if (side === 'left') delete label.iconSide;
+      else label.iconSide = side;
+    });
     const textAlignButtons = document.querySelectorAll('[data-text-align]');
     for (const button of textAlignButtons) {
       button.addEventListener('click', () => {
@@ -9146,8 +9152,8 @@
         button.blur();
         if (!label) return;
         recordUndo();
-        if (label.textAlign === button.dataset.textAlign) delete label.textAlign;
-        else label.textAlign = button.dataset.textAlign;
+        const align = button.dataset.textAlign;
+        setIconSide(label, align === 'center' ? (alignOf(label) === 'center' ? label.iconSide : 'top') : align);
         draw();
       });
     }
@@ -9155,8 +9161,7 @@
     for (const button of iconSideButtons) {
       button.addEventListener('click', () => {
         recordUndo();
-        if (button.dataset.iconSide === 'left') delete soleLabel().iconSide;
-        else soleLabel().iconSide = button.dataset.iconSide;
+        setIconSide(soleLabel(), button.dataset.iconSide);
         button.blur();
         draw();
       });
@@ -9828,7 +9833,7 @@
           button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
         }
         document.getElementById('label-text-align-field').hidden = iconOn;
-        for (const button of textAlignButtons) button.setAttribute('aria-pressed', button.dataset.textAlign === selectedLabel.textAlign);
+        for (const button of textAlignButtons) button.setAttribute('aria-pressed', button.dataset.textAlign === alignOf(selectedLabel));
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         for (const button of labelResetButtons) button.style.visibility = selectedLabel[button.dataset.reset] === undefined ? 'hidden' : 'visible';
@@ -9934,7 +9939,7 @@
         button.blur();
         if (button.getAttribute('aria-pressed') === 'true') return;
         recordUndo();
-        for (const label of selectedLabels) setLabelKind(label, button.dataset.kind);
+        for (const label of selectedLabels) keepBox(label, () => setLabelKind(label, button.dataset.kind));
         draw();
       });
     }
@@ -10329,8 +10334,11 @@
     };
     // How a label lies: its lines, each aligned on textX as align says, as
     // [{ text, y, width }]; its icon centred on (iconX, iconY); its box (the
-    // background, padding included) centred on its spot; and bounds, the box
-    // plus any icon outside it.
+    // background, padding included); and bounds, the box plus any icon
+    // outside it. Without a pointer the label is held on its spot by its icon,
+    // or by the side its text is aligned to, so text can change without the
+    // label moving; with one, or when centred (labels from before anchoring,
+    // and list rows), its box is centred on the spot.
     //
     // The icon sits on the label's iconSide of the text (left when absent),
     // the icon gap from the text, or from the box when its style's iconOutside. Outside,
@@ -10340,6 +10348,17 @@
     // no room.
     // zoom is how much larger the label is drawn than its style's sizes,
     // which matters only to a pin's shadow gap.
+    const alignOf = (label) => ({ left: 'left', right: 'right', top: 'center', bottom: 'center' })[label.iconSide ?? 'left'];
+    // Changes how a label is held without moving it on the map.
+    function keepBox(label, change) {
+      const before = labelLayout(label).box;
+      change();
+      delete label.centred;
+      const after = labelLayout(label).box;
+      const edge = (box) => box.x + box.w * { left: 0, center: 0.5, right: 1 }[alignOf(label)];
+      label.x += edge(before) - edge(after);
+      label.y += before.y + before.h / 2 - (after.y + after.h / 2);
+    }
     function labelLayout(label, zoom = mapScale()) {
       const style = styleOf(label);
       const step = style.size * style.lineHeight;
@@ -10395,15 +10414,21 @@
         if (sw) icon = beside(text);
         box = pad(icon ? unionRect(text, iconRect(icon)) : text);
       }
-      const dx = label.x - (box.x + box.w / 2);
-      const dy = label.y - (box.y + box.h / 2);
+      const align = alignOf(label);
+      let dx = label.x - (box.x + box.w / 2);
+      let dy = label.y - (box.y + box.h / 2);
+      if (!label.pointer && !label.centred) {
+        if (icon) {
+          dx = label.x - icon.x;
+          dy = label.y - icon.y;
+        } else if (align === 'left') dx = label.x - box.x;
+        else if (align === 'right') dx = label.x - (box.x + box.w);
+      }
       box = { ...box, x: box.x + dx, y: box.y + dy };
       const iconX = icon ? icon.x + dx : label.x;
       const iconY = icon ? icon.y + dy : label.y;
       const bounds = outside ? unionRect(box, { x: iconX - sw / 2, y: iconY - sh / 2, w: sw, h: sh }) : box;
       const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
-      // Only a label without an icon lines its text up to one side.
-      const align = label.icon ? 'center' : label.textAlign ?? 'center';
       const textX = dx + { left: -tw / 2, center: 0, right: tw / 2 }[align];
       // On levels where only the label's icon shows, the icon keeps its place
       // in the whole label, in a box of its own; frame is still the whole label.
@@ -16305,6 +16330,7 @@
         groups: groups.map((group) => ({ ...group, segments: [...group.segments].map((segment) => segmentIds.get(segment)).filter(Boolean) })),
         labels,
         labelStyles,
+        labelAnchors: true,
         nextStyleId,
         iconStyles,
         nextIconStyleId,
@@ -16376,6 +16402,18 @@
       if (!labelStyles.length) labelStyles.push({ ...NEW_STYLE, id: 1, name: 'Label' });
       nextStyleId = file.nextStyleId ?? Math.max(...labelStyles.map((style) => style.id)) + 1;
       labels.splice(0, labels.length, ...(file.labels ?? []).map((label) => ({ pins: [], ...(separateIcons ? {} : { iconStyleId: label.styleId }), ...label })));
+      // Older files centred every label on its spot, and text-only labels' lines too.
+      if (!file.labelAnchors) {
+        for (const label of labels) {
+          label.centred = true;
+          if (!label.icon) {
+            if (label.textAlign === 'right') label.iconSide = 'right';
+            else if (label.textAlign === 'left') delete label.iconSide;
+            else if (alignOf(label) !== 'center') label.iconSide = 'top';
+          }
+          delete label.textAlign;
+        }
+      }
       lists.splice(0, lists.length, ...(file.lists ?? []).map((list) => ({ ...newList(list), ...list })));
       shapes.splice(0, shapes.length, ...(file.shapes ?? []).map((shape) => (shape.kind === 'image' ? { ...shape, image: images[shape.image] } : shape)));
       const sketchPoints = file.sketch?.points ?? [];

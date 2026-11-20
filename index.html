@@ -7973,6 +7973,16 @@
       const uprightBox = turnUpright(ctx, turn);
       if (!noBackground) ctx.fill(boxPath(uprightBox, board.radius, board.corners));
       ctx.restore();
+      // Turned, the map is cropped to the upright outer frame; handles for editing aren't.
+      const cropToFrame = () => {
+        ctx.save();
+        if (!turn) return;
+        const onMap = ctx.getTransform();
+        turnUpright(ctx, turn);
+        ctx.clip(boxPath(uprightBox, board.radius, board.corners));
+        ctx.setTransform(onMap);
+      };
+      cropToFrame();
       if (backgroundImage && !noBackground) {
         const { x, y, w, h } = backgroundRect();
         ctx.save();
@@ -7989,11 +7999,13 @@
       if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
       if ((buildingsImage || shapes.some(isBuildingShape)) && !noBackground) drawLiftedBuildings(ctx);
       if (stamps.length && !noBackground) drawTrees(ctx, stamps);
+      ctx.restore();
       if (!backgroundTools.hidden && backgroundTool === 'tree') {
         drawTerrainSelection(ctx);
         drawFillAreas(ctx);
       }
       if (fillDraft.length) drawFillDraft(ctx);
+      cropToFrame();
       if (satelliteReference && satelliteReferenceOn.checked && (!backgroundTools.hidden || !pathTools.hidden) && !locationPart) {
         const r = satelliteRect();
         ctx.save();
@@ -8006,6 +8018,7 @@
         drawSketchFills();
       }
       if (!noBackground) drawMapLight(ctx, turn);
+      ctx.restore();
       if (board.outline && !noBackground) {
         ctx.save();
         turnUpright(ctx, turn);

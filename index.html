@@ -114,6 +114,13 @@
       border-radius: 4px;
       cursor: pointer;
     }
+    #terrain-pop [data-terrain="delete"] {
+      display: flex;
+      margin-left: 4px;
+    }
+    #terrain-pop .material-symbols-rounded {
+      font-size: 18px;
+    }
     #terrain-pop button[aria-pressed="true"] {
       color: #fff;
       background: #000;
@@ -2307,6 +2314,7 @@
     <div id="terrain-pop" hidden>
       <button type="button" data-terrain="none">None</button>
       <button type="button" data-terrain="trees">Trees</button>
+      <button type="button" data-terrain="delete" aria-label="Delete shape"><span class="material-symbols-rounded">delete</span></button>
     </div>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
@@ -2314,6 +2322,7 @@
         <input type="range" min="0" max="200" step="1" aria-label="Building height">
         <span class="lift-percent"><input id="building-lift-percent" type="number" min="0" step="1" aria-label="Building height percent">%</span>
         <button id="building-lift-reset" type="button" aria-label="Use the panel's building height"><span class="material-symbols-rounded">restart_alt</span></button>
+        <button id="building-delete" type="button" aria-label="Delete building"><span class="material-symbols-rounded">delete</span></button>
       </div>
       <div id="building-roof-height" class="pop-row">
         <span>Roof Height</span>
@@ -5703,6 +5712,8 @@
     // Base-layer shapes given a terrain, { index: 'water' | 'dirt' | 'grass' }, by
     // their order among the base SVG's shapes.
     let terrain = {};
+    // Background shapes taken off the map, by index; they come back with a new background.
+    let removedBase = new Set();
     let selectedTerrain = [];
     let baseShapes = null;
     let terrainImage = null;
@@ -13254,6 +13265,7 @@
       const url = URL.createObjectURL(file);
       if (file.type === 'image/svg+xml') svgUploads.add(url);
       terrain = {};
+      removedBase = new Set();
       setBackgroundImage(url).then(() => {
         if (!backgroundImage || backgroundImage.src !== url) return;
         backgroundPlace = null;
@@ -13302,6 +13314,7 @@
       backgroundRequest++;
       backgroundImage = null;
       terrain = {};
+      removedBase = new Set();
       selectedTerrain = [];
       baseShapes = null;
       terrainImage = null;
@@ -13350,6 +13363,25 @@
       if (file) setBuildingsImage(URL.createObjectURL(file));
     });
     document.getElementById('buildings-delete').addEventListener('click', () => setBuildingsImage(null));
+    // A building from the image is deleted alone; a building shape is deleted as a shape.
+    function deleteSelectedBuilding() {
+      if (!selectedBuilding) return;
+      if (selectedBuilding.shape) {
+        shapes.splice(shapes.indexOf(selectedBuilding.shape), 1);
+        selectedShapes = [];
+      } else selectedBuilding.removed = true;
+      selectBuilding(null);
+      draw();
+    }
+    document.getElementById('building-delete').addEventListener('click', deleteSelectedBuilding);
+    window.addEventListener('keydown', (e) => {
+      if (!selectedBuilding || selectedBuilding.shape || e.target.closest('input, textarea, select')) return;
+      if (document.getElementById('background-panel').dataset.tab !== 'buildings' || backgroundTools.hidden) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelectedBuilding();
+      }
+    });
     const drawBuildings = (c) => {
       const { x, y, w, h } = buildingsRect();
       c.drawImage(buildingsImage, x, y, w, h);
@@ -13862,7 +13894,9 @@
       shapeParts.set(shape, part);
       return part;
     }
-    const allBuildingParts = () => [...buildingParts, ...shapes.filter(isBuildingShape).map(shapeBuildingPart)];
+    // Parts deleted from the buildings image stay in the list, so saved settings keep their places.
+    const shownParts = () => buildingParts.filter((part) => !part.removed);
+    const allBuildingParts = () => [...shownParts(), ...shapes.filter(isBuildingShape).map(shapeBuildingPart)];
     // Selected shapes get a switch above them to make them buildings.
     const shapeBuildingPop = document.getElementById('shape-building-pop');
     const shapeBuildingSwitch = shapeBuildingPop.querySelector('input');
@@ -14033,7 +14067,7 @@
       };
       // Drawn building shapes always stand in front of the buildings image.
       const byDepth = (a, b) => depth(a) - depth(b);
-      const order = [...[...buildingParts].sort(byDepth), ...allBuildingParts().filter((part) => part.shape).sort(byDepth)];
+      const order = [...shownParts().sort(byDepth), ...allBuildingParts().filter((part) => part.shape).sort(byDepth)];
       for (const part of order) {
         const r = partRect(part);
         const top = tilted ? partLift(part) * view.scale : 0;
@@ -14121,7 +14155,7 @@
       const base = baseShapeAt(p);
       if (base !== null && terrain[base] === 'water') return true;
       if (fillAreas.some((area) => area.terrain === 'water' && areaProbe.isPointInPath(areaPath(area), p.x, p.y))) return true;
-      if (buildingsImage && buildingParts.some((part) => onPart(part, p))) return true;
+      if (buildingsImage && shownParts().some((part) => onPart(part, p))) return true;
       return shapes.some((shape) => isBuildingShape(shape) && insideShape(shape, p));
     }
     function buildingAt(s) {
@@ -14131,7 +14165,7 @@
       const r = buildingsRect();
       const hit = (part, p) => onPart(part, p, r, W, H);
       const tilted = !!canvasTilt?.angle;
-      const near = [...buildingParts].reverse();
+      const near = shownParts().reverse();
       for (const t of tilted ? [1, 0.75, 0.5, 0.25, 0] : [0]) {
         for (const part of near) {
           const q = liftMatrix(partLift(part) * view.scale * t).inverse().transformPoint(new DOMPoint(s.x, s.y));
@@ -14955,7 +14989,7 @@
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
       if (!area.shapes.length) return [];
-      const blockers = [terrain, !!baseShapes, buildingParts.length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation]), fillAreas.filter((other) => other.terrain === 'water').map((other) => other.points)];
+      const blockers = [terrain, !!baseShapes, shownParts().length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation]), fillAreas.filter((other) => other.terrain === 'water').map((other) => other.points)];
       const key = JSON.stringify([area.points, area.density, area.shapes, area.seed, blockers]);
       if (area.stampsKey === key) return area.stamps;
       const random = seededRandom(area.seed);
@@ -15343,7 +15377,7 @@
         terrainEffect = effect;
         draw();
       };
-      if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
+      if (!baseShapes || (!Object.keys(terrain).length && !removedBase.size)) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
       // A terrain's stroke replaces the shape's own: its width is in map
@@ -15358,6 +15392,7 @@
         }
         else if (TERRAIN[type]) els[i]?.style.setProperty('display', 'none');
       }
+      for (const i of removedBase) els[i]?.style.setProperty('display', 'none');
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
       keep(img, await terrainEffectImage(request));
     }
@@ -15454,7 +15489,7 @@
       const y = (p.y - r.y) / ky;
       for (let i = baseShapes.shapes.length - 1; i >= 0; i--) {
         const { path, filled } = baseShapes.shapes[i];
-        if (filled && areaProbe.isPointInPath(path, x, y)) return i;
+        if (filled && !removedBase.has(i) && areaProbe.isPointInPath(path, x, y)) return i;
       }
       return null;
     }
@@ -15565,6 +15600,7 @@
           draw();
           return;
         }
+        if (button.dataset.terrain === 'delete') return deleteBaseShapes();
         terrain = { ...terrain };
         for (const i of selectedTerrain) {
           if (button.dataset.terrain === 'none') delete terrain[i];
@@ -15716,8 +15752,22 @@
         })),
       }));
     }
+    function deleteBaseShapes() {
+      for (const i of selectedTerrain) {
+        removedBase.add(i);
+        delete terrain[i];
+      }
+      terrain = { ...terrain };
+      selectedTerrain = [];
+      paintTerrain();
+    }
     window.addEventListener('keydown', (e) => {
-      if (!selectedTerrain.length || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
+      if (!selectedTerrain.length || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        return deleteBaseShapes();
+      }
+      if (e.key !== 'Escape') return;
       selectedTerrain = [];
       draw();
     });
@@ -16078,6 +16128,8 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
+      file.buildingRemoved = buildingParts.map((part) => !!part.removed);
+      file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
       file.outerFrame = outerFrame;
@@ -16165,10 +16217,12 @@
       for (const saved of listed) addCustomTerrain(saved);
       terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
       setPresentation(file.presentation ?? '2d');
+      removedBase = new Set(file.removedBase ?? []);
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? []);
+      (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));
       fillAreas = (file.fillAreas ?? []).map(({ shape, shapes = [shape], ...area }) => ({ ...area, shapes: shapes.filter(known).map((name) => OLD_STAMPS[name] ?? name) }));

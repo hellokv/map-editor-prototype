@@ -2241,6 +2241,7 @@
       <button type="button" data-terrain="water">Water</button>
       <button type="button" data-terrain="dirt">Dirt</button>
       <button type="button" data-terrain="grass">Grass</button>
+      <button type="button" data-terrain="trees">Trees</button>
     </div>
     <div id="building-lift-pop" hidden>
       <div class="pop-row">
@@ -15400,9 +15401,51 @@
       boundsCache.set(path, box);
       return box;
     }
+    // A base shape's outline as map points: its longest closed run sampled
+    // along its length, few enough that the corner handles stay apart.
+    function baseShapeOutline(shape) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const runs = shape.d.match(/[Mm][^Mm]*/g) ?? [shape.d];
+      let best = null;
+      // Relative moves after the first depend on where the last run ended, so
+      // each run is measured from the start of the path.
+      for (let i = 0; i < runs.length; i++) {
+        svg.setAttribute('d', runs.slice(0, i + 1).join(''));
+        const end = svg.getTotalLength();
+        svg.setAttribute('d', runs.slice(0, i).join(''));
+        const start = i ? svg.getTotalLength() : 0;
+        if (!best || end - start > best.end - best.start) best = { start, end };
+      }
+      svg.setAttribute('d', shape.d);
+      const length = best.end - best.start;
+      const n = Math.max(8, Math.min(64, Math.round(length / 12)));
+      const m = DOMMatrix.fromMatrix({ a: shape.m[0], b: shape.m[1], c: shape.m[2], d: shape.m[3], e: shape.m[4], f: shape.m[5] });
+      const { r, kx, ky } = baseScale();
+      return Array.from({ length: n }, (_, i) => {
+        const q = svg.getPointAtLength(best.start + (length * i) / n);
+        const p = m.transformPoint(new DOMPoint(q.x, q.y));
+        return { x: r.x + p.x * kx, y: r.y + p.y * ky };
+      });
+    }
     for (const button of terrainPop.querySelectorAll('button')) {
       button.addEventListener('click', () => {
         button.blur();
+        // Trees turns each chosen shape into a fill area of the chosen stamps, or round trees.
+        if (button.dataset.terrain === 'trees') {
+          const made = selectedTerrainShapes().map((shape) => ({
+            points: baseShapeOutline(shape),
+            shapes: stampChoice.size ? [...stampChoice] : ['round'],
+            density: Number(fillSpacing.value) || 25,
+            seed: Math.floor(Math.random() * 2 ** 31),
+          }));
+          fillAreas = [...fillAreas, ...made];
+          selectedTerrain = [];
+          selectedArea = made[made.length - 1] ?? null;
+          stampChoice = new Set(selectedArea?.shapes ?? []);
+          showStampChoice();
+          draw();
+          return;
+        }
         terrain = { ...terrain };
         for (const i of selectedTerrain) {
           if (button.dataset.terrain === 'none') delete terrain[i];

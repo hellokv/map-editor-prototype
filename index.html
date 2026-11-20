@@ -1818,6 +1818,11 @@
       border: none;
       background: none;
     }
+    :is(#panel, #style-panel, #settings-panel) .section-heading .terrain-draw[aria-pressed="true"] {
+      color: #fff;
+      background: #000;
+      border-radius: 4px;
+    }
     .section-label {
       margin-bottom: 8px;
       font-size: 12px;
@@ -3293,7 +3298,7 @@
         </div>
       </div>
       <div id="tree-shapes" class="label-section tab-landscape" hidden>
-        <div class="section-heading">Trees</div>
+        <div class="section-heading">Trees<button id="tree-draw" class="terrain-draw" type="button" aria-label="Draw a tree area" aria-pressed="false"><span class="material-symbols-rounded">polyline</span></button></div>
         <div class="field">
           <div id="tree-set-toggle" class="toggle-group">
             <button type="button" data-set="shapes" aria-pressed="true">Shapes</button>
@@ -14903,14 +14908,18 @@
         showStampChoice();
       }
       fillButton.setAttribute('aria-pressed', String(on));
+      document.getElementById('tree-draw').setAttribute('aria-pressed', String(on));
       document.getElementById('landscape-fill-hint').hidden = !on;
       showTreeSet();
       draw();
     }
-    fillButton.addEventListener('click', () => {
-      fillButton.blur();
-      setFilling(!fillingArea);
-    });
+    // The Trees heading's draw button is Fill Area by another name.
+    for (const button of [fillButton, document.getElementById('tree-draw')]) {
+      button.addEventListener('click', () => {
+        button.blur();
+        setFilling(!fillingArea);
+      });
+    }
     window.addEventListener('keydown', (e) => {
       if (!fillingArea || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') setFilling(false);
@@ -15200,7 +15209,7 @@
       return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
     }
     // A terrain section's Draw button starts the pen; the next loop it closes takes that terrain.
-    for (const button of document.querySelectorAll('.terrain-draw')) {
+    for (const button of document.querySelectorAll('.terrain-draw[data-terrain]')) {
       button.addEventListener('click', () => {
         button.blur();
         setBackgroundTool('segments');

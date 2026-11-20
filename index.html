@@ -5602,16 +5602,24 @@
     // The box: the inner frame, grown by the padding all round.
     const boardBox = () => ({ x: -board.padding, y: -board.padding, w: board.w + 2 * board.padding, h: board.h + 2 * board.padding });
     const boardShape = () => boxPath(boardBox(), board.radius, board.corners);
-    // Turned, the box stays square to the screen, grown to hold the turned
-    // map: c is turned back, and the box returned is the one to draw in it.
+    // Turned, the box stays square to the screen: c is turned back, and the
+    // box returned is the one to draw in it. Its size is outerFrame once
+    // the frame is resized while turned, else just enough to hold the map.
+    let outerFrame = null;
     function turnUpright(c, turn) {
-      const box = boardBox();
-      if (!turn) return box;
+      if (!turn) return boardBox();
       const cx = board.w / 2;
       const cy = board.h / 2;
       c.translate(cx, cy);
       c.rotate(-turn);
       c.translate(-cx, -cy);
+      return outerBox(turn);
+    }
+    function outerBox(turn) {
+      if (outerFrame) return { ...outerFrame };
+      const box = boardBox();
+      const cx = board.w / 2;
+      const cy = board.h / 2;
       const cos = Math.abs(Math.cos(turn));
       const sin = Math.abs(Math.sin(turn));
       const w = box.w * cos + box.h * sin;
@@ -16054,6 +16062,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
+      file.outerFrame = outerFrame;
       file.customTerrains = savedCustomTerrains();
       file.presentation = presentation;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle, terrain: type }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }), ...(type && { terrain: type }) }));
@@ -16124,6 +16133,7 @@
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new Event('change'));
       }
+      outerFrame = file.outerFrame ?? null;
       for (const entry of [...customTerrains]) removeCustomTerrain(entry);
       for (const saved of file.customTerrains ?? []) addCustomTerrain(saved);
       terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
@@ -17233,7 +17243,31 @@
     document.addEventListener('keydown', (e) => {
       if (frameEditing && e.key === 'Escape') setFrameEditing(false);
     });
+    // Turned, the handles are the outer frame's, square to the screen. A
+    // point in the upright frame and on the map are the board's centre
+    // turned by the map's turn.
+    const frameTurn = () => canvasTilt?.turn ?? 0;
+    function fromUpright(p, turn) {
+      const [cx, cy] = [board.w / 2, board.h / 2];
+      const q = new DOMMatrix().translate(cx, cy).rotate((-turn * 180) / Math.PI).translate(-cx, -cy).transformPoint(new DOMPoint(p.x, p.y));
+      return { x: q.x, y: q.y };
+    }
+    function toUpright(p, turn) {
+      return fromUpright(p, -turn);
+    }
+    function outerHandles(turn) {
+      const { x, y, w, h } = outerBox(turn);
+      const at = { nw: [x, y], n: [x + w / 2, y], ne: [x + w, y], e: [x + w, y + h / 2], se: [x + w, y + h], s: [x + w / 2, y + h], sw: [x, y + h], w: [x, y + h / 2] };
+      return Object.fromEntries(Object.entries(at).map(([part, [px, py]]) => [part, { x: px, y: py }]));
+    }
     function frameHandles() {
+      const turn = frameTurn();
+      if (turn) {
+        return Object.fromEntries(Object.entries(outerHandles(turn)).map(([part, p]) => {
+          const q = toScreen(fromUpright(p, turn));
+          return [part, [q.x, q.y]];
+        }));
+      }
       const [x0, y0] = [view.x, view.y];
       const [x1, y1] = [view.x + board.w * view.scale, view.y + board.h * view.scale];
       const [xm, ym] = [(x0 + x1) / 2, (y0 + y1) / 2];
@@ -17252,6 +17286,25 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.strokeStyle = SELECTED_COLOR;
       ctx.lineWidth = 1.5;
+      const turn = frameTurn();
+      if (turn) {
+        const { nw, ne, se, sw } = frameHandles();
+        ctx.beginPath();
+        [nw, ne, se, sw].forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        for (const [x, y] of Object.values(frameHandles())) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(-turn);
+          ctx.fillRect(-4, -4, 8, 8);
+          ctx.strokeRect(-4, -4, 8, 8);
+          ctx.restore();
+        }
+        ctx.restore();
+        return;
+      }
       ctx.strokeRect(view.x, view.y, board.w * view.scale, board.h * view.scale);
       ctx.fillStyle = '#fff';
       for (const [x, y] of Object.values(frameHandles())) {
@@ -17300,9 +17353,26 @@
       canvas.setPointerCapture(e.pointerId);
       const edges = backgroundImage ? backgroundRect() : satelliteReference ? satelliteRect() : null;
       frameDrag = { part, x: e.clientX, y: e.clientY, start: { w: board.w, h: board.h, viewX: view.x, viewY: view.y }, shifted: { x: 0, y: 0 }, edges };
+      const turn = frameTurn();
+      if (turn && part !== 'move') Object.assign(frameDrag, { turn, outer: outerBox(turn), from: toUpright(toBackground(s.x, s.y), turn) });
     }, { capture: true });
     window.addEventListener('pointermove', (e) => {
       if (!frameDrag) return;
+      // Turned, a handle moves the outer frame's edges, measured square to the screen.
+      if (frameDrag.outer) {
+        const s = canvasPoint(e);
+        const now = toUpright(toBackground(s.x, s.y), frameDrag.turn);
+        const [dx, dy] = [now.x - frameDrag.from.x, now.y - frameDrag.from.y];
+        const { part, outer } = frameDrag;
+        let [left, right, top, bottom] = [outer.x, outer.x + outer.w, outer.y, outer.y + outer.h];
+        if (part.includes('w')) left = Math.min(left + dx, right - FRAME_MIN_SIZE);
+        if (part.includes('e')) right = Math.max(right + dx, left + FRAME_MIN_SIZE);
+        if (part.includes('n')) top = Math.min(top + dy, bottom - FRAME_MIN_SIZE);
+        if (part.includes('s')) bottom = Math.max(bottom + dy, top + FRAME_MIN_SIZE);
+        outerFrame = { x: left, y: top, w: right - left, h: bottom - top };
+        draw();
+        return;
+      }
       const dx = (e.clientX - frameDrag.x) / view.scale;
       const dy = (e.clientY - frameDrag.y) / view.scale;
       const { part } = frameDrag;
@@ -17381,7 +17451,7 @@
         if (selectedShapes.length) return SHAPE_NAMES[selectedShapes[0].kind];
         if (sketchSelected?.point) return 'Point';
         if (sketchSelected?.figure) return 'Shape';
-        if (frameEditing) return 'Inner Frame';
+        if (frameEditing) return frameTurn() ? 'Outer Frame' : 'Inner Frame';
         return 'Base';
       }
       if (selected?.area) return 'Area';

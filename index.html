@@ -1795,6 +1795,14 @@
       display: flex;
       justify-content: space-between;
     }
+    /* A custom terrain's delete sits just left of its draw button. */
+    .custom-terrain .terrain-delete {
+      margin-left: auto;
+      margin-right: 12px;
+    }
+    .custom-terrain .terrain-delete .material-symbols-rounded {
+      font-size: 20px;
+    }
     .style-picker {
       display: flex;
       flex-direction: column;
@@ -3503,6 +3511,55 @@
           </div>
         </div>
       </div>
+      <div id="terrain-add" class="label-section terrain-section tab-landscape" hidden>
+        <button id="add-terrain" class="new-style" type="button">Add Terrain<span class="material-symbols-rounded">add</span></button>
+      </div>
+      <template id="terrain-template">
+      <div id="terrain-__id__" class="label-section terrain-section custom-terrain tab-landscape" data-terrain="__id__">
+        <div class="section-heading"><span class="terrain-title">__name__</span><button class="terrain-delete" type="button" aria-label="Delete __name__"><span class="material-symbols-rounded">delete</span></button><button class="terrain-draw" type="button" data-terrain="__id__" aria-label="Draw __id__"><span class="material-symbols-rounded">polyline</span></button></div>
+        <div class="field-group">
+          <label class="field">
+            Name
+            <input class="terrain-name" type="text" value="__name__">
+          </label>
+          <label class="field">
+            Color
+            <span class="color-field"><input id="__id__-color" type="color" value="#7f9c5a"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="__name__ opacity">%</span>
+          </label>
+          <div class="field">
+            Effect
+            <div class="toggle-group terrain-effects" data-for="__id__-effect">
+              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
+              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
+              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
+            </div>
+            <select id="__id__-effect" hidden>
+              <option value="none">None</option>
+              <option value="stripes">Stripes</option>
+              <option value="dots">Dots</option>
+            </select>
+          </div>
+          <div id="__id__-pattern" class="terrain-pattern" hidden>
+            <label class="field">
+              Pattern Color
+              <span class="color-field"><input id="__id__-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="__name__ pattern opacity">%</span>
+            </label>
+            <label class="field">
+              <span class="pattern-size-label">Stripe Thickness</span>
+              <input id="__id__-pattern-size" type="number" min="0.5" step="0.5" value="4">
+            </label>
+            <label class="field">
+              <span class="pattern-gap-label">Stripe Spacing</span>
+              <input id="__id__-pattern-gap" type="number" min="0" step="0.5" value="8">
+            </label>
+            <label class="field">
+              <span class="pattern-angle-label">Stripe Angle</span>
+              <span class="slider"><input id="__id__-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="__name__ pattern angle"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      </template>
       <div class="label-section tab-base">
         <div class="field">
           Presentation
@@ -14979,7 +15036,7 @@
     const allStamps = () => [...trees, ...fillAreas.flatMap(areaStamps)];
     const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
     // Outlines are drawn in the color the area paints with.
-    const areaColor = (area) => (area.terrain ? colorOf(TERRAIN[area.terrain].color) : area.wash ? washLook(area).colors[0] : treeColorInput.value);
+    const areaColor = (area) => (area.terrain ? terrainLook(area.terrain).color : area.wash ? washLook(area).colors[0] : treeColorInput.value);
     // Outlines show only in the Landscape tool; the selected one bolder, with handles to drag its corners.
     function drawFillAreas(c) {
       c.save();
@@ -15197,7 +15254,7 @@
       c.save();
       c.beginPath();
       fillDraft.forEach(({ x, y }, i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-      const color = fillingTerrain ? colorOf(TERRAIN[fillingTerrain].color) : treeSet === 'brushes' ? washFrom.value : treeColorInput.value;
+      const color = fillingTerrain ? terrainLook(fillingTerrain).color : treeSet === 'brushes' ? washFrom.value : treeColorInput.value;
       c.strokeStyle = color;
       c.lineWidth = 2 / view.scale;
       c.setLineDash([6 / view.scale, 4 / view.scale]);
@@ -15211,7 +15268,8 @@
       }
       c.restore();
     }
-    const TERRAIN = Object.fromEntries(['water', 'dirt', 'grass'].map((type) => [type, {
+    // A terrain's fields, found by the ids its section gives them.
+    const terrainKind = (type) => ({
       color: document.getElementById(`${type}-color`),
       effect: document.getElementById(`${type}-effect`),
       pattern: document.getElementById(`${type}-pattern`),
@@ -15219,10 +15277,13 @@
       patternSize: document.getElementById(`${type}-pattern-size`),
       patternGap: document.getElementById(`${type}-pattern-gap`),
       patternAngle: document.getElementById(`${type}-pattern-angle`),
-    }]));
+    });
+    // Water, Dirt and Grass, then any custom terrains, which are added and removed.
+    const TERRAIN = Object.fromEntries(['water', 'dirt', 'grass'].map((type) => [type, terrainKind(type)]));
     // A terrain's look for a drawn loop, read live so its settings restyle it.
     function terrainLook(type) {
       const kind = TERRAIN[type];
+      if (!kind) return { color: 'transparent', stripes: null, dots: null };
       const effect = kind.effect.value;
       const pattern = { color: colorOf(kind.patternColor), width: Math.max(0.5, Number(kind.patternSize.value) || 4), gap: Math.max(0, Number(kind.patternGap.value) || 0), angle: Number(kind.patternAngle.value) || 0 };
       return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
@@ -15340,7 +15401,7 @@
       if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
-      for (const [i, type] of Object.entries(terrain)) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
+      for (const [i, type] of Object.entries(terrain)) if (TERRAIN[type]) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
       keep(img, await terrainEffectImage(request));
     }
@@ -15368,7 +15429,8 @@
       kind.pattern.querySelector('.pattern-gap-label').textContent = `${word} Spacing`;
       kind.pattern.querySelector('.pattern-angle-label').textContent = `${word} Angle`;
     }
-    for (const kind of Object.values(TERRAIN)) {
+    for (const kind of Object.values(TERRAIN)) wireTerrain(kind);
+    function wireTerrain(kind) {
       kind.color.addEventListener('input', paintTerrain);
       // The effect is picked with icon buttons; the hidden select holds it for saving.
       const effectButtons = document.querySelectorAll(`[data-for="${kind.effect.id}"] button`);
@@ -15522,8 +15584,10 @@
         return { x: r.x + p.x * kx, y: r.y + p.y * ky };
       });
     }
-    for (const button of terrainPop.querySelectorAll('button')) {
-      button.addEventListener('click', () => {
+    terrainPop.addEventListener('click', (e) => {
+      const button = e.target.closest('button');
+      if (!button) return;
+      {
         button.blur();
         // Trees turns each chosen shape into a fill area of the chosen stamps, or round trees.
         if (button.dataset.terrain === 'trees') {
@@ -15547,7 +15611,84 @@
           else terrain[i] = button.dataset.terrain;
         }
         paintTerrain();
+      }
+    });
+    // Custom terrains: each a section made from the template, with a name
+    // that heads it and labels its button in the terrain pop-up. They work
+    // as the built-in ones do.
+    let customTerrains = [];
+    const CUSTOM_TERRAIN_COLORS = ['#c9b27c', '#8fb3c9', '#b7a0c9', '#d3a27f', '#9fbf8f'];
+    function addCustomTerrain({ id = `terrain${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, name, settings } = {}) {
+      name ??= `Terrain ${customTerrains.length + 1}`;
+      const html = document.getElementById('terrain-template').innerHTML.replaceAll('__id__', id).replaceAll('__name__', name.replace(/[<>&"]/g, ''));
+      const holder = document.createElement('div');
+      holder.innerHTML = html;
+      const section = holder.firstElementChild;
+      section.hidden = backgroundTool !== 'tree' || backgroundTools.hidden;
+      document.getElementById('terrain-add').before(section);
+      const kind = terrainKind(id);
+      TERRAIN[id] = kind;
+      kind.color.value = CUSTOM_TERRAIN_COLORS[customTerrains.length % CUSTOM_TERRAIN_COLORS.length];
+      const popButton = Object.assign(document.createElement('button'), { type: 'button', textContent: name });
+      popButton.dataset.terrain = id;
+      terrainPop.querySelector('[data-terrain="trees"]').before(popButton);
+      const entry = { id, name, section, popButton };
+      customTerrains.push(entry);
+      wireTerrain(kind);
+      const nameInput = section.querySelector('.terrain-name');
+      nameInput.value = name;
+      nameInput.addEventListener('input', () => {
+        entry.name = nameInput.value;
+        section.querySelector('.terrain-title').textContent = entry.name;
+        popButton.textContent = entry.name;
       });
+      section.querySelector('.terrain-draw').addEventListener('click', (e) => {
+        e.currentTarget.blur();
+        if (fillingArea && fillingTerrain === id) return setFilling(false);
+        setFilling(true, id);
+      });
+      section.querySelector('.terrain-delete').addEventListener('click', () => removeCustomTerrain(entry));
+      if (settings) {
+        for (const [field, value] of Object.entries(settings)) {
+          const input = document.getElementById(`${id}-${field}`);
+          if (!input) continue;
+          const opacity = input.nextElementSibling?.classList.contains('opacity');
+          if (opacity) showColor(input, value);
+          else input.value = value;
+        }
+      }
+      for (const input of [kind.color, kind.patternColor, kind.patternSize, kind.patternGap, kind.patternAngle]) input.dispatchEvent(new Event('input'));
+      kind.effect.dispatchEvent(new Event('change'));
+      return entry;
+    }
+    // Shapes and areas of a deleted terrain go back to having none.
+    function removeCustomTerrain(entry) {
+      customTerrains = customTerrains.filter((other) => other !== entry);
+      entry.section.remove();
+      entry.popButton.remove();
+      delete TERRAIN[entry.id];
+      terrain = Object.fromEntries(Object.entries(terrain).filter(([, type]) => type !== entry.id));
+      fillAreas = fillAreas.filter((area) => area.terrain !== entry.id);
+      if (selectedArea && !fillAreas.includes(selectedArea)) selectedArea = null;
+      if (fillingTerrain === entry.id) setFilling(false);
+      paintTerrain();
+    }
+    document.getElementById('add-terrain').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      const entry = addCustomTerrain();
+      entry.section.scrollIntoView({ block: 'nearest' });
+    });
+    // What a custom terrain saves: its name and its fields, by their id endings.
+    const customTerrainFields = ['color', 'effect', 'pattern-color', 'pattern-size', 'pattern-gap', 'pattern-angle'];
+    function savedCustomTerrains() {
+      return customTerrains.map(({ id, name }) => ({
+        id,
+        name,
+        settings: Object.fromEntries(customTerrainFields.map((field) => {
+          const input = document.getElementById(`${id}-${field}`);
+          return [field, input.type === 'color' ? colorOf(input) : input.value];
+        })),
+      }));
     }
     window.addEventListener('keydown', (e) => {
       if (!selectedTerrain.length || e.key !== 'Escape' || e.target.closest('input, textarea, select')) return;
@@ -15913,6 +16054,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
+      file.customTerrains = savedCustomTerrains();
       file.presentation = presentation;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle, terrain: type }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }), ...(type && { terrain: type }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
@@ -15982,6 +16124,8 @@
         input.dispatchEvent(new Event('input'));
         input.dispatchEvent(new Event('change'));
       }
+      for (const entry of [...customTerrains]) removeCustomTerrain(entry);
+      for (const saved of file.customTerrains ?? []) addCustomTerrain(saved);
       terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
       setPresentation(file.presentation ?? '2d');
       selectedTerrain = [];

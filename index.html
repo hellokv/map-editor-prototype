@@ -4221,16 +4221,17 @@
       document.getElementById('dimension-toggle').hidden = value !== 'both';
       document.getElementById('map-scale-3d-field').hidden = value === '2d';
       showProjectionFields();
+      showBuildingFields();
       draw();
     }
     // Projection and tilt only mean something for a map meant to be seen in 3D.
     function showProjectionFields() {
       const deep = presentation === '3d' || presentation === 'both';
       document.getElementById('map-projection').closest('.field').hidden = !deep;
-      document.getElementById('map-tilt-field').hidden = !deep || buildingsOnlyInput.checked;
+      document.getElementById('map-tilt-field').hidden = !deep;
     }
     // A map shown both ways gets a 2D/3D switch by the zoom. 2D shows it
-    // top down with buildings flat, whatever its tilt, turn and lift.
+    // untilted: top down, or with isometric buildings when those are on.
     let viewDimension = '3d';
     const flatView = () => presentation === 'both' && viewDimension === '2d';
     const dimensionButtons = document.querySelectorAll('#dimension-toggle button');
@@ -13565,6 +13566,7 @@
     const mapView = document.getElementById('map-view');
     const buildingsOnlyInput = document.getElementById('buildings-only');
     const buildingsOnly = () => buildingsOnlyInput.checked;
+    const isoBuildings = () => buildingsOnly() && (presentation === '2d' || flatView());
     const projectionButtons = document.querySelectorAll('#map-projection button');
     mapView.addEventListener('change', () => {
       // Files from before the buildings' projection was its own setting kept it here.
@@ -13576,8 +13578,8 @@
       for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.view === mapView.value));
       draw();
     });
-    // The Buildings tab's Projection: Isometric raises the buildings over a
-    // flat map, Top-down leaves the map's own projection to show them.
+    // The Buildings tab's 2D Projection: in 2D, Isometric raises the buildings
+    // over the flat map. 3D shows them in the map's own projection.
     const buildingsProjectionButtons = document.querySelectorAll('#buildings-projection button');
     for (const button of buildingsProjectionButtons) {
       button.addEventListener('click', () => {
@@ -13608,13 +13610,13 @@
     // The buildings' fields show while there's a buildings image or a shape made a building.
     function showBuildingFields() {
       document.getElementById('buildings-lift-field').hidden = !hasBuildings();
-      document.getElementById('buildings-only-field').hidden = !hasBuildings();
+      document.getElementById('buildings-only-field').hidden = !hasBuildings() || presentation === '3d';
       document.getElementById('buildings-colors').hidden = !hasBuildings();
       showBuildingRotation();
       showShadowFields();
     }
     function showBuildingRotation() {
-      document.getElementById('buildings-rotation-field').hidden = !hasBuildings() || !buildingsOnly();
+      document.getElementById('buildings-rotation-field').hidden = !hasBuildings() || !buildingsOnly() || presentation === '3d';
       buildingsRotationReset.hidden = !buildingsRotate.checked;
       if (!buildingsRotate.checked) {
         buildingsRotationInput.value = Number(mapRotationInput.value) || 0;
@@ -13647,7 +13649,7 @@
     // map's, unless Building Rotation overrides it.
     // Building Rotation applies only to isometric buildings, where it's offered.
     function leanSpin() {
-      if (!buildingsRotate.checked || !buildingsOnly()) return canvasTilt.spin;
+      if (!buildingsRotate.checked || !isoBuildings()) return canvasTilt.spin;
       const { cx, cy } = canvasTilt;
       return new DOMMatrix().translate(cx, cy).rotate(Number(buildingsRotationInput.value) || 0).translate(-cx, -cy);
     }
@@ -14102,7 +14104,7 @@
       const sy = r.h / buildingsImage.naturalHeight;
       return { x: r.x + part.x * sx, y: r.y + part.y * sy, w: part.w * sx, h: part.h * sy };
     }
-    const panelLift = () => (flatView() ? 0 : Math.max(0, Number(buildingsLiftInput.value) || 0));
+    const panelLift = () => (flatView() && !isoBuildings() ? 0 : Math.max(0, Number(buildingsLiftInput.value) || 0));
     // A part's own height is a percentage of the panel's. Older maps kept a
     // height in pixels, taken over as a percentage the first time it's needed.
     function partHeight(part) {
@@ -16019,10 +16021,10 @@
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
       // Isometric buildings lean at 45°, so a building rises on screen exactly as far as its lift.
-      const flat = buildingsOnly();
+      const flat = isoBuildings();
       // Paths and Location show the map top down, whatever its tilt and rotation.
-      const topDown = blank || !pathTools.hidden || inLocation() || flatView();
-      const deg = topDown ? 0 : flat ? 45 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
+      const topDown = blank || !pathTools.hidden || inLocation() || (flatView() && !flat);
+      const deg = topDown ? 0 : flat ? 45 : presentation === '2d' ? 0 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
       const turn = topDown ? 0 : (Number(mapRotationInput.value) || 0) % 360;
       canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);
       tiltAngles = deg || turn ? { deg, turn, flat } : null;

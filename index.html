@@ -3474,6 +3474,22 @@
             </label>
           </div>
         </div>
+        <div class="field-group">
+          <label class="field">
+            Stroke
+            <input id="__id__-stroke" class="switch" type="checkbox">
+          </label>
+          <div id="__id__-stroke-fields" class="terrain-pattern" hidden>
+            <label class="field">
+              Stroke Color
+              <span class="color-field"><input id="__id__-stroke-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="__name__ stroke opacity">%</span>
+            </label>
+            <label class="field">
+              Stroke Width
+              <input id="__id__-stroke-width" type="number" min="0" step="0.5" value="2">
+            </label>
+          </div>
+        </div>
       </div>
       </template>
       <div class="label-section tab-base">
@@ -15203,6 +15219,10 @@
       patternSize: document.getElementById(`${type}-pattern-size`),
       patternGap: document.getElementById(`${type}-pattern-gap`),
       patternAngle: document.getElementById(`${type}-pattern-angle`),
+      stroke: document.getElementById(`${type}-stroke`),
+      strokeFields: document.getElementById(`${type}-stroke-fields`),
+      strokeColor: document.getElementById(`${type}-stroke-color`),
+      strokeWidth: document.getElementById(`${type}-stroke-width`),
     });
     // Every terrain's fields by its id, as terrains are added and removed.
     const TERRAIN = {};
@@ -15210,16 +15230,17 @@
     // A terrain's look for a drawn loop, read live so its settings restyle it.
     function terrainLook(type) {
       const kind = TERRAIN[type];
-      if (!terrainShown(type)) return { color: 'transparent', stripes: null, dots: null };
+      if (!terrainShown(type)) return { color: 'transparent', stripes: null, dots: null, stroke: null };
       const effect = kind.effect.value;
       const pattern = { color: colorOf(kind.patternColor), width: Math.max(0.5, Number(kind.patternSize.value) || 4), gap: Math.max(0, Number(kind.patternGap.value) || 0), angle: Number(kind.patternAngle.value) || 0 };
-      return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
+      const stroke = kind.stroke.checked && Number(kind.strokeWidth.value) > 0 ? { color: colorOf(kind.strokeColor), width: Number(kind.strokeWidth.value) } : null;
+      return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null, stroke };
     }
     // Terrain areas lie flat on the map under everything raised: filled in
     // their terrain's color, with its stripes or dots over it.
     function drawTerrainAreas(areas) {
       for (const area of areas) {
-        const { color, stripes, dots } = terrainLook(area.terrain);
+        const { color, stripes, dots, stroke } = terrainLook(area.terrain);
         ctx.save();
         ctx.beginPath();
         area.points.forEach(({ x, y }, i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
@@ -15231,6 +15252,12 @@
           const ys = area.points.map((q) => q.y);
           const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
           (stripes ? paintStripes : paintDots)(stripes ?? dots, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
+        }
+        if (stroke) {
+          ctx.strokeStyle = stroke.color;
+          ctx.lineWidth = stroke.width;
+          ctx.lineJoin = 'round';
+          ctx.stroke();
         }
         ctx.restore();
       }
@@ -15319,8 +15346,16 @@
       if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
+      // A terrain's stroke replaces the shape's own: its width is in map
+      // units, so it's divided by the image's scale.
+      const perUnit = 1 / baseScale().kx;
       for (const [i, type] of Object.entries(terrain)) {
-        if (terrainShown(type)) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
+        const stroke = terrainLook(type).stroke;
+        if (terrainShown(type)) {
+          els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
+          els[i]?.style.setProperty('stroke', stroke ? stroke.color : 'none');
+          if (stroke) els[i]?.style.setProperty('stroke-width', String(stroke.width * perUnit));
+        }
         else if (TERRAIN[type]) els[i]?.style.setProperty('display', 'none');
       }
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
@@ -15351,6 +15386,11 @@
       kind.pattern.querySelector('.pattern-angle-label').textContent = `${word} Angle`;
     }
     function wireTerrain(kind) {
+      kind.stroke.addEventListener('change', () => {
+        kind.strokeFields.hidden = !kind.stroke.checked;
+        paintTerrain();
+      });
+      for (const input of [kind.strokeColor, kind.strokeColor.nextElementSibling, kind.strokeWidth]) input.addEventListener('input', paintTerrain);
       kind.color.addEventListener('input', paintTerrain);
       // The effect is picked with icon buttons; the hidden select holds it for saving.
       const effectButtons = document.querySelectorAll(`[data-for="${kind.effect.id}"] button`);
@@ -15622,7 +15662,8 @@
           const input = document.getElementById(`${id}-${field}`);
           if (!input) continue;
           const opacity = input.nextElementSibling?.classList.contains('opacity');
-          if (opacity) showColor(input, value);
+          if (input.type === 'checkbox') input.checked = !!value;
+          else if (opacity) showColor(input, value);
           else input.value = value;
         }
       }
@@ -15630,6 +15671,7 @@
       if (settings) {
         for (const input of [kind.color, kind.patternColor, kind.patternSize, kind.patternGap, kind.patternAngle]) input.dispatchEvent(new Event('input'));
         kind.effect.dispatchEvent(new Event('change'));
+        kind.stroke.dispatchEvent(new Event('change'));
       }
       return entry;
     }
@@ -15662,7 +15704,7 @@
     });
     for (const terrainType of DEFAULT_TERRAINS) addCustomTerrain(terrainType);
     // What a custom terrain saves: its name and its fields, by their id endings.
-    const customTerrainFields = ['color', 'effect', 'pattern-color', 'pattern-size', 'pattern-gap', 'pattern-angle'];
+    const customTerrainFields = ['color', 'effect', 'pattern-color', 'pattern-size', 'pattern-gap', 'pattern-angle', 'stroke', 'stroke-color', 'stroke-width'];
     function savedCustomTerrains() {
       return customTerrains.map(({ id, name, visible }) => ({
         id,
@@ -15670,7 +15712,7 @@
         ...(!visible && { visible }),
         settings: Object.fromEntries(customTerrainFields.map((field) => {
           const input = document.getElementById(`${id}-${field}`);
-          return [field, input.type === 'color' ? colorOf(input) : input.value];
+          return [field, input.type === 'color' ? colorOf(input) : input.type === 'checkbox' ? input.checked : input.value];
         })),
       }));
     }

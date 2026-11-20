@@ -5344,6 +5344,14 @@
         lists: lists.map((list) => ({ ...list, items: list.items.map((item) => ({ ...item })) })),
         shapes: shapes.map((shape) => ({ ...shape })),
         ...copySketch(),
+        // The landscape: what's deleted from the background and buildings, terrain, trees and areas.
+        landscape: {
+          terrain: { ...terrain },
+          removedBase: [...removedBase],
+          removedParts: buildingParts.map((part) => !!part.removed),
+          trees: trees.map((tree) => ({ ...tree })),
+          fillAreas: fillAreas.map((area) => ({ ...area, points: area.points.map((q) => ({ ...q })) })),
+        },
         selection: copiedSelection,
       };
     }
@@ -5354,7 +5362,7 @@
 
     function undo() {
       if (!undoState) return;
-      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, iconStyles: restoredIconStyles, lists: restoredLists, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, selection } = undoState;
+      const { paths: restoredPaths, fills: restoredFills, groups: restoredGroups, labels: restoredLabels, labelStyles: restoredStyles, iconStyles: restoredIconStyles, lists: restoredLists, shapes: restoredShapes, sketch: restoredSketch, sketchFills: restoredSketchFills, landscape: restoredLandscape, selection } = undoState;
       undoState = null;
       paths.splice(0, paths.length, ...restoredPaths);
       groups.splice(0, groups.length, ...restoredGroups);
@@ -5375,6 +5383,17 @@
       sketchActive = null;
       sketchSelected = null;
       fills.splice(0, fills.length, ...restoredFills);
+      if (restoredLandscape) {
+        terrain = restoredLandscape.terrain;
+        removedBase = new Set(restoredLandscape.removedBase);
+        buildingParts.forEach((part, i) => { part.removed = !!restoredLandscape.removedParts[i]; });
+        trees = restoredLandscape.trees;
+        fillAreas = restoredLandscape.fillAreas;
+        selectedTerrain = [];
+        selectedArea = null;
+        selectBuilding(null);
+        paintTerrain();
+      }
       if (selection.area) {
         selected = { path: restoredPaths[selection.pathIndex], area: selection.area };
       } else {
@@ -11384,6 +11403,7 @@
         showStampChoice();
         if (area || hadSelection || !treeShape) return draw();
         const tree = treeAt(s);
+        recordUndo();
         trees = tree ? trees.filter((other) => other !== tree) : [...trees, { x: p.x, y: p.y, shape: treeShape }];
         return;
       }
@@ -13376,6 +13396,7 @@
     // A building from the image is deleted alone; a building shape is deleted as a shape.
     function deleteSelectedBuilding() {
       if (!selectedBuilding) return;
+      recordUndo();
       if (selectedBuilding.shape) {
         shapes.splice(shapes.indexOf(selectedBuilding.shape), 1);
         selectedShapes = [];
@@ -15091,6 +15112,7 @@
       draw();
     }
     function deleteArea() {
+      recordUndo();
       fillAreas = fillAreas.filter((area) => area !== selectedArea);
       deselectArea();
     }
@@ -15622,6 +15644,7 @@
           return;
         }
         if (button.dataset.terrain === 'delete') return deleteBaseShapes();
+        recordUndo();
         terrain = { ...terrain };
         for (const i of selectedTerrain) {
           if (button.dataset.terrain === 'none') delete terrain[i];
@@ -15803,12 +15826,14 @@
     const showImageReset = () => { imageReset.hidden = !removedBase.size && !Object.keys(terrain).length; };
     imageReset.addEventListener('click', () => {
       imageReset.blur();
+      recordUndo();
       removedBase = new Set();
       terrain = {};
       selectedTerrain = [];
       paintTerrain();
     });
     function deleteBaseShapes() {
+      recordUndo();
       for (const i of selectedTerrain) {
         removedBase.add(i);
         delete terrain[i];

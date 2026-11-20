@@ -3314,7 +3314,6 @@
           Depth
           <span class="slider"><span class="percent-field"><input id="tree-depth" type="number" min="0" max="100" step="1" value="0"></span><input type="range" min="0" max="100" step="1" value="0" aria-label="Tree depth"></span>
         </label>
-        <button id="landscape-fill" class="new-style" type="button" aria-pressed="false">Fill Area<span class="material-symbols-rounded">pentagon</span></button>
         <label id="landscape-fill-spacing-field" class="field" hidden>
           Density
           <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
@@ -14900,7 +14899,7 @@
     // a grid at the spacing its density gives, each point nudged up to 40% of
     // it. The nudges come from the area's own seed, so its stamps stay put
     // while it's redrawn, and move only when it's reshaped.
-    const fillButton = document.getElementById('landscape-fill');
+    const fillButton = document.getElementById('tree-draw');
     const fillSpacing = document.getElementById('landscape-fill-spacing');
     linkSlider(fillSpacing);
     function setFilling(on) {
@@ -14911,18 +14910,14 @@
         showStampChoice();
       }
       fillButton.setAttribute('aria-pressed', String(on));
-      document.getElementById('tree-draw').setAttribute('aria-pressed', String(on));
       document.getElementById('landscape-fill-hint').hidden = !on;
       showTreeSet();
       draw();
     }
-    // The Trees heading's draw button is Fill Area by another name.
-    for (const button of [fillButton, document.getElementById('tree-draw')]) {
-      button.addEventListener('click', () => {
-        button.blur();
-        setFilling(!fillingArea);
-      });
-    }
+    fillButton.addEventListener('click', () => {
+      fillButton.blur();
+      setFilling(!fillingArea);
+    });
     window.addEventListener('keydown', (e) => {
       if (!fillingArea || e.target.closest('input, textarea, select')) return;
       if (e.key === 'Escape') setFilling(false);

@@ -2559,6 +2559,7 @@
             Plane
             <div id="label-plane-toggle" class="toggle-group">
               <button type="button" data-plane="screen" aria-pressed="true">Screen</button>
+              <button type="button" data-plane="building" aria-pressed="false">Building</button>
               <button type="button" data-plane="base" aria-pressed="false">Base</button>
             </div>
           </div>
@@ -9181,15 +9182,20 @@
       imagePlace.blur();
       draw();
     });
-    // A label stands upright on the screen, or with Base lies on the map and tilts and turns with it.
+    // A label stands upright on the screen, or with Base lies on the map and
+    // tilts and turns with it. Building stands it upright at the height of
+    // the tallest building, so over a tilted map it shows that much higher.
+    const planeOf = (label) => (label.basePlane ? 'base' : label.buildingPlane ? 'building' : 'screen');
     for (const button of document.querySelectorAll('#label-plane-toggle button')) {
       button.addEventListener('click', () => {
         button.blur();
         if (!selectedLabels.length) return;
         recordUndo();
         for (const label of selectedLabels) {
+          delete label.basePlane;
+          delete label.buildingPlane;
           if (button.dataset.plane === 'base') label.basePlane = true;
-          else delete label.basePlane;
+          if (button.dataset.plane === 'building') label.buildingPlane = true;
         }
         draw();
       });
@@ -9582,7 +9588,7 @@
       if (!anyLabels && !labelStyleList.closest('[hidden]') && currentStyleListKey() !== styleListKey) renderLabelStyles();
       if (anyLabels) {
         for (const button of document.querySelectorAll('#label-plane-toggle button')) {
-          button.setAttribute('aria-pressed', String(selectedLabels.every((label) => !!label.basePlane === (button.dataset.plane === 'base'))));
+          button.setAttribute('aria-pressed', String(selectedLabels.every((label) => planeOf(label) === button.dataset.plane)));
         }
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
@@ -15590,9 +15596,14 @@
         const a = anchor(item);
         return Object.assign(item, { x: item.x + p.x - a.x, y: item.y + p.y - a.y });
       };
+      // Building labels are raised as the roofs of the tallest building are.
+      const top = Math.max(0, ...allBuildingParts().map(partLift)) * view.scale;
+      const rise = top ? liftMatrix(top) : null;
+      const lift = (item, p) => (rise && standing.has(item) && item.buildingPlane ? rise.transformPoint(new DOMPoint(p.x, p.y)) : p);
+      const drop = (item, p) => (rise && standing.has(item) && item.buildingPlane ? rise.inverse().transformPoint(new DOMPoint(p.x, p.y)) : p);
       const saved = moved.map((item) => {
         const before = { x: item.x, y: item.y };
-        const f = toScreen(anchor(item));
+        const f = lift(item, toScreen(anchor(item)));
         const w = windowPoint(f.x, f.y);
         setAnchor(item, toBackground(w.x, w.y));
         return [item, before, { x: item.x, y: item.y }];
@@ -15607,7 +15618,7 @@
           if (item.x === placed.x && item.y === placed.y) Object.assign(item, before);
           else {
             const s = toScreen(anchor(item));
-            const flat = untilt(s.x, s.y);
+            const flat = drop(item, untilt(s.x, s.y));
             setAnchor(item, toBackground(flat.x, flat.y));
           }
         }

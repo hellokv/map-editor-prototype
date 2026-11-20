@@ -3318,7 +3318,6 @@
           Density
           <span class="slider"><input id="landscape-fill-spacing" type="number" min="1" max="100" step="1" value="25"><input type="range" min="1" max="100" step="1" value="25" aria-label="Fill density"></span>
         </label>
-        <p id="landscape-fill-hint" class="panel-note" hidden></p>
         <div id="tree-size-group" class="field-group">
           <label class="field">
             Size
@@ -14687,11 +14686,6 @@
       // Washes lie in the paper, so they cast no shadow to set.
       document.getElementById('tree-shadows-field').closest('.field-group').hidden = brushes;
       document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes || !!fillingTerrain;
-      document.getElementById('landscape-fill-hint').textContent = fillingTerrain
-        ? 'Click around the area; click the first point, or press Enter, to finish it. Escape cancels. Click it later to move or reshape it.'
-        : brushes
-        ? 'Click around the area; click the first point, or press Enter, to paint it. Escape cancels. Click an area later to change it.'
-        : 'Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.';
     }
     for (const button of treeSetButtons) {
       button.addEventListener('click', () => {
@@ -14913,7 +14907,6 @@
         showStampChoice();
       }
       fillButton.setAttribute('aria-pressed', String(on && !fillingTerrain));
-      document.getElementById('landscape-fill-hint').hidden = !on;
       showTreeSet();
       draw();
     }

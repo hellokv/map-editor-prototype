@@ -15500,9 +15500,17 @@
       const { r, kx, ky } = baseScale();
       const x = (p.x - r.x) / kx;
       const y = (p.y - r.y) / ky;
+      // A stroke is picked along its width, give or take a few screen pixels,
+      // so outline-only shapes can be clicked too.
+      const reach = 6 / (kx * view.scale);
       for (let i = baseShapes.shapes.length - 1; i >= 0; i--) {
-        const { path, filled } = baseShapes.shapes[i];
-        if (filled && !removedBase.has(i) && areaProbe.isPointInPath(path, x, y)) return i;
+        const { path, filled, stroke } = baseShapes.shapes[i];
+        if (removedBase.has(i)) continue;
+        if (filled && areaProbe.isPointInPath(path, x, y)) return i;
+        if (stroke > 0) {
+          areaProbe.lineWidth = stroke + 2 * reach;
+          if (areaProbe.isPointInStroke(path, x, y)) return i;
+        }
       }
       return null;
     }

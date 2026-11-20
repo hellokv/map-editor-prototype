@@ -3359,6 +3359,12 @@
           </div>
           <input id="buildings-only" type="checkbox" hidden>
         </div>
+        <label id="buildings-lift-2d-field" class="field" hidden>
+          2D Height
+          <span class="slider"><input id="buildings-lift-2d" type="number" min="0" max="100" step="1" value="0"><input type="range" min="0" max="100" step="1" value="0" aria-label="2D building height"></span>
+          <button id="buildings-lift-2d-reset" type="button" aria-label="Follow the building height" hidden><span class="material-symbols-rounded">restart_alt</span></button>
+          <input id="buildings-lift-2d-set" type="checkbox" hidden>
+        </label>
         <div id="buildings-colors" class="field-group" hidden>
           <div class="field-pair">
             <label class="field">
@@ -13617,6 +13623,7 @@
     }
     function showBuildingRotation() {
       document.getElementById('buildings-rotation-field').hidden = !hasBuildings() || !buildingsOnly() || presentation === '3d';
+      showLift2d();
       buildingsRotationReset.hidden = !buildingsRotate.checked;
       if (!buildingsRotate.checked) {
         buildingsRotationInput.value = Number(mapRotationInput.value) || 0;
@@ -13643,6 +13650,41 @@
       buildingsRotationReset.blur();
       buildingsRotate.checked = false;
       showBuildingRotation();
+      draw();
+    });
+    // 2D Height, for isometric buildings in 2D, follows Height until it's moved;
+    // buildings-lift-2d-set records that it was.
+    const lift2dInput = document.getElementById('buildings-lift-2d');
+    const lift2dSet = document.getElementById('buildings-lift-2d-set');
+    const lift2dReset = document.getElementById('buildings-lift-2d-reset');
+    function showLift2d() {
+      document.getElementById('buildings-lift-2d-field').hidden = !hasBuildings() || !buildingsOnly() || presentation === '3d';
+      lift2dReset.hidden = !lift2dSet.checked;
+      if (!lift2dSet.checked) {
+        lift2dInput.value = Number(document.getElementById('buildings-lift').value) || 0;
+        lift2dInput.closest('.slider').querySelector('input[type="range"]').value = lift2dInput.value;
+      }
+    }
+    lift2dSet.addEventListener('change', () => {
+      showLift2d();
+      draw();
+    });
+    document.getElementById('buildings-lift').addEventListener('input', showLift2d);
+    linkSlider(lift2dInput);
+    for (const input of [lift2dInput, lift2dInput.closest('.slider').querySelector('input[type="range"]')]) {
+      input.addEventListener('input', (e) => {
+        if (e.isTrusted && !lift2dSet.checked) {
+          lift2dSet.checked = true;
+          showLift2d();
+        }
+        draw();
+      });
+    }
+    lift2dReset.addEventListener('click', (e) => {
+      e.preventDefault();
+      lift2dReset.blur();
+      lift2dSet.checked = false;
+      showLift2d();
       draw();
     });
     // The turn buildings are seen from, which sets the way they lean: the
@@ -14104,7 +14146,10 @@
       const sy = r.h / buildingsImage.naturalHeight;
       return { x: r.x + part.x * sx, y: r.y + part.y * sy, w: part.w * sx, h: part.h * sy };
     }
-    const panelLift = () => (flatView() && !isoBuildings() ? 0 : Math.max(0, Number(buildingsLiftInput.value) || 0));
+    const panelLift = () => {
+      if (flatView() && !isoBuildings()) return 0;
+      return Math.max(0, Number((isoBuildings() ? lift2dInput : buildingsLiftInput).value) || 0);
+    };
     // A part's own height is a percentage of the panel's. Older maps kept a
     // height in pixels, taken over as a percentage the first time it's needed.
     function partHeight(part) {
@@ -16283,7 +16328,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-lift-2d-set', 'buildings-lift-2d', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.

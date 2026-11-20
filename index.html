@@ -2674,8 +2674,8 @@
             </div>
           </div>
           <label id="label-building-height-field" class="field" hidden>
-            Height
-            <span class="slider"><span class="percent-field"><input id="label-building-height" type="number" min="0" max="200" step="1" value="100"></span><input type="range" min="0" max="200" step="1" value="100" aria-label="Label height"></span>
+            Offset
+            <span class="slider"><span class="percent-field"><input id="label-building-height" type="number" min="0" max="200" step="1" value="100"></span><input type="range" min="0" max="200" step="1" value="100" aria-label="Label offset"></span>
           </label>
           </div>
         </div>
@@ -9378,8 +9378,9 @@
         draw();
       });
     }
-    // A Building label's height as a share of the panel's building height,
-    // as a building's own is.
+    // Offset raises a Building label (100% by default) or a Base one (0%) by a
+    // share of the panel's building height, as a building's own height is.
+    const offsetKey = (label) => (label.basePlane ? 'baseOffset' : 'buildingHeight');
     const labelBuildingHeight = document.getElementById('label-building-height');
     const labelBuildingHeightSlider = linkSlider(labelBuildingHeight);
     let labelHeightUndone = false;
@@ -9387,7 +9388,7 @@
       if (!labelHeightUndone) recordUndo();
       labelHeightUndone = true;
       const value = Math.max(0, Number(labelBuildingHeight.value) || 0);
-      for (const label of selectedLabels) if (label.buildingPlane) label.buildingHeight = value;
+      for (const label of selectedLabels) if (label.buildingPlane || label.basePlane) label[offsetKey(label)] = value;
       draw();
     });
     labelBuildingHeight.addEventListener('change', () => { labelHeightUndone = false; });
@@ -9782,10 +9783,11 @@
         for (const button of document.querySelectorAll('#label-plane-toggle button')) {
           button.setAttribute('aria-pressed', String(selectedLabels.every((label) => planeOf(label) === button.dataset.plane)));
         }
-        const onBuildings = selectedLabels.every((label) => label.buildingPlane);
-        document.getElementById('label-building-height-field').hidden = !onBuildings;
-        if (onBuildings && document.activeElement !== labelBuildingHeight) {
-          labelBuildingHeight.value = labelBuildingHeightSlider.value = selectedLabels[0].buildingHeight ?? 100;
+        const plane = planeOf(selectedLabels[0]);
+        const offsetShown = plane !== 'screen' && selectedLabels.every((label) => planeOf(label) === plane);
+        document.getElementById('label-building-height-field').hidden = !offsetShown;
+        if (offsetShown && document.activeElement !== labelBuildingHeight) {
+          labelBuildingHeight.value = labelBuildingHeightSlider.value = selectedLabels[0][offsetKey(selectedLabels[0])] ?? (plane === 'base' ? 0 : 100);
         }
         for (const button of document.querySelectorAll('#label-layers [data-layer]')) {
           button.setAttribute('aria-pressed', selectedLabels.every((label) => label.layers?.[button.dataset.layer]));
@@ -10628,9 +10630,31 @@
       const inFront = byScreenY(labels.filter(labelShown).filter(onItsLabelPlane)).reverse();
       for (const label of inFront) {
         const box = labelArea(label);
-        if (p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h) return label;
+        const at = dropBaseLabel(label, p);
+        if (at.x >= box.x && at.x <= box.x + box.w && at.y >= box.y && at.y <= box.y + box.h) return label;
       }
       return null;
+    }
+    // Where p on the map is on the raised plane of a Base label with an offset.
+    function dropBaseLabel(label, p) {
+      const rise = baseRise(label);
+      if (!rise) return p;
+      const s = toScreen(p);
+      const q = rise.inverse().transformPoint(new DOMPoint(s.x, s.y));
+      return toBackground(q.x, q.y);
+    }
+    // A Base label with an offset lies on a plane raised off the tilted map.
+    function baseRise(label) {
+      if (!label?.basePlane || !label.baseOffset || !canvasTilt || onPlane) return null;
+      const top = (panelLift() * view.scale * label.baseOffset) / 100;
+      return top ? liftMatrix(top) : null;
+    }
+    function raiseBaseLabel(c, label) {
+      const rise = baseRise(label);
+      if (!rise) return;
+      const dpr = window.devicePixelRatio || 1;
+      const margin = canvasTilt.margin ?? { x: 0, y: 0 };
+      c.setTransform(new DOMMatrix().scale(dpr).translate(margin.x, margin.y).multiply(rise).translate(-margin.x, -margin.y).scale(1 / dpr).multiply(c.getTransform()));
     }
 
     // Unit steps for each pointer direction, with y growing downward.
@@ -10872,6 +10896,7 @@
         ctx.shadowBlur = style.size * 0.25 * view.scale * k * dpr;
         ctx.shadowOffsetY = style.size * 0.08 * view.scale * k * dpr;
         ctx.save();
+        raiseBaseLabel(ctx, label);
         zoomAboutLabel(ctx, label);
         if (label.pointer) drawPointer(label, style, k);
         paintLabel(ctx, label, style, k);
@@ -10906,7 +10931,10 @@
       }
       for (const label of boxed) {
         const box = labelArea(label);
+        ctx.save();
+        raiseBaseLabel(ctx, label);
         ctx.strokeRect(box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+        ctx.restore();
       }
       ctx.restore();
       // In split screen, the text box follows the label in the active panel.

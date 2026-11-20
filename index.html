@@ -17414,6 +17414,7 @@
       frameDrag = { part, x: e.clientX, y: e.clientY, start: { w: board.w, h: board.h, viewX: view.x, viewY: view.y }, shifted: { x: 0, y: 0 }, edges };
       const turn = frameTurn();
       if (turn && part !== 'move') Object.assign(frameDrag, { turn, outer: outerBox(turn), from: toUpright(toBackground(s.x, s.y), turn) });
+      if (turn && part === 'move') frameDrag.turn = turn;
     }, { capture: true });
     window.addEventListener('pointermove', (e) => {
       if (!frameDrag) return;
@@ -17436,7 +17437,16 @@
       const dy = (e.clientY - frameDrag.y) / view.scale;
       const { part } = frameDrag;
       // A move follows the pointer step by step; a resize goes by the whole drag from its start.
-      if (part === 'move') {
+      if (part === 'move' && frameDrag.turn) {
+        // Turned, the map moves whole under the outer frame, which stays put on screen.
+        outerFrame = outerFrame ?? outerBox(frameDrag.turn);
+        outerFrame.x -= dx;
+        outerFrame.y -= dy;
+        view.x += dx * view.scale;
+        view.y += dy * view.scale;
+        frameDrag.x = e.clientX;
+        frameDrag.y = e.clientY;
+      } else if (part === 'move') {
         translateContent(dx, dy);
         frameDrag.x = e.clientX;
         frameDrag.y = e.clientY;

@@ -1795,13 +1795,38 @@
       display: flex;
       justify-content: space-between;
     }
-    /* A custom terrain's delete sits just left of its draw button. */
-    .custom-terrain .terrain-delete {
+    /* A custom terrain's ⋮ menu sits right of its draw button. */
+    :is(#panel, #style-panel, #settings-panel) .custom-terrain .section-heading .terrain-draw {
       margin-left: auto;
-      margin-right: 12px;
     }
-    .custom-terrain .terrain-delete .material-symbols-rounded {
+    .terrain-menu {
+      margin-left: 8px;
+      font-size: 14px;
+      font-weight: 400;
+    }
+    .terrain-menu > button .material-symbols-rounded {
       font-size: 20px;
+    }
+    :is(#panel, #style-panel, #settings-panel) .section-heading .terrain-rename {
+      flex: 1;
+      min-width: 0;
+      padding: 2px 4px;
+      font: inherit;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    /* New terrain's name, typed in place before it's added. */
+    :is(#panel, #style-panel, #settings-panel) #terrain-add input {
+      flex: 1;
+      text-align: left;
+    }
+    :is(#panel, #style-panel, #settings-panel) #add-terrain {
+      display: flex;
+      margin-left: 8px;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
     }
     .style-picker {
       display: flex;
@@ -3512,16 +3537,15 @@
         </div>
       </div>
       <div id="terrain-add" class="label-section terrain-section tab-landscape" hidden>
-        <button id="add-terrain" class="new-style" type="button">Add Terrain<span class="material-symbols-rounded">add</span></button>
+        <label class="field">
+          <input id="new-terrain-name" type="text" placeholder="New terrain name" aria-label="New terrain name">
+          <button id="add-terrain" type="button" aria-label="Add terrain"><span class="material-symbols-rounded">add</span></button>
+        </label>
       </div>
       <template id="terrain-template">
       <div id="terrain-__id__" class="label-section terrain-section custom-terrain tab-landscape" data-terrain="__id__">
-        <div class="section-heading"><span class="terrain-title">__name__</span><button class="terrain-delete" type="button" aria-label="Delete __name__"><span class="material-symbols-rounded">delete</span></button><button class="terrain-draw" type="button" data-terrain="__id__" aria-label="Draw __id__"><span class="material-symbols-rounded">polyline</span></button></div>
+        <div class="section-heading"><span class="terrain-title">__name__</span><button class="terrain-draw" type="button" data-terrain="__id__" aria-label="Draw __id__"><span class="material-symbols-rounded">polyline</span></button><span class="style-menu terrain-menu"><button type="button" aria-label="More"><span class="material-symbols-rounded">more_vert</span></button><div role="menu" hidden><button type="button" data-action="rename">Rename</button><button type="button" data-action="delete">Delete</button></div></span></div>
         <div class="field-group">
-          <label class="field">
-            Name
-            <input class="terrain-name" type="text" value="__name__">
-          </label>
           <label class="field">
             Color
             <span class="color-field"><input id="__id__-color" type="color" value="#7f9c5a"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="__name__ opacity">%</span>
@@ -15643,19 +15667,45 @@
       const entry = { id, name, section, popButton };
       customTerrains.push(entry);
       wireTerrain(kind);
-      const nameInput = section.querySelector('.terrain-name');
-      nameInput.value = name;
-      nameInput.addEventListener('input', () => {
-        entry.name = nameInput.value;
-        section.querySelector('.terrain-title').textContent = entry.name;
-        popButton.textContent = entry.name;
+      // Rename edits the heading in place: Enter or leaving keeps it, Escape doesn't.
+      const title = section.querySelector('.terrain-title');
+      const menuItems = section.querySelector('.terrain-menu [role="menu"]');
+      section.querySelector('.terrain-menu > button').addEventListener('click', () => {
+        const opening = menuItems.hidden;
+        closeStyleMenus();
+        menuItems.hidden = !opening;
+      });
+      menuItems.querySelector('[data-action="rename"]').addEventListener('click', () => {
+        menuItems.hidden = true;
+        const input = Object.assign(document.createElement('input'), { type: 'text', className: 'terrain-rename', value: entry.name });
+        input.setAttribute('aria-label', 'Terrain name');
+        title.replaceWith(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = (keep) => {
+          if (done) return;
+          done = true;
+          const name = input.value.trim();
+          if (keep && name) {
+            entry.name = name;
+            title.textContent = name;
+            popButton.textContent = name;
+          }
+          input.replaceWith(title);
+        };
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') finish(true);
+          if (e.key === 'Escape') finish(false);
+        });
+        input.addEventListener('blur', () => finish(true));
       });
       section.querySelector('.terrain-draw').addEventListener('click', (e) => {
         e.currentTarget.blur();
         if (fillingArea && fillingTerrain === id) return setFilling(false);
         setFilling(true, id);
       });
-      section.querySelector('.terrain-delete').addEventListener('click', () => removeCustomTerrain(entry));
+      menuItems.querySelector('[data-action="delete"]').addEventListener('click', () => removeCustomTerrain(entry));
       if (settings) {
         for (const [field, value] of Object.entries(settings)) {
           const input = document.getElementById(`${id}-${field}`);
@@ -15681,10 +15731,19 @@
       if (fillingTerrain === entry.id) setFilling(false);
       paintTerrain();
     }
-    document.getElementById('add-terrain').addEventListener('click', (e) => {
-      e.currentTarget.blur();
-      const entry = addCustomTerrain();
+    const newTerrainName = document.getElementById('new-terrain-name');
+    function addNamedTerrain() {
+      const entry = addCustomTerrain({ name: newTerrainName.value.trim() || undefined });
+      newTerrainName.value = '';
       entry.section.scrollIntoView({ block: 'nearest' });
+    }
+    document.getElementById('add-terrain').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.currentTarget.blur();
+      addNamedTerrain();
+    });
+    newTerrainName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addNamedTerrain();
     });
     // What a custom terrain saves: its name and its fields, by their id endings.
     const customTerrainFields = ['color', 'effect', 'pattern-color', 'pattern-size', 'pattern-gap', 'pattern-angle'];

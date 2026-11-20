@@ -1797,8 +1797,16 @@
     }
     /* A custom terrain's ⋮ menu sits right of its draw button. */
     :is(#panel, #style-panel, #settings-panel) .custom-terrain .section-heading .terrain-eye {
-      margin-left: auto;
-      margin-right: 12px;
+      margin: -4px 8px -4px auto;
+      padding: 4px;
+      border-radius: 6px;
+    }
+    /* Heading buttons share the menu toggle's hover. */
+    :is(#panel, #style-panel, #settings-panel) .section-heading :is(.terrain-draw, .terrain-eye) {
+      cursor: pointer;
+    }
+    :is(#panel, #style-panel, #settings-panel) .section-heading :is(.terrain-draw:not([aria-pressed="true"]), .terrain-eye):hover {
+      background: #e4e4e4;
     }
     .terrain-eye .material-symbols-rounded {
       font-size: 20px;
@@ -1807,7 +1815,7 @@
       opacity: 0.4;
     }
     .terrain-menu {
-      margin-left: 8px;
+      margin-left: 12px;
       font-size: 14px;
       font-weight: 400;
     }

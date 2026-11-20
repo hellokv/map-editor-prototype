@@ -1412,7 +1412,7 @@
     /* The Tree tool's panel is its options alone. */
     #background-panel:not([data-tab="base"]) > .tab-base,
     #background-panel:not([data-tab="buildings"]) > .tab-buildings,
-    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, #terrain-settings) {
+    #background-panel.tree-mode > :not(#background-tabs, #tree-shapes, .terrain-section) {
       display: none !important;
     }
     .tree-shape-grid:not([hidden]) {
@@ -3365,15 +3365,15 @@
           </label>
         </div>
       </div>
-      <div id="terrain-settings" class="label-section tab-landscape" hidden>
-        <div class="section-heading">Terrain</div>
+      <div id="terrain-water" class="label-section terrain-section tab-landscape" hidden>
+        <div class="section-heading">Water</div>
         <div class="field-group">
           <label class="field">
-            Water Color
+            Color
             <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Water opacity">%</span>
           </label>
           <div class="field">
-            Water Effect
+            Effect
             <div class="toggle-group terrain-effects" data-for="water-effect">
               <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
               <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
@@ -3387,7 +3387,7 @@
           </div>
           <div id="water-pattern" class="terrain-pattern" hidden>
             <label class="field">
-              Water Pattern Color
+              Pattern Color
               <span class="color-field"><input id="water-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Water pattern opacity">%</span>
             </label>
             <label class="field">
@@ -3404,13 +3404,16 @@
             </label>
           </div>
         </div>
+      </div>
+      <div id="terrain-dirt" class="label-section terrain-section tab-landscape" hidden>
+        <div class="section-heading">Dirt</div>
         <div class="field-group">
           <label class="field">
-            Dirt Color
+            Color
             <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Dirt opacity">%</span>
           </label>
           <div class="field">
-            Dirt Effect
+            Effect
             <div class="toggle-group terrain-effects" data-for="dirt-effect">
               <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
               <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
@@ -3424,7 +3427,7 @@
           </div>
           <div id="dirt-pattern" class="terrain-pattern" hidden>
             <label class="field">
-              Dirt Pattern Color
+              Pattern Color
               <span class="color-field"><input id="dirt-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Dirt pattern opacity">%</span>
             </label>
             <label class="field">
@@ -3441,13 +3444,16 @@
             </label>
           </div>
         </div>
+      </div>
+      <div id="terrain-grass" class="label-section terrain-section tab-landscape" hidden>
+        <div class="section-heading">Grass</div>
         <div class="field-group">
           <label class="field">
-            Grass Color
+            Color
             <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Grass opacity">%</span>
           </label>
           <div class="field">
-            Grass Effect
+            Effect
             <div class="toggle-group terrain-effects" data-for="grass-effect">
               <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
               <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
@@ -3461,7 +3467,7 @@
           </div>
           <div id="grass-pattern" class="terrain-pattern" hidden>
             <label class="field">
-              Grass Pattern Color
+              Pattern Color
               <span class="color-field"><input id="grass-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Grass pattern opacity">%</span>
             </label>
             <label class="field">
@@ -4221,7 +4227,7 @@
         button.setAttribute('aria-pressed', button.dataset.backgroundTool === name || (name === 'tree' && button.dataset.backgroundTool === 'select'));
       }
       document.getElementById('tree-shapes').hidden = name !== 'tree';
-      document.getElementById('terrain-settings').hidden = name !== 'tree';
+      for (const section of document.querySelectorAll('.terrain-section')) section.hidden = name !== 'tree';
       const panel = document.getElementById('background-panel');
       panel.classList.toggle('tree-mode', name === 'tree');
       // The Landscape tab is the Landscape tool; leaving one leaves the other.

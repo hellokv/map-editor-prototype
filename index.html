@@ -2611,6 +2611,13 @@
             <label for="label-text">Text</label>
             <textarea id="label-text" rows="1"></textarea>
           </div>
+          <div id="label-text-align-field" class="field">
+            Alignment
+            <div id="label-text-align" class="icon-buttons">
+              <button type="button" data-text-align="left" aria-label="Align text left"><span class="material-symbols-rounded">format_align_left</span></button>
+              <button type="button" data-text-align="right" aria-label="Align text right"><span class="material-symbols-rounded">format_align_right</span></button>
+            </div>
+          </div>
           <div class="field-pair">
             <label class="field">
               X
@@ -9131,6 +9138,19 @@
         draw();
       });
     }
+    // Pressing the alignment in use again centres the lines.
+    const textAlignButtons = document.querySelectorAll('[data-text-align]');
+    for (const button of textAlignButtons) {
+      button.addEventListener('click', () => {
+        const label = soleLabel();
+        button.blur();
+        if (!label) return;
+        recordUndo();
+        if (label.textAlign === button.dataset.textAlign) delete label.textAlign;
+        else label.textAlign = button.dataset.textAlign;
+        draw();
+      });
+    }
     const iconSideButtons = document.querySelectorAll('[data-icon-side]');
     for (const button of iconSideButtons) {
       button.addEventListener('click', () => {
@@ -9807,6 +9827,8 @@
         for (const button of iconSideButtons) {
           button.setAttribute('aria-pressed', button.dataset.iconSide === (selectedLabel.iconSide ?? 'left'));
         }
+        document.getElementById('label-text-align-field').hidden = iconOn;
+        for (const button of textAlignButtons) button.setAttribute('aria-pressed', button.dataset.textAlign === selectedLabel.textAlign);
         // Blank means the style's icon size, shown as the placeholder.
         labelIconSizeInput.placeholder = styleOf(selectedLabel).iconSize;
         for (const button of labelResetButtons) button.style.visibility = selectedLabel[button.dataset.reset] === undefined ? 'hidden' : 'visible';
@@ -10305,7 +10327,7 @@
       const y = Math.min(a.y, b.y);
       return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
     };
-    // How a label lies: its lines, each centred on textX, as
+    // How a label lies: its lines, each aligned on textX as align says, as
     // [{ text, y, width }]; its icon centred on (iconX, iconY); its box (the
     // background, padding included) centred on its spot; and bounds, the box
     // plus any icon outside it.
@@ -10380,6 +10402,9 @@
       const iconY = icon ? icon.y + dy : label.y;
       const bounds = outside ? unionRect(box, { x: iconX - sw / 2, y: iconY - sh / 2, w: sw, h: sh }) : box;
       const lines = texts.map((line, i) => ({ text: line, y: dy + (i - (texts.length - 1) / 2) * step, width: widths[i] }));
+      // Only a label without an icon lines its text up to one side.
+      const align = label.icon ? 'center' : label.textAlign ?? 'center';
+      const textX = dx + { left: -tw / 2, center: 0, right: tw / 2 }[align];
       // On levels where only the label's icon shows, the icon keeps its place
       // in the whole label, in a box of its own; frame is still the whole label.
       // While the text fades, the box moves between the two.
@@ -10392,9 +10417,9 @@
           w: iconBox.w + (r.w - iconBox.w) * textAlpha,
           h: iconBox.h + (r.h - iconBox.h) * textAlpha,
         });
-        return { lines: textAlpha ? lines : [], textX: dx, iconX, iconY, box: mix(box), bounds: mix(bounds), frame: box, textAlpha };
+        return { lines: textAlpha ? lines : [], textX, align, iconX, iconY, box: mix(box), bounds: mix(bounds), frame: box, textAlpha };
       }
-      return { lines, textX: dx, iconX, iconY, box, bounds, frame: box, textAlpha };
+      return { lines, textX, align, iconX, iconY, box, bounds, frame: box, textAlpha };
     }
 
     // A label's box in background pixels, centred on its spot, padding included.
@@ -10655,15 +10680,17 @@
         c.shadowColor = 'transparent';
         if (style.outline) strokeOutside(c, shape, box, style.outline, style.outlineWidth);
       }
-      const { lines, iconX, iconY, textX: textMiddle, textAlpha } = labelLayout(label, zoom);
+      const { lines, iconX, iconY, textX: textAnchor, align, textAlpha } = labelLayout(label, zoom);
       const alpha = c.globalAlpha;
       if (label.icon && (style.iconBackground || style.iconOutline)) paintIconBackdrop(c, style, iconX, iconY, zoom);
       // The icon sits off its room's centre by the difference in padding either side.
       const pad = iconPaddingOf(style);
       const glyphX = iconX + (pad.left - pad.right) / 2;
       const glyphY = iconY + (pad.top - pad.bottom) / 2;
-      // Centred text would be pulled left by the trailing gap after its last letter.
-      const textX = textMiddle + style.letterSpacing / 2;
+      // Canvas puts a letter-spacing gap after the last letter too, which would pull centred or right-aligned text left.
+      const textX = textAnchor + { left: 0, center: style.letterSpacing / 2, right: style.letterSpacing }[align];
+      const textAlign = c.textAlign;
+      c.textAlign = align;
       c.letterSpacing = `${style.letterSpacing}px`;
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
@@ -10681,6 +10708,7 @@
       c.globalAlpha = alpha;
       c.fillStyle = style.iconColor ?? style.color;
       if (label.icon) paintIcon(c, label, style, glyphX, glyphY, 'fillText');
+      c.textAlign = textAlign;
     }
     // Padding around an icon with a backdrop, per side; only a square
     // backdrop takes sides of their own.
@@ -10815,7 +10843,7 @@
       ctx.shadowColor = 'transparent';
       ctx.shadowOffsetY = 0;
       if (typing && caretShown()) {
-        const { lines, textX } = labelLayout(typing, labelZoom(typing));
+        const { lines, textX, align } = labelLayout(typing, labelZoom(typing));
         const last = lines.at(-1);
         const px = 1 / (view.scale * labelZoom(typing));
         const typingStyle = styleOf(typing);
@@ -10823,7 +10851,7 @@
           ctx.save();
           zoomAboutLabel(ctx, typing);
           ctx.fillStyle = typingStyle.color;
-          ctx.fillRect(textX + last.width / 2 + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
+          ctx.fillRect(textX + { left: last.width, center: last.width / 2, right: 0 }[align] + 2 * px, last.y - typingStyle.size / 2, 2 * px, typingStyle.size);
           ctx.restore();
         }
       }

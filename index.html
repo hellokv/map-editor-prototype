@@ -10361,14 +10361,19 @@
     // which matters only to a pin's shadow gap.
     const alignOf = (label) => ({ left: 'left', right: 'right', top: 'center', bottom: 'center' })[label.iconSide ?? 'left'];
     // Changes how a label is held without moving it on the map.
+    // The box is compared as drawn, zoomed about the label's anchor and where
+    // it stands on a tilted map, as moving the anchor moves both.
     function keepBox(label, change) {
-      const before = labelLayout(label).box;
-      change();
-      delete label.centred;
-      const after = labelLayout(label).box;
-      const edge = (box) => box.x + box.w * { left: 0, center: 0.5, right: 1 }[alignOf(label)];
-      label.x += edge(before) - edge(after);
-      label.y += before.y + before.h / 2 - (after.y + after.h / 2);
+      onScreenPlane(() => {
+        const shown = () => zoomedRect(label, labelLayout(label, labelZoom(label)).box);
+        const before = shown();
+        change();
+        delete label.centred;
+        const after = shown();
+        const edge = (box) => box.x + box.w * { left: 0, center: 0.5, right: 1 }[alignOf(label)];
+        label.x += edge(before) - edge(after);
+        label.y += before.y + before.h / 2 - (after.y + after.h / 2);
+      });
     }
     function labelLayout(label, zoom = mapScale()) {
       const style = styleOf(label);

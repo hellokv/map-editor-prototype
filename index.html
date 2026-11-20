@@ -14958,13 +14958,15 @@
       return (area.stamps = stamps);
     }
     const allStamps = () => [...trees, ...fillAreas.flatMap(areaStamps)];
-    const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
+    // A hidden terrain's areas aren't there to see or pick until it's shown again.
+    const areaShown = (area) => !area.terrain || terrainShown(area.terrain);
+    const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaShown(area) && areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
     // Outlines are drawn in the color the area paints with.
     const areaColor = (area) => (area.terrain ? (TERRAIN[area.terrain] ? colorOf(TERRAIN[area.terrain].color) : 'transparent') : area.wash ? washLook(area).colors[0] : treeColorInput.value);
     // Outlines show only in the Landscape tool; the selected one bolder, with handles to drag its corners.
     function drawFillAreas(c) {
       c.save();
-      for (const area of fillAreas) {
+      for (const area of fillAreas.filter(areaShown)) {
         const selected = area === selectedArea;
         c.strokeStyle = areaColor(area);
         c.lineWidth = (selected ? 2 : 1.5) / view.scale;
@@ -15048,7 +15050,7 @@
     // that node adds a corner there. The selected area is tried first.
     let edgeNode = null;
     function edgeNodeAt(s) {
-      const areas = [selectedArea, ...[...fillAreas].reverse().filter((area) => area !== selectedArea)].filter(Boolean);
+      const areas = [selectedArea, ...[...fillAreas].reverse().filter((area) => area !== selectedArea)].filter((area) => area && areaShown(area));
       for (const area of areas) {
         const pts = area.points;
         for (let i = 0; i < pts.length; i++) {
@@ -15317,7 +15319,10 @@
       if (!baseShapes || !Object.keys(terrain).length) return keep(null, null);
       const root = new DOMParser().parseFromString(baseShapes.text, 'image/svg+xml').documentElement;
       const els = root.querySelectorAll(BASE_SHAPES);
-      for (const [i, type] of Object.entries(terrain)) if (terrainShown(type)) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
+      for (const [i, type] of Object.entries(terrain)) {
+        if (terrainShown(type)) els[i]?.style.setProperty('fill', colorOf(TERRAIN[type].color));
+        else if (TERRAIN[type]) els[i]?.style.setProperty('display', 'none');
+      }
       const img = await blobImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
       keep(img, await terrainEffectImage(request));
     }
@@ -15607,6 +15612,8 @@
       eye.addEventListener('click', () => {
         eye.blur();
         entry.setVisible(!entry.visible);
+        if (selectedArea?.terrain === id && !entry.visible) selectedArea = null;
+        selectedTerrain = selectedTerrain.filter((i) => terrain[i] !== id || entry.visible);
         paintTerrain();
       });
       if (visible === false) entry.setVisible(false);

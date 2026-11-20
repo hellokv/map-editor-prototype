@@ -3544,13 +3544,27 @@
       </div>
       </template>
       <div class="label-section tab-base">
-        <div class="field">
-          Presentation
-          <div id="presentation-toggle" class="toggle-group">
-            <button type="button" data-presentation="2d" aria-pressed="true">2D</button>
-            <button type="button" data-presentation="3d" aria-pressed="false">3D</button>
-            <button type="button" data-presentation="both" aria-pressed="false">Both</button>
+        <div class="field-group">
+          <div class="field">
+            Presentation
+            <div id="presentation-toggle" class="toggle-group">
+              <button type="button" data-presentation="2d" aria-pressed="true">2D</button>
+              <button type="button" data-presentation="3d" aria-pressed="false">3D</button>
+              <button type="button" data-presentation="both" aria-pressed="false">Both</button>
+            </div>
           </div>
+          <div class="field">
+            3D Projection
+            <div id="map-projection" class="toggle-group">
+              <button type="button" data-view="perspective" aria-pressed="true">Perspective</button>
+              <button type="button" data-view="isometric" aria-pressed="false">Isometric</button>
+            </div>
+            <input id="map-view" type="text" value="perspective" hidden>
+          </div>
+          <label id="map-tilt-field" class="field">
+            Tilt
+            <span class="slider"><input id="map-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Tilt"></span>
+          </label>
         </div>
       </div>
       <div class="label-section background-settings tab-base">
@@ -3597,18 +3611,6 @@
           <input id="background-show-paths" class="switch" type="checkbox">
         </label>
         <div class="field-group">
-          <div class="field">
-            Projection
-            <div id="map-projection" class="toggle-group">
-              <button type="button" data-view="perspective" aria-pressed="true">Perspective</button>
-              <button type="button" data-view="isometric" aria-pressed="false">Isometric</button>
-            </div>
-            <input id="map-view" type="text" value="perspective" hidden>
-          </div>
-          <label id="map-tilt-field" class="field">
-            Tilt
-            <span class="slider"><input id="map-tilt" type="number" min="0" max="75" step="1" value="0"><input type="range" min="0" max="75" step="1" value="0" aria-label="Tilt"></span>
-          </label>
           <label class="field">
             Rotation
             <span class="slider"><input id="map-rotation" type="number" min="0" max="360" step="1" value="0"><input type="range" min="0" max="360" step="1" value="0" aria-label="Rotation"></span>

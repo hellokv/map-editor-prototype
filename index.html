@@ -3326,10 +3326,14 @@
           Height
           <span class="slider"><input id="buildings-lift" type="number" min="0" max="100" step="1" value="0"><input type="range" min="0" max="100" step="1" value="0" aria-label="Building height"></span>
         </label>
-        <label id="buildings-only-field" class="field" hidden>
-          Buildings Only
-          <input id="buildings-only" class="switch" type="checkbox">
-        </label>
+        <div id="buildings-only-field" class="field" hidden>
+          Projection
+          <div id="buildings-projection" class="toggle-group">
+            <button type="button" data-iso="false" aria-pressed="true">Top-down</button>
+            <button type="button" data-iso="true" aria-pressed="false">Isometric</button>
+          </div>
+          <input id="buildings-only" type="checkbox" hidden>
+        </div>
         <div id="buildings-colors" class="field-group" hidden>
           <div class="field-pair">
             <label class="field">
@@ -13425,15 +13429,15 @@
     const mapRotationInput = document.getElementById('map-rotation');
     linkSlider(mapRotationInput);
     mapRotationInput.addEventListener('input', draw);
-    // Perspective and Isometric tilt the whole map. Buildings Only, whichever
-    // is chosen, leaves the map flat and raises just the buildings, straight
-    // up by their lift.
+    // Perspective and Isometric tilt the whole map. The Buildings tab's
+    // Isometric projection, whichever is chosen, leaves the map flat and
+    // raises just the buildings, straight up by their lift.
     const mapView = document.getElementById('map-view');
     const buildingsOnlyInput = document.getElementById('buildings-only');
     const buildingsOnly = () => buildingsOnlyInput.checked;
     const projectionButtons = document.querySelectorAll('#map-projection button');
     mapView.addEventListener('change', () => {
-      // Files from before Buildings Only was its own switch kept it here.
+      // Files from before the buildings' projection was its own setting kept it here.
       if (mapView.value === 'buildings') {
         mapView.value = 'perspective';
         buildingsOnlyInput.checked = true;
@@ -13442,7 +13446,18 @@
       for (const button of projectionButtons) button.setAttribute('aria-pressed', String(button.dataset.view === mapView.value));
       draw();
     });
+    // The Buildings tab's Projection: Isometric raises the buildings over a
+    // flat map, Top-down leaves the map's own projection to show them.
+    const buildingsProjectionButtons = document.querySelectorAll('#buildings-projection button');
+    for (const button of buildingsProjectionButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        buildingsOnlyInput.checked = button.dataset.iso === 'true';
+        buildingsOnlyInput.dispatchEvent(new Event('change'));
+      });
+    }
     buildingsOnlyInput.addEventListener('change', () => {
+      for (const button of buildingsProjectionButtons) button.setAttribute('aria-pressed', String((button.dataset.iso === 'true') === buildingsOnlyInput.checked));
       showProjectionFields();
       showBuildingRotation();
       draw();
@@ -13500,7 +13515,7 @@
     });
     // The turn buildings are seen from, which sets the way they lean: the
     // map's, unless Building Rotation overrides it.
-    // Building Rotation applies only in Buildings Only, where it's offered.
+    // Building Rotation applies only to isometric buildings, where it's offered.
     function leanSpin() {
       if (!buildingsRotate.checked || !buildingsOnly()) return canvasTilt.spin;
       const { cx, cy } = canvasTilt;
@@ -15873,7 +15888,7 @@
     // Rotation turns the map about the box's centre; tilt then tips it back
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
-      // Buildings Only leans at 45°, so a building rises on screen exactly as far as its lift.
+      // Isometric buildings lean at 45°, so a building rises on screen exactly as far as its lift.
       const flat = buildingsOnly();
       // Paths and Location show the map top down, whatever its tilt and rotation.
       const topDown = blank || !pathTools.hidden || inLocation() || flatView();

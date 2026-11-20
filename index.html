@@ -1169,21 +1169,28 @@
       display: block;
       margin: 4px 0;
     }
-    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete) {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete, #image-reset) {
       flex: none;
       display: flex;
       padding: 2px;
       border: none;
       background: none;
     }
-    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete):hover {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete, #image-reset):hover {
       background: #e4e4e4;
     }
-    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete) {
+    :is(#panel, #style-panel, #settings-panel) :is(#image-delete, #buildings-delete, #image-reset) {
       position: absolute;
       top: 12px;
       right: 12px;
       background: rgba(255, 255, 255, 0.9);
+    }
+    :is(#panel, #style-panel, #settings-panel) #image-reset {
+      right: auto;
+      left: 12px;
+    }
+    #image-reset[hidden] {
+      display: none;
     }
     #satellite-reference-field .field-end {
       display: flex;
@@ -3519,6 +3526,9 @@
         </label>
         <div id="image-preview" hidden>
           <img alt="Background image">
+          <button id="image-reset" type="button" aria-label="Reset to the original background" hidden>
+            <span class="material-symbols-rounded">restart_alt</span>
+          </button>
           <button id="image-delete" type="button" aria-label="Delete image">
             <span class="material-symbols-rounded">delete</span>
           </button>
@@ -15365,6 +15375,7 @@
     };
     async function paintTerrain() {
       const request = ++terrainRequest;
+      showImageReset();
       const keep = (img, effect) => {
         if (request !== terrainRequest) {
           dropImage(img);
@@ -15752,6 +15763,16 @@
         })),
       }));
     }
+    // Reset puts the background back as it came: every shape, no terrain on any.
+    const imageReset = document.getElementById('image-reset');
+    const showImageReset = () => { imageReset.hidden = !removedBase.size && !Object.keys(terrain).length; };
+    imageReset.addEventListener('click', () => {
+      imageReset.blur();
+      removedBase = new Set();
+      terrain = {};
+      selectedTerrain = [];
+      paintTerrain();
+    });
     function deleteBaseShapes() {
       for (const i of selectedTerrain) {
         removedBase.add(i);

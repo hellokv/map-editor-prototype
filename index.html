@@ -10723,26 +10723,30 @@
       const glyphY = iconY + (pad.top - pad.bottom) / 2;
       // Canvas puts a letter-spacing gap after the last letter too, which would pull centred or right-aligned text left.
       const textX = textAnchor + { left: 0, center: style.letterSpacing / 2, right: style.letterSpacing }[align];
+      // Icons are drawn centred on their spot whatever the text's alignment.
       const textAlign = c.textAlign;
-      c.textAlign = align;
+      const lineUp = (on) => { c.textAlign = on ? align : textAlign; };
       c.letterSpacing = `${style.letterSpacing}px`;
       if (!style.background && style.outline) {
         c.strokeStyle = style.outline;
         // Half of a stroke falls inside the glyphs, under the fill.
         c.lineWidth = style.outlineWidth * 2;
         c.globalAlpha = alpha * textAlpha;
+        lineUp(true);
         for (const line of lines) c.strokeText(line.text, textX, line.y + baseline);
+        lineUp(false);
         c.globalAlpha = alpha;
         if (label.icon) paintIcon(c, label, style, glyphX, glyphY, 'strokeText');
         c.shadowColor = 'transparent';
       }
       c.fillStyle = style.color;
       c.globalAlpha = alpha * textAlpha;
+      lineUp(true);
       for (const line of lines) c.fillText(line.text, textX, line.y + baseline);
+      lineUp(false);
       c.globalAlpha = alpha;
       c.fillStyle = style.iconColor ?? style.color;
       if (label.icon) paintIcon(c, label, style, glyphX, glyphY, 'fillText');
-      c.textAlign = textAlign;
     }
     // Padding around an icon with a backdrop, per side; only a square
     // backdrop takes sides of their own.

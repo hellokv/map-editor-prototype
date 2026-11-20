@@ -2570,6 +2570,15 @@
       <button id="panel-close" type="button" aria-label="Close panel"><span class="material-symbols-rounded">right_panel_close</span></button>
     </div>
     <div id="labels-panel" hidden>
+      <div class="label-section">
+        <label class="field">
+          Language
+          <select id="label-language">
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+          </select>
+        </label>
+      </div>
       <div id="label-properties" hidden>
         <div class="label-section">
           <div id="label-kind" class="kind-tabs">
@@ -5508,7 +5517,7 @@
     function listLayout(list) {
       const rows = [
         { text: list.heading, styleId: list.headingStyleId },
-        ...list.items.map((item) => ({ text: item.text, icon: item.icon, styleId: itemStyleIdOf(list, item) })),
+        ...list.items.map((item) => ({ text: shownText(item), icon: item.icon, styleId: itemStyleIdOf(list, item) })),
       ].filter((row) => row.text.trim() || row.icon);
       const sizes = rows.map((row) => labelBox({ ...row, x: 0, y: 0 }));
       const w = Math.max(0, ...sizes.map((size) => size.w)) + 2 * list.padding;
@@ -8221,6 +8230,24 @@
 
     // A field that sets a property of the selected path (or another target)
     // as it changes, and becomes one undo step when the edit is committed.
+    const PLACE_NAMES = {
+      es: {
+        'African Elephant': 'Elefante africano', Giraffe: 'Jirafa', Lion: 'León', 'Red Panda': 'Panda rojo', Gorilla: 'Gorila',
+        Zebra: 'Cebra', 'Snow Leopard': 'Leopardo de las nieves', Penguin: 'Pingüino', 'Komodo Dragon': 'Dragón de Komodo',
+        Hippopotamus: 'Hipopótamo', Meerkat: 'Suricata', 'Polar Bear': 'Oso polar', Orangutan: 'Orangután', Flamingo: 'Flamenco', 'Sea Lion': 'León marino',
+      },
+    };
+    // English text lives in `text`; another language's in `text_<code>`, kept
+    // flat because snapshots copy labels and list items one level deep.
+    let language = 'en';
+    const textKey = () => (language === 'en' ? 'text' : `text_${language}`);
+    const placeName = (place) => PLACE_NAMES[language]?.[place] ?? place;
+    // Own text in this language, else the place's name in it, else the English text.
+    const shownText = (item) => item[textKey()] || (item.place ? placeName(item.place) : item.text) || '';
+    const placeOptions = () => [
+      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
+      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: placeName(place) })),
+    ];
     function liveField(id, key, read, target = () => selected?.group) {
       const input = document.getElementById(id);
       let before = null;
@@ -8228,7 +8255,7 @@
         const object = target();
         if (!object) return;
         before ??= snapshot();
-        object[key] = read(input);
+        object[typeof key === 'function' ? key() : key] = read(input);
         draw();
       });
       input.addEventListener('change', () => {
@@ -8961,7 +8988,7 @@
       create.addEventListener('click', () => (icons ? newIconStyle : newLabelStyle)(adopt));
       container.append(create);
     }
-    const labelTextInput = liveField('label-text', 'text', (input) => input.value, soleLabel);
+    const labelTextInput = liveField('label-text', textKey, (input) => input.value, soleLabel);
     // A blank override field shows its default as the placeholder; stepping
     // it with the spinner starts from that default, not from zero.
     for (const input of document.querySelectorAll('#panel input[type="number"]')) {
@@ -9140,7 +9167,7 @@
       const list = newList({ x: area.x, y: area.y });
       const ordered = [...selectedLabels].sort((a, b) => a.y - b.y);
       list.heading = '';
-      list.items = ordered.map((label) => ({ text: labelText(label), styleId: styleOf(label).id, ...(label.icon ? { icon: label.icon } : {}), ...(label.place ? { place: label.place } : {}) }));
+      list.items = ordered.map((label) => ({ ...Object.fromEntries(Object.entries(label).filter(([key]) => key === 'text' || key.startsWith('text_'))), text: label.text || label.place || '', styleId: styleOf(label).id, ...(label.icon ? { icon: label.icon } : {}), ...(label.place ? { place: label.place } : {}) }));
       lists.push(list);
       for (const label of selectedLabels) labels.splice(labels.indexOf(label), 1);
       selectedLabels = [];
@@ -9382,18 +9409,16 @@
     const listItemRows = document.getElementById('list-item-rows');
     const listItemFields = document.getElementById('list-item-fields');
     const listItemPlace = document.getElementById('list-item-place');
-    const listItemText = liveField('list-item-text', 'text', (input) => input.value, theItem);
+    const listItemText = liveField('list-item-text', textKey, (input) => input.value, theItem);
     const listItemIcon = document.getElementById('list-item-icon');
-    listItemPlace.replaceChildren(
-      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
-      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: place })),
-    );
+    listItemPlace.replaceChildren(...placeOptions());
     // As on a label, picking a place names the item after it.
     listItemPlace.addEventListener('change', () => {
       const item = theItem();
       if (!item) return;
       recordUndo();
       if (listItemPlace.value) {
+        for (const key of Object.keys(item)) if (key.startsWith('text_')) delete item[key];
         item.place = listItemPlace.value;
         item.text = listItemPlace.value;
       } else {
@@ -9450,7 +9475,7 @@
       item: {
         container: document.getElementById('list-item-style-picker'), title: 'Style', open: false, rendered: '',
         styleId: (list) => itemStyleIdOf(list, theItem()),
-        text: () => theItem().text,
+        text: () => shownText(theItem()),
         icon: () => theItem().icon,
         adopt: (list, style) => { theItem().styleId = style.id; },
       },
@@ -9494,13 +9519,13 @@
           chevron: true,
         });
       }
-      const rowsKey = JSON.stringify([list.items, listItemIndex]);
+      const rowsKey = JSON.stringify([list.items, listItemIndex, language]);
       if (rowsKey !== listRowsKey) {
         listRowsKey = rowsKey;
         listItemRows.replaceChildren(...list.items.map((item, i) => {
           const row = Object.assign(document.createElement('div'), { className: 'list-item-row' });
           row.setAttribute('aria-selected', i === listItemIndex);
-          row.append(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded', textContent: item.icon ?? '' }), item.text);
+          row.append(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded', textContent: item.icon ?? '' }), shownText(item));
           // A second click on the open item closes it.
           row.addEventListener('click', () => {
             listItemIndex = i === listItemIndex ? -1 : i;
@@ -9513,7 +9538,8 @@
       listItemFields.hidden = !item;
       if (item) {
         if (document.activeElement !== listItemPlace) listItemPlace.value = item.place ?? '';
-        if (document.activeElement !== listItemText) listItemText.value = item.text;
+        if (document.activeElement !== listItemText) listItemText.value = item[textKey()] ?? '';
+        listItemText.placeholder = item.place ? placeName(item.place) : language === 'en' ? '' : item.text;
         listItemIconClear.hidden = !item.icon;
         document.getElementById('list-item-icon-search').hidden = !!item.icon;
         if (document.activeElement !== listItemIcon) listItemIcon.value = item.icon ?? '';
@@ -9717,8 +9743,8 @@
       if (selectedLabel) {
         // Leave a field alone while it's being typed in.
         const show = (input, value) => { if (document.activeElement !== input) input.value = value; };
-        show(labelTextInput, selectedLabel.text);
-        labelTextInput.placeholder = selectedLabel.place ?? '';
+        show(labelTextInput, selectedLabel[textKey()] ?? '');
+        labelTextInput.placeholder = selectedLabel.place ? placeName(selectedLabel.place) : language === 'en' ? '' : selectedLabel.text;
         show(labelXInput, Math.round(selectedLabel.x));
         show(labelYInput, Math.round(selectedLabel.y));
         for (const button of pointerButtons) {
@@ -9765,22 +9791,34 @@
     }
 
     // A label with a place and no text of its own shows the place's name.
-    const labelText = (label) => label.text || label.place || '';
+    const labelText = shownText;
     const labelPlaceSelect = document.getElementById('label-place');
-    labelPlaceSelect.replaceChildren(
-      Object.assign(document.createElement('option'), { value: '', textContent: 'None' }),
-      ...PLACES.map((place) => Object.assign(document.createElement('option'), { value: place, textContent: place })),
-    );
+    labelPlaceSelect.replaceChildren(...placeOptions());
+    document.getElementById('label-language').addEventListener('change', (e) => {
+      language = e.target.value;
+      e.target.blur();
+      labelPlaceSelect.replaceChildren(...placeOptions());
+      listItemPlace.replaceChildren(...placeOptions());
+      draw();
+    });
     labelPlaceSelect.addEventListener('change', () => {
       const label = soleLabel();
       if (!label) return;
       recordUndo();
       // A new place names the label after it, until its own text is typed.
+      const texts = Object.keys(label).filter((key) => key === 'text' || key.startsWith('text_'));
       if (labelPlaceSelect.value) {
         label.place = labelPlaceSelect.value;
+        for (const key of texts) delete label[key];
         label.text = '';
       } else {
-        label.text = labelText(label);
+        // Each language keeps the name it was showing.
+        const kept = language;
+        for (const code of ['en', ...Object.keys(PLACE_NAMES)]) {
+          language = code;
+          label[textKey()] = labelText(label);
+        }
+        language = kept;
         delete label.place;
       }
       labelPlaceSelect.blur();
@@ -10098,13 +10136,17 @@
         // Clearing an existing label's text deletes it, unless it has a
         // place, whose name it then shows again.
         recordUndo();
-        if (text) label.text = text === label.place ? '' : text;
-        else if (label.place) label.text = '';
+        const key = textKey();
+        if (text) label[key] = label.place && text === placeName(label.place) ? '' : text;
+        else if (label.place) label[key] = '';
+        else if (language !== 'en' && label.text) delete label[key];
         else labels.splice(labels.indexOf(label), 1);
         selectedLabels = selectedLabels.filter((other) => labels.includes(other));
       } else if (!label && keep && text) {
         recordUndo();
-        created = { x: editingLabel.x, y: editingLabel.y, text: text === editingLabel.place ? '' : text, styleId: currentStyle().id, pins: [] };
+        const own = editingLabel.place && text === placeName(editingLabel.place) ? '' : text;
+        // Text typed in another language stands in for the English until that's written.
+        created = { x: editingLabel.x, y: editingLabel.y, text: editingLabel.place ? '' : text, [textKey()]: own, styleId: currentStyle().id, pins: [] };
         if (editingLabel.kind !== 'text') Object.assign(created, { iconStyleId: currentIconStyle().id, icon: 'pets' });
         if (editingLabel.kind === 'icon') created.styleId = null;
         if (editingLabel.place) created.place = editingLabel.place;
@@ -10146,10 +10188,10 @@
     function showPlaceSuggestions() {
       if (!editingLabel || editingLabel.label) return;
       const typed = labelInput.value.trim().toLowerCase();
-      placeMatches = PLACES.filter((place) => place.toLowerCase().includes(typed));
+      placeMatches = PLACES.filter((place) => placeName(place).toLowerCase().includes(typed));
       activePlace = typed && placeMatches.length ? 0 : -1;
       placeSuggestions.replaceChildren(...placeMatches.map((place) => {
-        const option = Object.assign(document.createElement('div'), { textContent: place });
+        const option = Object.assign(document.createElement('div'), { textContent: placeName(place) });
         // mousedown, not click, so the text box keeps focus until the pick.
         option.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -10166,7 +10208,7 @@
       placeSuggestions.children[activePlace]?.scrollIntoView({ block: 'nearest' });
     }
     function pickPlace(place) {
-      labelInput.value = place;
+      labelInput.value = placeName(place);
       editingLabel.place = place;
       const created = finishLabel(true);
       if (created) {

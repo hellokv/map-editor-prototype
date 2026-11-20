@@ -1818,13 +1818,18 @@
       border: none;
       background: none;
     }
+    /* Padded for the pressed state's background; the margin keeps the icon in place. */
+    :is(#panel, #style-panel, #settings-panel) .section-heading .terrain-draw {
+      margin: -4px;
+      padding: 4px;
+      border-radius: 6px;
+    }
     :is(#panel, #style-panel, #settings-panel) .section-heading .terrain-draw .material-symbols-rounded {
       font-size: 20px;
     }
     :is(#panel, #style-panel, #settings-panel) .section-heading .terrain-draw[aria-pressed="true"] {
       color: #fff;
       background: #000;
-      border-radius: 4px;
     }
     .section-label {
       margin-bottom: 8px;

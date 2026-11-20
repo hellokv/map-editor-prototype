@@ -3366,7 +3366,7 @@
         </div>
       </div>
       <div id="terrain-water" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Water</div>
+        <div class="section-heading">Water<button class="terrain-draw" type="button" data-terrain="water" aria-label="Draw water"><span class="material-symbols-rounded">polyline</span></button></div>
         <div class="field-group">
           <label class="field">
             Color
@@ -3406,7 +3406,7 @@
         </div>
       </div>
       <div id="terrain-dirt" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Dirt</div>
+        <div class="section-heading">Dirt<button class="terrain-draw" type="button" data-terrain="dirt" aria-label="Draw dirt"><span class="material-symbols-rounded">polyline</span></button></div>
         <div class="field-group">
           <label class="field">
             Color
@@ -3446,7 +3446,7 @@
         </div>
       </div>
       <div id="terrain-grass" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Grass</div>
+        <div class="section-heading">Grass<button class="terrain-draw" type="button" data-terrain="grass" aria-label="Draw grass"><span class="material-symbols-rounded">polyline</span></button></div>
         <div class="field-group">
           <label class="field">
             Color
@@ -4149,6 +4149,8 @@
     // The shape options sit just right of the Shapes tool button.
     // How the map is meant to be shown: '2d', '3d' or 'both'.
     let presentation = '2d';
+    // The terrain the pen's next closed loop takes, set by a terrain section's Draw button.
+    let drawingTerrain = null;
     const presentationButtons = document.querySelectorAll('#presentation-toggle button');
     function setPresentation(value) {
       presentation = value;
@@ -4221,6 +4223,7 @@
     }
     function setBackgroundTool(name) {
       backgroundTool = name;
+      if (name !== 'segments') drawingTerrain = null;
       sketchActive = null;
       // In Landscape, picking without a stamp is its select tool.
       for (const button of backgroundToolButtons) {
@@ -10963,6 +10966,25 @@
       }
       ctx.restore();
     }
+    // Dots on a grid turned by their angle, clipped to the current path as stripes are.
+    function paintDots(dots, cx, cy, reach) {
+      ctx.save();
+      ctx.clip();
+      ctx.shadowColor = 'transparent';
+      ctx.translate(cx, cy);
+      ctx.rotate((dots.angle * Math.PI) / 180);
+      ctx.fillStyle = dots.color;
+      const step = dots.width + dots.gap;
+      ctx.beginPath();
+      for (let y = -Math.ceil(reach / step) * step; y < reach; y += step) {
+        for (let x = -Math.ceil(reach / step) * step; x < reach; x += step) {
+          ctx.moveTo(x + dots.width / 2, y);
+          ctx.arc(x, y, dots.width / 2, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+      ctx.restore();
+    }
     // Each corner is rounded with an arc that meets both its edges,
     // starting from the middle of the last edge.
     function traceRoundedPolygon(corners, radius, c = ctx) {
@@ -11480,7 +11502,8 @@
     const SKETCH_POINT_RADIUS = 4;
     const SKETCH_HIT_DISTANCE = 8;
     const sketchFillOf = (points) => sketchFills.find((fill) => samePoints(fill, points));
-    const LOOP_LOOK = { color: null, stripes: null, outline: null, outlineWidth: SHAPE_OUTLINE_WIDTH, radius: 0 };
+    // A loop with a terrain takes its fill, stripes or dots from that terrain's settings.
+    const LOOP_LOOK = { color: null, stripes: null, outline: null, outlineWidth: SHAPE_OUTLINE_WIDTH, radius: 0, terrain: null };
     const lookOf = (fill) => Object.fromEntries(Object.keys(LOOP_LOOK).map((key) => [key, fill[key]]));
     const newLoop = (points, look) => Object.assign(new Set(points), LOOP_LOOK, look);
     // Every point joined to this one through segments.
@@ -11602,7 +11625,8 @@
       if (closed.length) {
         // A loop cut from another keeps its look; a new one is filled.
         const cut = sketchFills.find((fill) => fill.has(segment[0]) && fill.has(segment[1]));
-        const look = cut ? lookOf(cut) : { color: colorOf(sketchFillColor) };
+        const look = cut ? lookOf(cut) : drawingTerrain ? { terrain: drawingTerrain } : { color: colorOf(sketchFillColor) };
+        drawingTerrain = null;
         for (const area of closed) {
           if (!sketchFillOf(area.points)) sketchFills.push(newLoop(area.points, look));
         }
@@ -11632,15 +11656,16 @@
         if (!ctx.globalAlpha) continue;
         ctx.beginPath();
         traceRoundedPolygon(area.polygon, fill.radius);
-        if (fill.color) {
-          ctx.fillStyle = fill.color;
+        const { color, stripes, dots } = fill.terrain ? terrainLook(fill.terrain) : fill;
+        if (color) {
+          ctx.fillStyle = color;
           ctx.fill();
         }
-        if (fill.stripes) {
+        if (stripes || dots) {
           const xs = area.polygon.map((p) => p.x);
           const ys = area.polygon.map((p) => p.y);
           const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-          paintStripes(fill.stripes, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
+          (stripes ? paintStripes : paintDots)(stripes ?? dots, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
         }
         if (fill.outline) {
           ctx.strokeStyle = fill.outline;
@@ -15167,6 +15192,22 @@
       patternGap: document.getElementById(`${type}-pattern-gap`),
       patternAngle: document.getElementById(`${type}-pattern-angle`),
     }]));
+    // A terrain's look for a drawn loop, read live so its settings restyle it.
+    function terrainLook(type) {
+      const kind = TERRAIN[type];
+      const effect = kind.effect.value;
+      const pattern = { color: colorOf(kind.patternColor), width: Math.max(0.5, Number(kind.patternSize.value) || 4), gap: Math.max(0, Number(kind.patternGap.value) || 0), angle: Number(kind.patternAngle.value) || 0 };
+      return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
+    }
+    // A terrain section's Draw button starts the pen; the next loop it closes takes that terrain.
+    for (const button of document.querySelectorAll('.terrain-draw')) {
+      button.addEventListener('click', () => {
+        button.blur();
+        setBackgroundTool('segments');
+        drawingTerrain = button.dataset.terrain;
+        draw();
+      });
+    }
     const terrainPop = document.getElementById('terrain-pop');
     const BASE_SHAPES = 'path, circle, rect, ellipse, polygon, polyline';
     function baseImage() {

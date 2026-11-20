@@ -2291,9 +2291,6 @@
     </label>
     <div id="terrain-pop" hidden>
       <button type="button" data-terrain="none">None</button>
-      <button type="button" data-terrain="water">Water</button>
-      <button type="button" data-terrain="dirt">Dirt</button>
-      <button type="button" data-terrain="grass">Grass</button>
       <button type="button" data-terrain="trees">Trees</button>
     </div>
     <div id="building-lift-pop" hidden>
@@ -3414,126 +3411,6 @@
             Color
             <span class="color-field"><input id="tree-shadow-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="30" aria-label="Tree shadow opacity">%</span>
           </label>
-        </div>
-      </div>
-      <div id="terrain-water" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Water<button class="terrain-draw" type="button" data-terrain="water" aria-label="Draw water"><span class="material-symbols-rounded">polyline</span></button></div>
-        <div class="field-group">
-          <label class="field">
-            Color
-            <span class="color-field"><input id="water-color" type="color" value="#7ba7c4"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Water opacity">%</span>
-          </label>
-          <div class="field">
-            Effect
-            <div class="toggle-group terrain-effects" data-for="water-effect">
-              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
-              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
-              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
-            </div>
-            <select id="water-effect" hidden>
-              <option value="none">None</option>
-              <option value="stripes">Stripes</option>
-              <option value="dots">Dots</option>
-            </select>
-          </div>
-          <div id="water-pattern" class="terrain-pattern" hidden>
-            <label class="field">
-              Pattern Color
-              <span class="color-field"><input id="water-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Water pattern opacity">%</span>
-            </label>
-            <label class="field">
-              <span class="pattern-size-label">Stripe Thickness</span>
-              <input id="water-pattern-size" type="number" min="0.5" step="0.5" value="4">
-            </label>
-            <label class="field">
-              <span class="pattern-gap-label">Stripe Spacing</span>
-              <input id="water-pattern-gap" type="number" min="0" step="0.5" value="8">
-            </label>
-            <label class="field">
-              <span class="pattern-angle-label">Stripe Angle</span>
-              <span class="slider"><input id="water-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Water pattern angle"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div id="terrain-dirt" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Dirt<button class="terrain-draw" type="button" data-terrain="dirt" aria-label="Draw dirt"><span class="material-symbols-rounded">polyline</span></button></div>
-        <div class="field-group">
-          <label class="field">
-            Color
-            <span class="color-field"><input id="dirt-color" type="color" value="#a0835f"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Dirt opacity">%</span>
-          </label>
-          <div class="field">
-            Effect
-            <div class="toggle-group terrain-effects" data-for="dirt-effect">
-              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
-              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
-              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
-            </div>
-            <select id="dirt-effect" hidden>
-              <option value="none">None</option>
-              <option value="stripes">Stripes</option>
-              <option value="dots">Dots</option>
-            </select>
-          </div>
-          <div id="dirt-pattern" class="terrain-pattern" hidden>
-            <label class="field">
-              Pattern Color
-              <span class="color-field"><input id="dirt-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Dirt pattern opacity">%</span>
-            </label>
-            <label class="field">
-              <span class="pattern-size-label">Stripe Thickness</span>
-              <input id="dirt-pattern-size" type="number" min="0.5" step="0.5" value="4">
-            </label>
-            <label class="field">
-              <span class="pattern-gap-label">Stripe Spacing</span>
-              <input id="dirt-pattern-gap" type="number" min="0" step="0.5" value="8">
-            </label>
-            <label class="field">
-              <span class="pattern-angle-label">Stripe Angle</span>
-              <span class="slider"><input id="dirt-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Dirt pattern angle"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div id="terrain-grass" class="label-section terrain-section tab-landscape" hidden>
-        <div class="section-heading">Grass<button class="terrain-draw" type="button" data-terrain="grass" aria-label="Draw grass"><span class="material-symbols-rounded">polyline</span></button></div>
-        <div class="field-group">
-          <label class="field">
-            Color
-            <span class="color-field"><input id="grass-color" type="color" value="#7f9c5a"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Grass opacity">%</span>
-          </label>
-          <div class="field">
-            Effect
-            <div class="toggle-group terrain-effects" data-for="grass-effect">
-              <button type="button" data-effect="none" aria-label="No effect" aria-pressed="true"><span class="material-symbols-rounded">check_box_outline_blank</span></button>
-              <button type="button" data-effect="stripes" aria-label="Stripes" aria-pressed="false"><span class="material-symbols-rounded">texture</span></button>
-              <button type="button" data-effect="dots" aria-label="Dots" aria-pressed="false"><span class="material-symbols-rounded">grain</span></button>
-            </div>
-            <select id="grass-effect" hidden>
-              <option value="none">None</option>
-              <option value="stripes">Stripes</option>
-              <option value="dots">Dots</option>
-            </select>
-          </div>
-          <div id="grass-pattern" class="terrain-pattern" hidden>
-            <label class="field">
-              Pattern Color
-              <span class="color-field"><input id="grass-pattern-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="60" aria-label="Grass pattern opacity">%</span>
-            </label>
-            <label class="field">
-              <span class="pattern-size-label">Stripe Thickness</span>
-              <input id="grass-pattern-size" type="number" min="0.5" step="0.5" value="4">
-            </label>
-            <label class="field">
-              <span class="pattern-gap-label">Stripe Spacing</span>
-              <input id="grass-pattern-gap" type="number" min="0" step="0.5" value="8">
-            </label>
-            <label class="field">
-              <span class="pattern-angle-label">Stripe Angle</span>
-              <span class="slider"><input id="grass-pattern-angle" type="number" step="1" value="45"><input type="range" min="0" max="180" step="1" value="45" aria-label="Grass pattern angle"></span>
-            </label>
-          </div>
         </div>
       </div>
       <div id="terrain-add" class="label-section terrain-section tab-landscape" hidden>
@@ -15310,8 +15187,8 @@
       patternGap: document.getElementById(`${type}-pattern-gap`),
       patternAngle: document.getElementById(`${type}-pattern-angle`),
     });
-    // Water, Dirt and Grass, then any custom terrains, which are added and removed.
-    const TERRAIN = Object.fromEntries(['water', 'dirt', 'grass'].map((type) => [type, terrainKind(type)]));
+    // Every terrain's fields by its id, as terrains are added and removed.
+    const TERRAIN = {};
     // A terrain's look for a drawn loop, read live so its settings restyle it.
     function terrainLook(type) {
       const kind = TERRAIN[type];
@@ -15319,15 +15196,6 @@
       const effect = kind.effect.value;
       const pattern = { color: colorOf(kind.patternColor), width: Math.max(0.5, Number(kind.patternSize.value) || 4), gap: Math.max(0, Number(kind.patternGap.value) || 0), angle: Number(kind.patternAngle.value) || 0 };
       return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
-    }
-    // A terrain section's draw button clicks out a fill area of that terrain.
-    for (const button of document.querySelectorAll('.terrain-draw[data-terrain]')) {
-      button.addEventListener('click', () => {
-        button.blur();
-        const type = button.dataset.terrain;
-        if (fillingArea && fillingTerrain === type) return setFilling(false);
-        setFilling(true, type);
-      });
     }
     // Terrain areas lie flat on the map under everything raised: filled in
     // their terrain's color, with its stripes or dots over it.
@@ -15461,7 +15329,6 @@
       kind.pattern.querySelector('.pattern-gap-label').textContent = `${word} Spacing`;
       kind.pattern.querySelector('.pattern-angle-label').textContent = `${word} Angle`;
     }
-    for (const kind of Object.values(TERRAIN)) wireTerrain(kind);
     function wireTerrain(kind) {
       kind.color.addEventListener('input', paintTerrain);
       // The effect is picked with icon buttons; the hidden select holds it for saving.
@@ -15645,22 +15512,29 @@
         paintTerrain();
       }
     });
-    // Custom terrains: each a section made from the template, with a name
-    // that heads it and labels its button in the terrain pop-up. They work
-    // as the built-in ones do.
+    // Terrains: each a section made from the template, with a name that
+    // heads it and labels its button in the terrain pop-up. Every map starts
+    // with Water, Dirt and Grass; any can be renamed or deleted, and more added.
     let customTerrains = [];
+    const DEFAULT_TERRAINS = [
+      { id: 'water', name: 'Water', color: '#7ba7c4' },
+      { id: 'dirt', name: 'Dirt', color: '#a0835f' },
+      { id: 'grass', name: 'Grass', color: '#7f9c5a' },
+    ];
     const CUSTOM_TERRAIN_COLORS = ['#c9b27c', '#8fb3c9', '#b7a0c9', '#d3a27f', '#9fbf8f'];
-    function addCustomTerrain({ id = `terrain${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, name, settings } = {}) {
-      name ??= `Terrain ${customTerrains.length + 1}`;
+    let addedTerrains = 0;
+    function addCustomTerrain({ id = `terrain${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, name, settings, color } = {}) {
+      if (!name) addedTerrains += 1;
+      name ??= `Terrain ${addedTerrains}`;
       const html = document.getElementById('terrain-template').innerHTML.replaceAll('__id__', id).replaceAll('__name__', name.replace(/[<>&"]/g, ''));
       const holder = document.createElement('div');
       holder.innerHTML = html;
       const section = holder.firstElementChild;
-      section.hidden = backgroundTool !== 'tree' || backgroundTools.hidden;
+      section.hidden = document.getElementById('tree-shapes').hidden;
       document.getElementById('terrain-add').before(section);
       const kind = terrainKind(id);
       TERRAIN[id] = kind;
-      kind.color.value = CUSTOM_TERRAIN_COLORS[customTerrains.length % CUSTOM_TERRAIN_COLORS.length];
+      kind.color.value = color ?? CUSTOM_TERRAIN_COLORS[customTerrains.length % CUSTOM_TERRAIN_COLORS.length];
       const popButton = Object.assign(document.createElement('button'), { type: 'button', textContent: name });
       popButton.dataset.terrain = id;
       terrainPop.querySelector('[data-terrain="trees"]').before(popButton);
@@ -15715,8 +15589,11 @@
           else input.value = value;
         }
       }
-      for (const input of [kind.color, kind.patternColor, kind.patternSize, kind.patternGap, kind.patternAngle]) input.dispatchEvent(new Event('input'));
-      kind.effect.dispatchEvent(new Event('change'));
+      // The template's fields already show its defaults; only loaded settings need applying.
+      if (settings) {
+        for (const input of [kind.color, kind.patternColor, kind.patternSize, kind.patternGap, kind.patternAngle]) input.dispatchEvent(new Event('input'));
+        kind.effect.dispatchEvent(new Event('change'));
+      }
       return entry;
     }
     // Shapes and areas of a deleted terrain go back to having none.
@@ -15734,6 +15611,7 @@
     const newTerrainName = document.getElementById('new-terrain-name');
     function addNamedTerrain() {
       const entry = addCustomTerrain({ name: newTerrainName.value.trim() || undefined });
+      paintTerrain();
       newTerrainName.value = '';
       entry.section.scrollIntoView({ block: 'nearest' });
     }
@@ -15745,6 +15623,7 @@
     newTerrainName.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') addNamedTerrain();
     });
+    for (const terrainType of DEFAULT_TERRAINS) addCustomTerrain(terrainType);
     // What a custom terrain saves: its name and its fields, by their id endings.
     const customTerrainFields = ['color', 'effect', 'pattern-color', 'pattern-size', 'pattern-gap', 'pattern-angle'];
     function savedCustomTerrains() {
@@ -16043,7 +15922,7 @@
     // Settings that live only in their fields, saved by id.
     const SETTING_FIELDS = [
       'show-labels', 'snap-distance', 'segment-distance', 'bend-focus', 'nudge-amount', 'path-color',
-      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'water-color', 'water-effect', 'dirt-color', 'dirt-effect', 'grass-color', 'grass-effect', 'water-pattern-color', 'water-pattern-size', 'water-pattern-gap', 'water-pattern-angle', 'dirt-pattern-color', 'dirt-pattern-size', 'dirt-pattern-gap', 'dirt-pattern-angle', 'grass-pattern-color', 'grass-pattern-size', 'grass-pattern-gap', 'grass-pattern-angle', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
+      'canvas-color', 'board-color', ...boardFields.map(([id]) => id), 'preview-blur', 'map-scale', 'map-scale-3d', 'map-scale-3d-set', 'map-tilt', 'map-rotation', 'map-view', 'buildings-only', 'buildings-lift', 'buildings-rotate', 'buildings-rotation', 'buildings-color', 'buildings-side-color', 'buildings-shadows', 'tree-shadows', 'tree-shadow-color', 'tree-size', 'tree-size-variation', 'tree-depth', 'tree-color', 'tree-trunk-color', 'tree-color-variation', 'shadow-length', 'buildings-shadow-color', 'buildings-outline', 'buildings-outline-color', 'buildings-outline-width', 'light-angle', 'map-light-on', 'map-light-color', 'map-light-spread',
     ];
     function imageData(image) {
       // The published page may not fetch data: URLs, and these need no fetching.
@@ -16122,7 +16001,7 @@
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
       file.outerFrame = outerFrame;
-      file.customTerrains = savedCustomTerrains();
+      file.terrains = savedCustomTerrains();
       file.presentation = presentation;
       file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle, terrain: type }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }), ...(type && { terrain: type }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
@@ -16194,7 +16073,16 @@
       }
       outerFrame = file.outerFrame ?? null;
       for (const entry of [...customTerrains]) removeCustomTerrain(entry);
-      for (const saved of file.customTerrains ?? []) addCustomTerrain(saved);
+      // Files from before every terrain was listed kept the defaults' fields among the settings.
+      const listed = file.terrains ?? [
+        ...DEFAULT_TERRAINS.map((type) => ({
+          ...type,
+          settings: Object.fromEntries(customTerrainFields.map((field) => [field, file.settings?.[`${type.id}-${field}`]]).filter(([, value]) => value !== undefined)),
+        })),
+        ...(file.customTerrains ?? []),
+      ];
+      addedTerrains = 0;
+      for (const saved of listed) addCustomTerrain(saved);
       terrain = file.terrain ?? Object.fromEntries((file.water ?? []).map((i) => [i, 'water']));
       setPresentation(file.presentation ?? '2d');
       selectedTerrain = [];

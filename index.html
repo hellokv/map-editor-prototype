@@ -4156,8 +4156,8 @@
     // The shape options sit just right of the Shapes tool button.
     // How the map is meant to be shown: '2d', '3d' or 'both'.
     let presentation = '2d';
-    // The terrain the pen's next closed loop takes, set by a terrain section's Draw button.
-    let drawingTerrain = null;
+    // The terrain a fill area being clicked out will be, set by a terrain section's draw button.
+    let fillingTerrain = null;
     const presentationButtons = document.querySelectorAll('#presentation-toggle button');
     function setPresentation(value) {
       presentation = value;
@@ -4230,7 +4230,6 @@
     }
     function setBackgroundTool(name) {
       backgroundTool = name;
-      if (name !== 'segments') drawingTerrain = null;
       sketchActive = null;
       // In Landscape, picking without a stamp is its select tool.
       for (const button of backgroundToolButtons) {
@@ -7889,6 +7888,8 @@
         ctx.restore();
       }
       const stamps = allStamps();
+      const terrainAreas = fillAreas.filter((area) => area.terrain);
+      if (terrainAreas.length && !noBackground) drawTerrainAreas(terrainAreas);
       const washes = fillAreas.filter((area) => area.wash);
       if (washes.length && !noBackground) drawWashes(ctx, washes);
       if (stamps.length && treeShadowsOn.checked && !noBackground) drawStampShadows(ctx, treeShadowColor, stamps);
@@ -11509,8 +11510,7 @@
     const SKETCH_POINT_RADIUS = 4;
     const SKETCH_HIT_DISTANCE = 8;
     const sketchFillOf = (points) => sketchFills.find((fill) => samePoints(fill, points));
-    // A loop with a terrain takes its fill, stripes or dots from that terrain's settings.
-    const LOOP_LOOK = { color: null, stripes: null, outline: null, outlineWidth: SHAPE_OUTLINE_WIDTH, radius: 0, terrain: null };
+    const LOOP_LOOK = { color: null, stripes: null, outline: null, outlineWidth: SHAPE_OUTLINE_WIDTH, radius: 0 };
     const lookOf = (fill) => Object.fromEntries(Object.keys(LOOP_LOOK).map((key) => [key, fill[key]]));
     const newLoop = (points, look) => Object.assign(new Set(points), LOOP_LOOK, look);
     // Every point joined to this one through segments.
@@ -11632,8 +11632,7 @@
       if (closed.length) {
         // A loop cut from another keeps its look; a new one is filled.
         const cut = sketchFills.find((fill) => fill.has(segment[0]) && fill.has(segment[1]));
-        const look = cut ? lookOf(cut) : drawingTerrain ? { terrain: drawingTerrain } : { color: colorOf(sketchFillColor) };
-        drawingTerrain = null;
+        const look = cut ? lookOf(cut) : { color: colorOf(sketchFillColor) };
         for (const area of closed) {
           if (!sketchFillOf(area.points)) sketchFills.push(newLoop(area.points, look));
         }
@@ -11663,16 +11662,15 @@
         if (!ctx.globalAlpha) continue;
         ctx.beginPath();
         traceRoundedPolygon(area.polygon, fill.radius);
-        const { color, stripes, dots } = fill.terrain ? terrainLook(fill.terrain) : fill;
-        if (color) {
-          ctx.fillStyle = color;
+        if (fill.color) {
+          ctx.fillStyle = fill.color;
           ctx.fill();
         }
-        if (stripes || dots) {
+        if (fill.stripes) {
           const xs = area.polygon.map((p) => p.x);
           const ys = area.polygon.map((p) => p.y);
           const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-          (stripes ? paintStripes : paintDots)(stripes ?? dots, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
+          paintStripes(fill.stripes, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
         }
         if (fill.outline) {
           ctx.strokeStyle = fill.outline;
@@ -14106,6 +14104,7 @@
     function treeBlocked(p) {
       const base = baseShapeAt(p);
       if (base !== null && terrain[base] === 'water') return true;
+      if (fillAreas.some((area) => area.terrain === 'water' && areaProbe.isPointInPath(areaPath(area), p.x, p.y))) return true;
       if (buildingsImage && buildingParts.some((part) => onPart(part, p))) return true;
       return shapes.some((shape) => isBuildingShape(shape) && insideShape(shape, p));
     }
@@ -14667,7 +14666,7 @@
           draw();
         }
         showStampChoice();
-        if (selectedArea && !selectedArea.wash) {
+        if (selectedArea && !selectedArea.wash && !selectedArea.terrain) {
           selectedArea.shapes = [...stampChoice];
           draw();
         }
@@ -14687,8 +14686,10 @@
       for (const grid of document.querySelectorAll('#tree-shapes .tree-shape-grid')) grid.hidden = (grid.dataset.set === 'brushes') !== brushes;
       // Washes lie in the paper, so they cast no shadow to set.
       document.getElementById('tree-shadows-field').closest('.field-group').hidden = brushes;
-      document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes;
-      document.getElementById('landscape-fill-hint').textContent = brushes
+      document.getElementById('landscape-fill-spacing-field').hidden = !fillingArea || brushes || !!fillingTerrain;
+      document.getElementById('landscape-fill-hint').textContent = fillingTerrain
+        ? 'Click around the area; click the first point, or press Enter, to finish it. Escape cancels. Click it later to move or reshape it.'
+        : brushes
         ? 'Click around the area; click the first point, or press Enter, to paint it. Escape cancels. Click an area later to change it.'
         : 'Click around the area; click the first point, or press Enter, to fill it with the chosen stamp. Escape cancels. Choose several stamps to mix them. Click an area later to change it.';
     }
@@ -14902,21 +14903,23 @@
     const fillButton = document.getElementById('tree-draw');
     const fillSpacing = document.getElementById('landscape-fill-spacing');
     linkSlider(fillSpacing);
-    function setFilling(on) {
+    function setFilling(on, terrainType = null) {
       fillingArea = on;
+      fillingTerrain = on ? terrainType : null;
+      for (const button of document.querySelectorAll('.terrain-draw[data-terrain]')) button.setAttribute('aria-pressed', String(button.dataset.terrain === fillingTerrain));
       fillDraft = [];
       if (!on && !selectedArea) {
         stampChoice = soloStamp();
         showStampChoice();
       }
-      fillButton.setAttribute('aria-pressed', String(on));
+      fillButton.setAttribute('aria-pressed', String(on && !fillingTerrain));
       document.getElementById('landscape-fill-hint').hidden = !on;
       showTreeSet();
       draw();
     }
     fillButton.addEventListener('click', () => {
       fillButton.blur();
-      setFilling(!fillingArea);
+      setFilling(!(fillingArea && !fillingTerrain));
     });
     window.addEventListener('keydown', (e) => {
       if (!fillingArea || e.target.closest('input, textarea, select')) return;
@@ -14924,8 +14927,9 @@
       if (e.key === 'Enter' && fillDraft.length >= 3) fillArea();
     });
     function fillArea() {
-      const area = { points: fillDraft, shapes: treeSet === 'brushes' ? [] : [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
-      if (treeSet === 'brushes') Object.assign(area, { wash: true, edge: 50 }, washFields());
+      const area = { points: fillDraft, shapes: treeSet === 'brushes' || fillingTerrain ? [] : [...stampChoice], density: Number(fillSpacing.value) || 25, seed: Math.floor(Math.random() * 2 ** 31) };
+      if (fillingTerrain) area.terrain = fillingTerrain;
+      else if (treeSet === 'brushes') Object.assign(area, { wash: true, edge: 50 }, washFields());
       fillAreas = [...fillAreas, area];
       selectedArea = area;
       setFilling(false);
@@ -14941,7 +14945,7 @@
     const areaProbe = new OffscreenCanvas(1, 1).getContext('2d');
     function areaStamps(area) {
       if (!area.shapes.length) return [];
-      const blockers = [terrain, !!baseShapes, buildingParts.length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation])];
+      const blockers = [terrain, !!baseShapes, buildingParts.length, shapes.filter(isBuildingShape).map(({ x, y, w, h, rotation }) => [x, y, w, h, rotation]), fillAreas.filter((other) => other.terrain === 'water').map((other) => other.points)];
       const key = JSON.stringify([area.points, area.density, area.shapes, area.seed, blockers]);
       if (area.stampsKey === key) return area.stamps;
       const random = seededRandom(area.seed);
@@ -14961,12 +14965,14 @@
     }
     const allStamps = () => [...trees, ...fillAreas.flatMap(areaStamps)];
     const fillAreaAt = (p) => [...fillAreas].reverse().find((area) => areaProbe.isPointInPath(areaPath(area), p.x, p.y)) ?? null;
+    // Outlines are drawn in the color the area paints with.
+    const areaColor = (area) => (area.terrain ? colorOf(TERRAIN[area.terrain].color) : area.wash ? washLook(area).colors[0] : treeColorInput.value);
     // Outlines show only in the Landscape tool; the selected one bolder, with handles to drag its corners.
     function drawFillAreas(c) {
       c.save();
       for (const area of fillAreas) {
         const selected = area === selectedArea;
-        c.strokeStyle = area.wash ? washLook(area).colors[0] : treeColorInput.value;
+        c.strokeStyle = areaColor(area);
         c.lineWidth = (selected ? 2 : 1.5) / view.scale;
         c.setLineDash([6 / view.scale, 4 / view.scale]);
         c.stroke(areaPath(area));
@@ -14985,7 +14991,7 @@
       }
       if (edgeNode) {
         const { area, x, y } = edgeNode;
-        c.strokeStyle = area.wash ? washLook(area).colors[0] : treeColorInput.value;
+        c.strokeStyle = areaColor(area);
         c.beginPath();
         c.arc(x, y, 4 / view.scale, 0, Math.PI * 2);
         c.fillStyle = '#fff';
@@ -15001,6 +15007,8 @@
     function showAreaPop() {
       areaPop.hidden = !selectedArea || backgroundTools.hidden || backgroundTool !== 'tree';
       if (areaPop.hidden) return;
+      // A terrain area has nothing to set but delete.
+      for (const el of [areaPop.querySelector('span'), areaPopSlider, areaPop.querySelector('output'), document.getElementById('area-shuffle')]) el.hidden = !!selectedArea.terrain;
       // A brush area has no stamps to space out; its slider sets how rough its edge is.
       const setting = selectedArea.wash ? 'edge' : 'density';
       areaPop.querySelector('span').textContent = selectedArea.wash ? 'Edge' : 'Density';
@@ -15176,7 +15184,7 @@
       c.save();
       c.beginPath();
       fillDraft.forEach(({ x, y }, i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-      const color = treeSet === 'brushes' ? washFrom.value : treeColorInput.value;
+      const color = fillingTerrain ? colorOf(TERRAIN[fillingTerrain].color) : treeSet === 'brushes' ? washFrom.value : treeColorInput.value;
       c.strokeStyle = color;
       c.lineWidth = 2 / view.scale;
       c.setLineDash([6 / view.scale, 4 / view.scale]);
@@ -15206,14 +15214,34 @@
       const pattern = { color: colorOf(kind.patternColor), width: Math.max(0.5, Number(kind.patternSize.value) || 4), gap: Math.max(0, Number(kind.patternGap.value) || 0), angle: Number(kind.patternAngle.value) || 0 };
       return { color: colorOf(kind.color), stripes: effect === 'stripes' ? pattern : null, dots: effect === 'dots' ? pattern : null };
     }
-    // A terrain section's Draw button starts the pen; the next loop it closes takes that terrain.
+    // A terrain section's draw button clicks out a fill area of that terrain.
     for (const button of document.querySelectorAll('.terrain-draw[data-terrain]')) {
       button.addEventListener('click', () => {
         button.blur();
-        setBackgroundTool('segments');
-        drawingTerrain = button.dataset.terrain;
-        draw();
+        const type = button.dataset.terrain;
+        if (fillingArea && fillingTerrain === type) return setFilling(false);
+        setFilling(true, type);
       });
+    }
+    // Terrain areas lie flat on the map under everything raised: filled in
+    // their terrain's color, with its stripes or dots over it.
+    function drawTerrainAreas(areas) {
+      for (const area of areas) {
+        const { color, stripes, dots } = terrainLook(area.terrain);
+        ctx.save();
+        ctx.beginPath();
+        area.points.forEach(({ x, y }, i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        if (stripes || dots) {
+          const xs = area.points.map((q) => q.x);
+          const ys = area.points.map((q) => q.y);
+          const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+          (stripes ? paintStripes : paintDots)(stripes ?? dots, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2);
+        }
+        ctx.restore();
+      }
     }
     const terrainPop = document.getElementById('terrain-pop');
     const BASE_SHAPES = 'path, circle, rect, ellipse, polygon, polyline';
@@ -15873,7 +15901,7 @@
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
       file.terrain = terrain;
       file.presentation = presentation;
-      file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }) }));
+      file.fillAreas = fillAreas.map(({ points, shapes, density, seed, wash, edge, colors, angle, terrain: type }) => ({ points: points.map(({ x, y }) => ({ x, y })), shapes, density, seed, ...(wash && { wash, edge, colors, angle }), ...(type && { terrain: type }) }));
       file.satelliteReference = satelliteReference && await imageData(satelliteReference);
       return file;
     }

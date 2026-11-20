@@ -14121,8 +14121,11 @@
     // isometric, shifted up by raise × tan(tilt).
     function liftMatrix(raise) {
       if (!canvasTilt?.angle || !raise) return new DOMMatrix();
-      const { ox, oy, d, angle } = canvasTilt;
+      const { ox, oy, d, angle, flat } = canvasTilt;
       const spin = leanSpin();
+      // Isometric buildings on an untipped map rise as far on screen as they
+      // would off a map tipped to their angle, which shortens them by cos(angle).
+      if (flat) return spin.inverse().multiply(new DOMMatrix().translate(0, -raise * Math.sin(angle))).multiply(spin);
       const height = d * Math.cos(angle);
       const top = Math.min(raise, height * 0.9);
       const lifted = d === Infinity
@@ -16020,7 +16023,7 @@
     // Rotation turns the map about the box's centre; tilt then tips it back
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
-      // Isometric buildings lean at 45°, so a building rises on screen exactly as far as its lift.
+      // Isometric buildings lean as if the map were tilted 45°, without tilting it.
       const flat = isoBuildings();
       // Paths and Location show the map top down, whatever its tilt and rotation.
       const topDown = blank || !pathTools.hidden || inLocation() || (flatView() && !flat);

@@ -3810,22 +3810,30 @@
         </label>
 
         <div id="shape-single-fields">
-          <label class="field">
-            X
-            <input id="shape-x" type="number" step="1">
-          </label>
-          <label class="field">
-            Y
-            <input id="shape-y" type="number" step="1">
-          </label>
-          <label class="field shape-box-field">
-            Width
-            <input id="shape-w" type="number" min="1" step="1">
-          </label>
-          <label class="field shape-box-field">
-            Height
-            <input id="shape-h" type="number" min="1" step="1">
-          </label>
+          <div class="field-group">
+            <div class="field-pair">
+              <label class="field">
+                X
+                <input id="shape-x" type="number" step="1">
+              </label>
+              <label class="field">
+                Y
+                <input id="shape-y" type="number" step="1">
+              </label>
+            </div>
+          </div>
+          <div class="field-group shape-box-field">
+            <div class="field-pair">
+              <label class="field">
+                Width
+                <input id="shape-w" type="number" min="1" step="1">
+              </label>
+              <label class="field">
+                Height
+                <input id="shape-h" type="number" min="1" step="1">
+              </label>
+            </div>
+          </div>
           <label id="compass-box-field" class="field">
             Size
             <input id="compass-box-size" type="number" min="1" step="1">

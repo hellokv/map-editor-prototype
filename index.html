@@ -14689,24 +14689,40 @@
       area.washKey = key;
       return (area.washCache = { body, bumps, box, size });
     }
-    // Smooth noise in 0..1 over a w×h grid of pixels, summed over octaves
-    // from a cell of `cell` pixels down; each octave is a lattice of seeded
-    // values, eased between, so no trig runs per pixel.
-    function noiseField(w, h, cell, octaves, random) {
+    // A seeded value in 0..1 for each whole-numbered lattice point, the same
+    // however many points around it are asked for.
+    function latticeValue(seed, ix, iy) {
+      let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed, 1442695041);
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+    // Smooth noise in 0..1 for a w×h grid of pixels laid k to a map unit from
+    // (x0, y0), summed over octaves from a cell of `cell` map units down. The
+    // field is fixed in map units, so any resolution samples the same paint;
+    // octaves finer than a pixel count at their average instead of aliasing.
+    function noiseField(w, h, x0, y0, k, cell, octaves, seed) {
       const out = new Float32Array(w * h);
       let weight = 0;
       for (let o = 0, size = cell, amp = 1; o < octaves; o++, size /= 2, amp /= 2) {
-        const step = Math.max(1, size);
-        const cols = Math.ceil(w / step) + 2;
-        const rows = Math.ceil(h / step) + 2;
-        const lattice = Float32Array.from({ length: cols * rows }, random);
+        weight += amp;
+        if (size * k < 0.5) {
+          for (let i = 0; i < out.length; i++) out[i] += amp * 0.5;
+          continue;
+        }
+        const s = seed + o * 1013;
+        const ix0 = Math.floor(x0 / size);
+        const iy0 = Math.floor(y0 / size);
+        const cols = Math.ceil((x0 + w / k) / size) - ix0 + 2;
+        const rows = Math.ceil((y0 + h / k) / size) - iy0 + 2;
+        const lattice = new Float32Array(cols * rows);
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) lattice[r * cols + c] = latticeValue(s, ix0 + c, iy0 + r);
         for (let y = 0; y < h; y++) {
-          const gy = y / step;
+          const gy = (y0 + (y + 0.5) / k) / size - iy0;
           const iy = Math.floor(gy);
           let fy = gy - iy;
           fy = fy * fy * (3 - 2 * fy);
           for (let x = 0; x < w; x++) {
-            const gx = x / step;
+            const gx = (x0 + (x + 0.5) / k) / size - ix0;
             const ix = Math.floor(gx);
             let fx = gx - ix;
             fx = fx * fx * (3 - 2 * fx);
@@ -14716,7 +14732,6 @@
             out[y * w + x] += amp * (top + (bottom - top) * fy);
           }
         }
-        weight += amp;
       }
       for (let i = 0; i < out.length; i++) out[i] /= weight;
       return out;
@@ -14727,8 +14742,9 @@
     };
     // A wash as paint soaking into paper: the shape is blurred as if it bled,
     // then cut back where noise says the paper drank less, which frays the
-    // edge. Pigment lies unevenly within, and a faint bloom spreads past it. Painted once per area and colour,
-    // in map units, so panning and zooming reuse it.
+    // edge. Pigment lies unevenly within, and a faint bloom spreads past it.
+    // Everything is measured in map units, so a wash painted at any number of
+    // pixels to a unit is the same wash, only sharper or softer.
     // Each wash keeps its own two colours and direction. The panel's fields
     // show the selected wash's, and are what a new wash starts from.
     const washFrom = document.getElementById('wash-color-from');
@@ -14756,12 +14772,11 @@
     // While an area is reshaped or its slider dragged, washes paint coarse,
     // since a full one takes a good fraction of a second.
     let washDraft = false;
-    function washImage(area) {
+    const WASH_PIXELS = 8e6;
+    // k is pixels to a map unit, cut back so the wash stays within a pixel budget.
+    function washImage(area, k) {
       const { body, bumps, box, size } = washShape(area);
       const { colors, angle } = washLook(area);
-      const key = JSON.stringify([area.washKey, colors, angle, washDraft]);
-      if (area.imageKey === key) return area.image;
-      const random = seededRandom(area.seed + 7);
       const e = (area.edge ?? 50) / 100;
       const bleed = size * 0.03;
       const pad = bleed * 3;
@@ -14769,8 +14784,10 @@
       const y0 = box.y0 - pad;
       const mw = box.x1 - box.x0 + pad * 2;
       const mh = box.y1 - box.y0 + pad * 2;
-      // Up to 2 pixels a map unit, kept to 2 million pixels.
-      const k = Math.min(2, Math.sqrt((washDraft ? 1.5e5 : 2e6) / (mw * mh)));
+      const budget = washDraft ? 1.5e5 : WASH_PIXELS;
+      while (k > 1 / 64 && mw * mh * k * k > budget) k /= 2;
+      const key = JSON.stringify([area.washKey, colors, angle, k]);
+      if (area.imageKey === key) return area.image;
       const w = Math.max(1, Math.ceil(mw * k));
       const h = Math.max(1, Math.ceil(mh * k));
       const shape = new OffscreenCanvas(w, h);
@@ -14780,9 +14797,9 @@
       sc.fill(body);
       sc.fill(bumps);
       const soak = sc.getImageData(0, 0, w, h).data;
-      const fray = noiseField(w, h, size * 0.06 * k, 6, random);
-      const pigment = noiseField(w, h, size * 0.25 * k, 3, random);
-      const grain = noiseField(w, h, 3, 2, random);
+      const fray = noiseField(w, h, x0, y0, k, size * 0.06, 6, area.seed + 7);
+      const pigment = noiseField(w, h, x0, y0, k, size * 0.25, 3, area.seed + 8);
+      const grain = noiseField(w, h, x0, y0, k, 1.5, 2, area.seed + 9);
       const [from, to] = colors.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
       // The blend runs across the area in the direction's heading (0° up,
       // 90° right), its front pushed about by the noise so it wanders like
@@ -14790,7 +14807,7 @@
       const turn = (angle * Math.PI) / 180;
       const ux = Math.sin(turn);
       const uy = -Math.cos(turn);
-      const ends = [[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => x * ux + y * uy);
+      const ends = [[0, 0], [mw, 0], [0, mh], [mw, mh]].map(([x, y]) => x * ux + y * uy);
       const lo = Math.min(...ends);
       const span = Math.max(...ends) - lo || 1;
       const image = new ImageData(w, h);
@@ -14806,7 +14823,7 @@
         const alpha = Math.min(1, Math.max(bloom, paint * depth));
         const x = i % w;
         const y = (i - x) / w;
-        const run = (x * ux + y * uy - lo) / span + (pigment[i] - 0.5) * 0.6 + (fray[i] - 0.5) * 0.25;
+        const run = (((x + 0.5) / k) * ux + ((y + 0.5) / k) * uy - lo) / span + (pigment[i] - 0.5) * 0.6 + (fray[i] - 0.5) * 0.25;
         const mix = smoothstep(0.2, 0.8, run);
         // Where the colours meet, pigment piles up a little, as in a real bleed.
         const meet = Math.exp(-(((mix - 0.5) / 0.18) ** 2));
@@ -14823,9 +14840,13 @@
     }
     // Washes lie on the map in map units; a later one over an earlier one
     // darkens it a little, as a second coat of watercolour does.
+    // Each is painted at the pixels to a unit it's drawn at, rounded up to a
+    // power of two so small zooms reuse it.
     function drawWashes(c, areas) {
+      const t = c.getTransform();
+      const k = 2 ** Math.ceil(Math.log2(Math.max(1 / 64, Math.hypot(t.a, t.b))));
       for (const area of areas) {
-        const { canvas, x, y, w, h } = washImage(area);
+        const { canvas, x, y, w, h } = washImage(area, k);
         c.drawImage(canvas, x, y, w, h);
       }
     }
@@ -14855,7 +14876,7 @@
       };
       brushPreview.paint = () => {
         const c = brushPreview.getContext('2d');
-        const { canvas, x, y, w, h } = washImage(sample);
+        const { canvas, x, y, w, h } = washImage(sample, 4);
         // Fitted by where the paint is, not the image's padded box, with the
         // trees' 4-pixel margin.
         const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;

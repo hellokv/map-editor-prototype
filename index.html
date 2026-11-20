@@ -1691,6 +1691,13 @@
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 8px;
     }
+    /* Each half as wide as its contents, the room left over shared evenly. */
+    .field-pair.fit-pair {
+      display: flex;
+    }
+    .fit-pair > .field {
+      flex: 1 1 auto;
+    }
     :is(#panel, #style-panel, #settings-panel) .field input[type="text"],
     :is(#panel, #style-panel, #settings-panel) .field input[type="number"],
     :is(#panel, #style-panel, #settings-panel) .field select,
@@ -3597,7 +3604,7 @@
       <div class="label-section background-settings tab-base frame-settings">
         <div class="section-heading">Frame</div>
         <div class="field-group">
-          <div class="field-pair">
+          <div class="field-pair fit-pair">
             <label class="field">
               Inside
               <span class="color-field"><input id="board-color" type="color" value="#ffffff"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Inside opacity">%</span>

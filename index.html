@@ -732,6 +732,20 @@
     #building-editor-cancel {
       left: 16px;
     }
+    #building-editor-view {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 32px;
+      padding: 0 28px 0 12px;
+      border: none;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      font: 13px 'National Park', system-ui, sans-serif;
+      pointer-events: auto;
+    }
     #building-editor-save {
       right: 16px;
     }
@@ -2413,6 +2427,7 @@
     </div>
     <div id="building-editor" hidden>
       <button id="building-editor-cancel" type="button"><span class="material-symbols-rounded">close</span>Cancel</button>
+      <select id="building-editor-view" aria-label="View"></select>
       <button id="building-editor-save" type="button"><span class="material-symbols-rounded">save</span>Save</button>
     </div>
     <div id="frame-actions" hidden>
@@ -13829,7 +13844,7 @@
     // map's, unless Building Rotation overrides it.
     // Building Rotation applies only to isometric buildings, where it's offered.
     function leanSpin() {
-      if (!buildingsRotate.checked || !isoBuildings()) return canvasTilt.spin;
+      if (buildingEditing || !buildingsRotate.checked || !isoBuildings()) return canvasTilt.spin;
       const { cx, cy } = canvasTilt;
       return new DOMMatrix().translate(cx, cy).rotate(Number(buildingsRotationInput.value) || 0).translate(-cx, -cy);
     }
@@ -14288,7 +14303,7 @@
     }
     const panelLift = () => {
       // The editor always shows height, so a map with none shows a little.
-      if (buildingEditing) return Math.max(0, Number((isoBuildings() ? lift2dInput : buildingsLiftInput).value) || 0) || 30;
+      if (buildingEditing) return Math.max(0, Number((buildingEditing.camera.flat ? lift2dInput : buildingsLiftInput).value) || 0) || 30;
       if (flatView() && !isoBuildings()) return 0;
       return Math.max(0, Number((isoBuildings() ? lift2dInput : buildingsLiftInput).value) || 0);
     };
@@ -14626,8 +14641,52 @@
     const canvasArea = document.getElementById('canvas-area');
     const buildingEditor = document.getElementById('building-editor');
     const buildingEditorPanel = document.getElementById('building-editor-panel');
+    // The views the editor offers: the map's own, as it's set to be shown,
+    // and a plain isometric one. Shift-dragging turns and tips a view freely.
+    function editorViews() {
+      const turn = (Number(mapRotationInput.value) || 0) % 360;
+      const tilt = Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
+      const views = [{ id: 'isometric', label: 'Isometric', deg: 45, turn: 0, flat: false, perspective: false }];
+      if (presentation !== '3d') {
+        views.push(buildingsOnly()
+          ? { id: '2d', label: '2D · Isometric', deg: 45, turn, flat: true, perspective: false }
+          : { id: '2d', label: '2D · Top-down', deg: 0, turn, flat: false, perspective: false });
+      }
+      if (presentation !== '2d') {
+        const perspective = mapView.value === 'perspective';
+        views.push({ id: '3d', label: `3D · ${perspective ? 'Perspective' : 'Isometric'} · ${tilt}°`, deg: tilt, turn, flat: false, perspective });
+      }
+      return views;
+    }
+    const editorViewSelect = document.getElementById('building-editor-view');
+    function showEditorViews() {
+      const views = editorViews();
+      const custom = buildingEditing.camera.id === 'custom';
+      editorViewSelect.replaceChildren(
+        ...views.map((v) => Object.assign(document.createElement('option'), { value: v.id, textContent: v.label })),
+        ...(custom ? [Object.assign(document.createElement('option'), { value: 'custom', textContent: 'Custom' })] : []),
+      );
+      editorViewSelect.value = buildingEditing.camera.id;
+    }
+    function setEditorView(id) {
+      const chosen = editorViews().find((v) => v.id === id);
+      if (!chosen) return;
+      buildingEditing.camera = { ...chosen };
+      showEditorViews();
+      tiltCanvas(false);
+      fitBuildingEditor();
+      draw();
+    }
+    editorViewSelect.addEventListener('change', () => {
+      editorViewSelect.blur();
+      setEditorView(editorViewSelect.value);
+    });
     function editBuilding(part) {
+      // Opens on the view the map is showing, where that shows height.
+      const views = editorViews();
+      const showing = views.find((v) => v.id === (showing3d() ? '3d' : '2d'));
       buildingEditing = {
+        camera: { ...(showing && (showing.flat || showing.deg) ? showing : views[0]) },
         part,
         before: snapshot(),
         settings: Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, part[key]])),
@@ -14641,6 +14700,7 @@
       buildingEditor.hidden = false;
       buildingEditorPanel.hidden = false;
       document.getElementById('panel-title').textContent = 'Building';
+      showEditorViews();
       setPanelOpen(true);
       tiltCanvas(false);
       fitBuildingEditor();
@@ -14660,15 +14720,39 @@
       selectedBuilding = part;
       draw();
     }
-    // The building fills the middle of the canvas, its walls and roof included.
+    // The building fills the middle of the canvas, its walls and roof included,
+    // measured where its corners land in the view as it's turned and tipped.
     function fitBuildingEditor() {
-      const r = partRect(buildingEditing.part);
-      const rise = (panelLift() * (partHeight(buildingEditing.part) ?? 100)) / 100 * Math.SQRT1_2;
+      const { part } = buildingEditing;
+      const r = partRect(part);
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
-      view.scale = Math.min(MAX_SCALE * zoomBase, (W * 0.6) / Math.max(r.w, 1), (H * 0.6) / Math.max(r.h + rise, 1));
+      const bounds = () => {
+        tiltCanvas(false);
+        const rise = liftMatrix(partLift(part) * view.scale);
+        const pts = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].flatMap(([x, y]) => {
+          const s0 = toScreen({ x, y });
+          const s1 = rise.transformPoint(new DOMPoint(s0.x, s0.y));
+          return [windowPoint(s0.x, s0.y), windowPoint(s1.x, s1.y)];
+        });
+        const xs = pts.map((q) => q.x);
+        const ys = pts.map((q) => q.y);
+        return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      };
+      view.scale = Math.min(MAX_SCALE * zoomBase, (W * 0.6) / Math.max(r.w, 1), (H * 0.6) / Math.max(r.h, 1));
       view.x = W / 2 - (r.x + r.w / 2) * view.scale;
-      view.y = H / 2 - (r.y + r.h / 2 - rise / 2) * view.scale;
+      view.y = H / 2 - (r.y + r.h / 2) * view.scale;
+      for (let pass = 0; pass < 2; pass++) {
+        const b = bounds();
+        const k = Math.min((W * 0.6) / Math.max(b.x1 - b.x0, 1), (H * 0.6) / Math.max(b.y1 - b.y0, 1));
+        const next = Math.min(MAX_SCALE * zoomBase, Math.max(MIN_SCALE * zoomBase, view.scale * k));
+        view.x = W / 2 - ((W / 2 - view.x) * next) / view.scale;
+        view.y = H / 2 - ((H / 2 - view.y) * next) / view.scale;
+        view.scale = next;
+        const c = bounds();
+        view.x += W / 2 - (c.x0 + c.x1) / 2;
+        view.y += H / 2 - (c.y0 + c.y1) / 2;
+      }
     }
     function paintBuildingEditor() {
       const dpr = window.devicePixelRatio || 1;
@@ -14747,7 +14831,8 @@
       e.stopPropagation();
       e.preventDefault();
       if (e.button !== 0) return;
-      editorPan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+      const { camera } = buildingEditing;
+      editorPan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, orbit: e.shiftKey, turn: camera.turn, deg: camera.deg };
       e.target.setPointerCapture(e.pointerId);
       canvasArea.classList.add('panning');
     }, { capture: true });
@@ -14755,8 +14840,23 @@
       if (!onEditorCanvas(e)) return;
       e.stopPropagation();
       if (!editorPan) return;
-      view.x = editorPan.vx + e.clientX - editorPan.x;
-      view.y = editorPan.vy + e.clientY - editorPan.y;
+      const dx = e.clientX - editorPan.x;
+      const dy = e.clientY - editorPan.y;
+      if (editorPan.orbit) {
+        // Across turns it, up and down tips it; a free view stands the building on tipped ground.
+        const { camera } = buildingEditing;
+        const fresh = camera.id !== 'custom';
+        Object.assign(camera, {
+          id: 'custom',
+          flat: false,
+          turn: (((editorPan.turn + dx * 0.4) % 360) + 360) % 360,
+          deg: Math.min(75, Math.max(0, editorPan.deg - dy * 0.3)),
+        });
+        if (fresh) showEditorViews();
+      } else {
+        view.x = editorPan.vx + dx;
+        view.y = editorPan.vy + dy;
+      }
       draw();
     }, { capture: true });
     for (const type of ['pointerup', 'pointercancel']) {
@@ -16384,12 +16484,12 @@
     // from whichever point of the turned box is lowest on screen.
     function tiltCanvas(blank) {
       // Isometric buildings lean as if the map were tilted 45°, without tilting it.
-      // The building editor shows its building isometric and unturned.
-      const flat = !!buildingEditing || isoBuildings();
+      const camera = buildingEditing?.camera;
+      const flat = camera ? camera.flat : isoBuildings();
       // Paths and Location show the map top down, whatever its tilt and rotation.
-      const topDown = !buildingEditing && (blank || !pathTools.hidden || inLocation() || (flatView() && !flat));
-      const deg = topDown ? 0 : flat ? 45 : presentation === '2d' ? 0 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
-      const turn = topDown || buildingEditing ? 0 : (Number(mapRotationInput.value) || 0) % 360;
+      const topDown = !camera && (blank || !pathTools.hidden || inLocation() || (flatView() && !flat));
+      const deg = camera ? camera.deg : topDown ? 0 : flat ? 45 : presentation === '2d' ? 0 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
+      const turn = camera ? camera.turn : topDown ? 0 : (Number(mapRotationInput.value) || 0) % 360;
       canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);
       tiltAngles = deg || turn ? { deg, turn, flat } : null;
       // Split screen tilts each panel on its own, as it paints them.
@@ -16413,18 +16513,21 @@
     // in rect of the window, and returns how it was done.
     function layTilt(el, rect, budget) {
       const { deg, turn, flat } = tiltAngles;
-      const centre = toScreen({ x: board.w / 2, y: board.h / 2 });
+      // The map turns and tips about its box; the building editor's view, about its building.
+      const area = buildingEditing ? partRect(buildingEditing.part) : { x: 0, y: 0, w: board.w, h: board.h };
+      const centre = toScreen({ x: area.x + area.w / 2, y: area.y + area.h / 2 });
       const cx = centre.x;
       const cy = centre.y;
       const spin = new DOMMatrix().translate(cx, cy).rotate(turn).translate(-cx, -cy);
-      const ys = [[0, 0], [board.w, 0], [0, board.h], [board.w, board.h]]
+      const ys = [[area.x, area.y], [area.x + area.w, area.y], [area.x, area.y + area.h], [area.x + area.w, area.y + area.h]]
         .map(([x, y]) => toScreen({ x, y }))
         .map((p) => spin.transformPoint(new DOMPoint(p.x, p.y)).y);
       const ox = cx;
       const oy = Math.max(...ys);
       // The camera stands back twice the box's height on screen; isometric
       // has it infinitely far away.
-      const d = mapView.value === 'perspective' ? Math.max(400, 2 * (oy - Math.min(...ys))) : Infinity;
+      const perspective = buildingEditing ? buildingEditing.camera.perspective : mapView.value === 'perspective';
+      const d = perspective ? Math.max(400, 2 * (oy - Math.min(...ys))) : Infinity;
       // flat: the map itself isn't tipped, and angle is only for the buildings' lean.
       const tilt = { ox, oy, d, angle: (deg * Math.PI) / 180, turn: (turn * Math.PI) / 180, spin, flat, cx, cy };
       // The rect's corners, taken back onto the flat map, bound what shows.

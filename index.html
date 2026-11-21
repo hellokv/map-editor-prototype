@@ -2702,6 +2702,10 @@
               <option value="inset">Inset</option>
             </select>
           </div>
+          <label id="edit-roof-thickness-field" class="field">
+            Roof Height
+            <span class="slider"><input id="edit-roof-thickness" type="number" min="0" max="40" step="1"><input type="range" min="0" max="40" step="1" aria-label="Flat roof height"></span>
+          </label>
           <label id="edit-roof-height-field" class="field">
             Roof Height
             <span class="slider"><span class="percent-field"><input id="edit-roof-height" type="number" min="0" max="300" step="1"></span><input type="range" min="0" max="300" step="1" aria-label="Roof height"></span>
@@ -4076,7 +4080,7 @@
     // The building open in the building editor, if any. Drawing reads it from the start.
     let buildingEditing = null;
     // A building's own settings, which the editor and undo keep.
-    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang'];
+    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang', 'roofThickness'];
     // A color input followed by an opacity percentage makes one #rrggbbaa
     // color with it.
     function colorOf(input) {
@@ -13716,7 +13720,7 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, heights = [], tops = [], roofHeights = [], roofInsets = [], lifts = [], overhangs = []) {
+    async function setBuildingsImage(src, heights = [], tops = [], roofHeights = [], roofInsets = [], lifts = [], overhangs = [], thicknesses = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
       buildingParts.forEach((part, i) => {
@@ -13726,6 +13730,7 @@
         part.roofHeight = roofHeights[i] ?? 100;
         part.roofInset = roofInsets[i] ?? 10;
         part.roofOverhang = overhangs[i] ?? 0;
+        part.roofThickness = thicknesses[i] ?? 0;
       });
       selectBuilding(null);
       buildingsImage = img;
@@ -14149,8 +14154,10 @@
       const r = partRect(part);
       return Math.min(r.w, r.h) * 0.5 * roofScale(part);
     }
-    // A building's Roof Height, as a share of its top's natural height.
+    // A building's Roof Height, as a share of its top's natural height; a flat
+    // top has none, so its Roof Height is its thickness in map units.
     const roofScale = (part) => (part.roofHeight ?? 100) / 100;
+    const flatRoofHeight = (part) => Math.max(0, part.roofThickness ?? 0);
     // An angled top as a hip roof on the part's outline, in map units: every
     // edge rises inward at 45°, so a point's height is its distance to the
     // nearest edge, and each edge's face is where that edge is nearest. The
@@ -14401,6 +14408,7 @@
         roofHeight: { get: () => shape.roofHeight ?? 100, set: (v) => { shape.roofHeight = v; } },
         roofInset: { get: () => shape.roofInset ?? 10, set: (v) => { shape.roofInset = v; } },
         roofOverhang: { get: () => shape.roofOverhang ?? 0, set: (v) => { shape.roofOverhang = v; } },
+        roofThickness: { get: () => shape.roofThickness ?? 0, set: (v) => { shape.roofThickness = v; } },
       });
       shapeParts.set(shape, part);
       return part;
@@ -14637,11 +14645,14 @@
             c.drawImage(grown, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);
           }
         }
-        for (let i = 1; i <= slices; i++) {
-          c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
+        // A flat top can be a slab of its own, as thick as its Roof Height, on top of the walls.
+        const slab = tilted && (part.roofStyle ?? 'flat') === 'flat' ? flatRoofHeight(part) * view.scale : 0;
+        const slabSlices = slab ? Math.max(1, Math.ceil((slab * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 0;
+        for (let i = 1; i <= slices + slabSlices; i++) {
+          c.setTransform(inCanvas(liftMatrix(i <= slices ? (top * i) / slices : top + (slab * (i - slices)) / slabSlices)));
           // Under a dome, the roof is the dome's own first layer.
-          const roof = i === slices && part.roofStyle !== 'dome';
-          const box = roof ? roofRect(part) : r;
+          const roof = i === slices + slabSlices && part.roofStyle !== 'dome';
+          const box = roof || i > slices ? roofRect(part) : r;
           c.drawImage(roof ? partTop(part) : partWall(part), box.x, box.y, box.w, box.h);
           if (roof && outlined) {
             const { canvas: rimmed, pad } = partOutline(part, true);
@@ -14950,6 +14961,8 @@
     const editRoofInset = document.getElementById('edit-roof-inset');
     const editRoofInsetSlider = linkSlider(editRoofInset);
     const editHeightReset = document.getElementById('edit-building-height-reset');
+    const editRoofThickness = document.getElementById('edit-roof-thickness');
+    const editRoofThicknessSlider = linkSlider(editRoofThickness);
     const editRoofOverhang = document.getElementById('edit-roof-overhang');
     const editRoofOverhangSlider = linkSlider(editRoofOverhang);
     const editTop = document.getElementById('edit-building-top');
@@ -14961,6 +14974,8 @@
       const top = part.roofStyle ?? 'flat';
       if (document.activeElement !== editTop) editTop.value = top;
       document.getElementById('edit-roof-height-field').hidden = top === 'flat';
+      document.getElementById('edit-roof-thickness-field').hidden = top !== 'flat';
+      show(editRoofThickness, editRoofThicknessSlider, part.roofThickness ?? 0);
       show(editRoofHeight, editRoofHeightSlider, part.roofHeight ?? 100);
       document.getElementById('edit-roof-inset-field').hidden = top !== 'inset';
       show(editRoofInset, editRoofInsetSlider, part.roofInset ?? 10);
@@ -14975,6 +14990,7 @@
     editField(editRoofHeight, (v) => { buildingEditing.part.roofHeight = v; });
     editField(editRoofInset, (v) => { buildingEditing.part.roofInset = v; });
     editField(editRoofOverhang, (v) => { buildingEditing.part.roofOverhang = Math.max(0, v); });
+    editField(editRoofThickness, (v) => { buildingEditing.part.roofThickness = Math.max(0, v); });
     editHeightReset.addEventListener('click', (e) => {
       e.preventDefault();
       editHeightReset.blur();
@@ -17058,6 +17074,7 @@
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.buildingRoofOverhangs = buildingParts.map((part) => part.roofOverhang ?? 0);
+      file.buildingRoofThicknesses = buildingParts.map((part) => part.roofThickness ?? 0);
       file.buildingRemoved = buildingParts.map((part) => !!part.removed);
       file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
@@ -17223,7 +17240,7 @@
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? [], file.buildingRoofOverhangs ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? [], file.buildingRoofOverhangs ?? [], file.buildingRoofThicknesses ?? []);
       (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));

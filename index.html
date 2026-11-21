@@ -4051,6 +4051,15 @@
   <script>
     // The building open in the building editor, if any. Drawing reads it from the start.
     let buildingEditing = null;
+    // Buildings made together in the building editor share a group id
+    // (part.group on the image's parts, shape.buildingGroup on shapes), and
+    // the map selects, moves, scales and deletes them as one.
+    const buildingGroupOf = (part) => (part?.shape ? part.shape.buildingGroup : part?.group) ?? null;
+    function groupMembers(part) {
+      const id = buildingGroupOf(part);
+      if (id == null) return part ? [part] : [];
+      return [...buildingParts.filter((p) => !p.removed && p.group === id), ...shapes.filter((sh) => isBuildingShape(sh) && sh.buildingGroup === id).map(shapeBuildingPart)];
+    }
     // A building's own settings, which the editor and undo keep.
     const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang', 'roofThickness'];
     // A color input followed by an opacity percentage makes one #rrggbbaa
@@ -5508,7 +5517,7 @@
           terrain: { ...terrain },
           removedBase: [...removedBase],
           removedParts: buildingParts.map((part) => !!part.removed),
-          partSettings: buildingParts.map((part) => Object.fromEntries([...BUILDING_EDIT_KEYS, 'x', 'y', 'w', 'h'].map((key) => [key, part[key]]))),
+          partSettings: buildingParts.map((part) => Object.fromEntries([...BUILDING_EDIT_KEYS, 'x', 'y', 'w', 'h', 'group'].map((key) => [key, part[key]]))),
           trees: trees.map((tree) => ({ ...tree })),
           fillAreas: fillAreas.map((area) => ({ ...area, points: area.points.map((q) => ({ ...q })) })),
         },
@@ -13722,10 +13731,12 @@
     function deleteSelectedBuilding() {
       if (!selectedBuilding) return;
       recordUndo();
-      if (selectedBuilding.shape) {
-        shapes.splice(shapes.indexOf(selectedBuilding.shape), 1);
-        selectedShapes = [];
-      } else selectedBuilding.removed = true;
+      for (const part of groupMembers(livePart(selectedBuilding))) {
+        if (part.shape) {
+          shapes.splice(shapes.indexOf(part.shape), 1);
+          selectedShapes = [];
+        } else part.removed = true;
+      }
       selectBuilding(null);
       draw();
     }
@@ -14448,6 +14459,7 @@
     // Parts deleted from the buildings image stay in the list, so saved settings keep their places.
     // In the building editor only its building is drawn.
     const editingOnly = (part) => !buildingEditing || part === buildingEditing.part
+      || buildingEditing.members.some((m) => m === part || (m.shape && m.shape === part.shape))
       || (part.shape && (part.shape === buildingEditing.part.shape || buildingEditing.added.includes(part.shape)));
     const shownParts = () => buildingParts.filter((part) => !part.removed && editingOnly(part));
     const allBuildingParts = () => [...shownParts(), ...shapes.filter(isBuildingShape).map(shapeBuildingPart).filter(editingOnly)];
@@ -14798,7 +14810,7 @@
           }
         }
         if (outlined && tilted) strokeBuildingEdges(c, part, top, inCanvas);
-        const picked = buildingEditing ? buildingEditing.selected && livePart(buildingEditing.selected) === part : part === selectedBuilding;
+        const picked = buildingEditing ? buildingEditing.selected && livePart(buildingEditing.selected) === part : part === selectedBuilding && buildingGroupOf(part) == null;
         if (picked) {
           c.strokeStyle = '#2f80ed';
           c.lineWidth = 2 / view.scale;
@@ -14819,7 +14831,33 @@
           }
         }
       }
+      // A group is boxed as a whole, with its handles at the box's corners.
+      if (!buildingEditing && selectedBuilding && buildingGroupOf(selectedBuilding) != null) {
+        c.setTransform(base);
+        const g = groupRect(selectedBuilding);
+        c.strokeStyle = '#2f80ed';
+        c.lineWidth = 2 / view.scale;
+        c.setLineDash([6 / view.scale, 4 / view.scale]);
+        c.strokeRect(g.x, g.y, g.w, g.h);
+        c.setLineDash([]);
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        const dpr = window.devicePixelRatio || 1;
+        c.fillStyle = '#fff';
+        c.lineWidth = 1.5 * dpr;
+        for (const corner of buildingCorners(selectedBuilding)) {
+          const q = inCanvas(new DOMMatrix()).transformPoint(new DOMPoint(corner.x, corner.y));
+          c.fillRect(q.x - 4 * dpr, q.y - 4 * dpr, 8 * dpr, 8 * dpr);
+          c.strokeRect(q.x - 4 * dpr, q.y - 4 * dpr, 8 * dpr, 8 * dpr);
+        }
+      }
       c.setTransform(base);
+    }
+    // The box around a building's whole group, in map units.
+    function groupRect(part) {
+      const rects = groupMembers(livePart(part)).map(partRect);
+      const x = Math.min(...rects.map((r) => r.x));
+      const y = Math.min(...rects.map((r) => r.y));
+      return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
     }
     // The part under a canvas point, looking down through roofs and walls.
     // Whether a background point lies on an image part's own pixels.
@@ -14866,7 +14904,8 @@
       // A lone selected building shape takes the same menu as the image's buildings.
       const sole = soleShape();
       if (sole && isBuildingShape(sole)) selectedBuilding = shapeBuildingPart(sole);
-      else if (selectedBuilding?.shape) selectedBuilding = null;
+      else if (selectedBuilding?.shape && buildingGroupOf(selectedBuilding) == null) selectedBuilding = null;
+      else if (selectedBuilding?.shape) selectedBuilding = livePart(selectedBuilding);
       buildingPop.hidden = !selectedBuilding || backgroundTools.hidden || !hasBuildings()
         || document.getElementById('background-panel').dataset.tab !== 'buildings';
       if (buildingPop.hidden) return;
@@ -14965,6 +15004,9 @@
         added: [],
         selected: null,
         part,
+        // The rest of its group, opened with it, and how each was, to put back on Cancel.
+        members: groupMembers(part).filter((m) => m !== part && !(m.shape && m.shape === part.shape)),
+        kept: groupMembers(part).map((m) => ({ target: m.shape ?? m, settings: Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, m[key]])), place: placeOf(m) })),
         before: snapshot(),
         settings: Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, part[key]])),
         place: placeOf(part),
@@ -14985,12 +15027,32 @@
       draw();
     }
     function leaveBuildingEditor(keep) {
-      const { part, before, settings, place, view: was, panelOpen } = buildingEditing;
-      if (keep) recordUndo(before);
-      else {
+      const { part, before, settings, place, view: was, panelOpen, added, members, kept } = buildingEditing;
+      if (keep) {
+        recordUndo(before);
+        // What was made together stays together.
+        if (added.length || members.length) {
+          const id = buildingGroupOf(part) ?? Date.now();
+          for (const m of [part, ...members, ...added.map(shapeBuildingPart)]) {
+            if (m.shape) m.shape.buildingGroup = id;
+            else m.group = id;
+          }
+        }
+      } else {
         for (const key of BUILDING_EDIT_KEYS) part[key] = settings[key];
         Object.assign(part.shape ?? part, place);
-        for (const shape of buildingEditing.added) shapes.splice(shapes.indexOf(shape), 1);
+        for (const shape of added) shapes.splice(shapes.indexOf(shape), 1);
+        for (const { target, settings: was, place: at } of kept) {
+          Object.assign(target, at);
+          if (target.kind) {
+            if (!shapes.includes(target)) shapes.push(target);
+            const live = shapeBuildingPart(target);
+            for (const key of BUILDING_EDIT_KEYS) live[key] = was[key];
+          } else {
+            target.removed = false;
+            for (const key of BUILDING_EDIT_KEYS) target[key] = was[key];
+          }
+        }
       }
       setEditorTool('pan');
       buildingEditing = null;
@@ -15257,13 +15319,16 @@
     function deleteEditorSelection() {
       const picked = buildingEditing.selected;
       if (!picked) return;
-      const added = buildingEditing.added.indexOf(picked.shape);
-      if (added < 0) {
+      const live = livePart(picked);
+      if (live === livePart(buildingEditing.part)) {
         document.getElementById('edit-building-delete').click();
         return;
       }
-      shapes.splice(shapes.indexOf(picked.shape), 1);
-      buildingEditing.added.splice(added, 1);
+      const added = buildingEditing.added.indexOf(live.shape);
+      if (added >= 0) buildingEditing.added.splice(added, 1);
+      else buildingEditing.members = buildingEditing.members.filter((m) => m !== picked && !(m.shape && m.shape === live.shape));
+      if (live.shape) shapes.splice(shapes.indexOf(live.shape), 1);
+      else live.removed = true;
       buildingEditing.selected = null;
       draw();
     }
@@ -15280,11 +15345,11 @@
     // A building from the image is moved by dragging it, and scaled by
     // dragging a corner of its box, about the opposite corner, keeping its shape.
     const buildingCorners = (part) => {
-      const r = partRect(part);
+      const r = groupRect(part);
       return [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]].map(([x, y]) => ({ x, y }));
     };
     function buildingHandleAt(e) {
-      if (!selectedBuilding || selectedBuilding.shape) return -1;
+      if (!selectedBuilding || (selectedBuilding.shape && buildingGroupOf(selectedBuilding) == null)) return -1;
       const rect = canvas.parentElement.getBoundingClientRect();
       return buildingCorners(selectedBuilding).findIndex((corner) => {
         const q = toScreen(corner);
@@ -15298,8 +15363,11 @@
         || document.getElementById('background-panel').dataset.tab !== 'buildings') return;
       const s = canvasPoint(e);
       const handle = buildingHandleAt(e);
-      // Drawn shapes sit above the buildings image, so a click on one picks the shape.
-      const part = handle >= 0 ? selectedBuilding : shapeAt(toBackground(s.x, s.y)) ? null : buildingAt(s);
+      // Drawn shapes sit above the buildings image, so a click on one picks
+      // the shape, unless it's part of a building group, which is picked whole.
+      const onShape = shapeAt(toBackground(s.x, s.y));
+      const grouped = onShape && isBuildingShape(onShape) && onShape.buildingGroup != null ? shapeBuildingPart(onShape) : null;
+      const part = handle >= 0 ? selectedBuilding : grouped ?? (onShape ? null : buildingAt(s));
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
         return;
@@ -15307,39 +15375,41 @@
       e.stopImmediatePropagation();
       e.preventDefault();
       selectBuilding(part);
-      buildingDrag = { part, handle, start: toBackground(s.x, s.y), was: { x: part.x, y: part.y, w: part.w, h: part.h }, before: snapshot(), moved: false };
+      buildingDrag = {
+        part, handle, start: toBackground(s.x, s.y), box: groupRect(part), before: snapshot(), moved: false,
+        members: groupMembers(part).map((m) => ({ m, rect: partRect(m), shape: m.shape && { x: m.shape.x, y: m.shape.y, w: m.shape.w, h: m.shape.h } })),
+      };
       canvas.setPointerCapture(e.pointerId);
       draw();
     }, { capture: true });
     canvas.addEventListener('pointermove', (e) => {
       if (!buildingDrag) return;
       e.stopImmediatePropagation();
-      const { part, handle, start, was, before } = buildingDrag;
+      const { handle, start, box, members, before } = buildingDrag;
       const s = canvasPoint(e);
       const p = toBackground(s.x, s.y);
       if (!buildingDrag.moved) recordUndo(before);
       buildingDrag.moved = true;
-      // Map units to the buildings image's own.
+      // Moved, everything shifts with the pointer; scaled, everything scales
+      // about the group box's opposite corner, which stays put.
+      let k = 1;
+      let [ax, ay] = [0, 0];
+      if (handle >= 0) {
+        ax = box.x + box.w * (handle === 1 || handle === 2 ? 0 : 1);
+        ay = box.y + box.h * (handle >= 2 ? 0 : 1);
+        k = Math.max(0.05, Math.hypot(p.x - ax, p.y - ay) / (Math.hypot(start.x - ax, start.y - ay) || 1));
+      }
+      const to = (x, y) => (handle >= 0 ? [ax + (x - ax) * k, ay + (y - ay) * k] : [x + p.x - start.x, y + p.y - start.y]);
       const b = buildingsRect();
-      const kx = buildingsImage.naturalWidth / b.w;
-      const ky = buildingsImage.naturalHeight / b.h;
-      if (handle < 0) {
-        part.x = was.x + (p.x - start.x) * kx;
-        part.y = was.y + (p.y - start.y) * ky;
-      } else {
-        // The opposite corner stays put; the scale follows the pointer's distance from it.
-        const fx = handle === 1 || handle === 2 ? 0 : 1;
-        const fy = handle >= 2 ? 0 : 1;
-        const ax = was.x + was.w * fx;
-        const ay = was.y + was.h * fy;
-        const px = b.x + ax / kx;
-        const py = b.y + ay / ky;
-        const from = Math.hypot(start.x - px, start.y - py) || 1;
-        const k = Math.max(0.05, Math.hypot(p.x - px, p.y - py) / from);
-        part.w = was.w * k;
-        part.h = was.h * k;
-        part.x = ax - part.w * fx;
-        part.y = ay - part.h * fy;
+      for (const { m, rect, shape } of members) {
+        if (shape) {
+          const [x, y] = to(shape.x, shape.y);
+          Object.assign(m.shape, { x, y, w: shape.w * k, h: shape.h * k });
+        } else {
+          const [x, y] = to(rect.x, rect.y);
+          const [kx, ky] = [buildingsImage.naturalWidth / b.w, buildingsImage.naturalHeight / b.h];
+          Object.assign(m, { x: (x - b.x) * kx, y: (y - b.y) * ky, w: rect.w * k * kx, h: rect.h * k * ky });
+        }
       }
       draw();
     }, { capture: true });
@@ -15347,6 +15417,7 @@
       canvas.addEventListener(type, (e) => {
         if (!buildingDrag) return;
         e.stopImmediatePropagation();
+        selectedBuilding = livePart(selectedBuilding);
         buildingDrag = null;
         draw();
       }, { capture: true });
@@ -17290,6 +17361,7 @@
       file.buildingRoofOverhangs = buildingParts.map((part) => part.roofOverhang ?? 0);
       file.buildingRoofThicknesses = buildingParts.map((part) => part.roofThickness ?? 0);
       file.buildingPlaces = buildingParts.map(({ x, y, w, h }) => [x, y, w, h]);
+      file.buildingGroups = buildingParts.map((part) => part.group ?? null);
       file.buildingRemoved = buildingParts.map((part) => !!part.removed);
       file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
@@ -17459,6 +17531,7 @@
       (file.buildingPlaces ?? []).forEach((place, i) => {
         if (buildingParts[i] && place) [buildingParts[i].x, buildingParts[i].y, buildingParts[i].w, buildingParts[i].h] = place;
       });
+      (file.buildingGroups ?? []).forEach((group, i) => { if (buildingParts[i] && group != null) buildingParts[i].group = group; });
       (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));

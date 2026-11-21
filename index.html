@@ -719,6 +719,7 @@
       position: absolute;
       inset: 0;
       z-index: 30;
+      pointer-events: none;
     }
     #building-editor[hidden] {
       display: none;
@@ -726,6 +727,7 @@
     #building-editor button {
       position: absolute;
       top: 16px;
+      pointer-events: auto;
     }
     #building-editor-cancel {
       left: 16px;
@@ -733,8 +735,15 @@
     #building-editor-save {
       right: 16px;
     }
-    #canvas-area.building-editing > :not(canvas, #building-editor) {
+    #canvas-area.building-editing > :not(canvas, #building-editor, #view-menu),
+    #canvas-area.building-editing #view-menu > :not(.percent-field, #fit-button) {
       display: none !important;
+    }
+    #canvas-area.building-editing canvas {
+      cursor: grab !important;
+    }
+    #canvas-area.building-editing.panning canvas {
+      cursor: grabbing !important;
     }
     #panel.building-editing > :not(#panel-header, #building-editor-panel),
     #panel.building-editing #panel-header button {
@@ -5952,7 +5961,8 @@
     });
     // In split screen, every panel fits the map to itself.
     document.getElementById('fit-button').addEventListener('click', (e) => {
-      if (panelViews) {
+      if (buildingEditing) fitBuildingEditor();
+      else if (panelViews) {
         const { w, h } = splitPanels()[0];
         centerBackground(w, h);
         panelViews = panelViews.map(() => ({ ...view }));
@@ -14656,7 +14666,7 @@
       const rise = (panelLift() * (partHeight(buildingEditing.part) ?? 100)) / 100 * Math.SQRT1_2;
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
-      view.scale = Math.min(MAX_SCALE, (W * 0.6) / Math.max(r.w, 1), (H * 0.6) / Math.max(r.h + rise, 1));
+      view.scale = Math.min(MAX_SCALE * zoomBase, (W * 0.6) / Math.max(r.w, 1), (H * 0.6) / Math.max(r.h + rise, 1));
       view.x = W / 2 - (r.x + r.w / 2) * view.scale;
       view.y = H / 2 - (r.y + r.h / 2 - rise / 2) * view.scale;
     }
@@ -14728,6 +14738,35 @@
       selectBuilding(null);
       draw();
     });
+    // The editor's canvas only pans, by dragging, and zooms, by the wheel or a
+    // pinch as on the map; its pointer events go no further.
+    let editorPan = null;
+    const onEditorCanvas = (e) => buildingEditing && (e.target === canvas || e.target === tiltView);
+    canvasArea.addEventListener('pointerdown', (e) => {
+      if (!onEditorCanvas(e)) return;
+      e.stopPropagation();
+      e.preventDefault();
+      if (e.button !== 0) return;
+      editorPan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+      e.target.setPointerCapture(e.pointerId);
+      canvasArea.classList.add('panning');
+    }, { capture: true });
+    canvasArea.addEventListener('pointermove', (e) => {
+      if (!onEditorCanvas(e)) return;
+      e.stopPropagation();
+      if (!editorPan) return;
+      view.x = editorPan.vx + e.clientX - editorPan.x;
+      view.y = editorPan.vy + e.clientY - editorPan.y;
+      draw();
+    }, { capture: true });
+    for (const type of ['pointerup', 'pointercancel']) {
+      canvasArea.addEventListener(type, (e) => {
+        if (!onEditorCanvas(e)) return;
+        e.stopPropagation();
+        editorPan = null;
+        canvasArea.classList.remove('panning');
+      }, { capture: true });
+    }
     // While editing, Escape cancels and the map's other shortcuts are held off.
     window.addEventListener('keydown', (e) => {
       if (!buildingEditing) return;

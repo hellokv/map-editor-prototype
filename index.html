@@ -13909,6 +13909,24 @@
     }
     const buildingsColor = document.getElementById('buildings-color');
     buildingsColor.addEventListener('input', draw);
+    // The average colour of a part's top, for roof that reaches past it.
+    function partTopColor(part) {
+      const top = partTop(part);
+      if (part.topAverageOf === top) return part.topAverage;
+      const n = 16;
+      const c = new OffscreenCanvas(n, n).getContext('2d', { willReadFrequently: true });
+      c.drawImage(top, 0, 0, n, n);
+      const data = c.getImageData(0, 0, n, n).data;
+      const sum = [0, 0, 0, 0];
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        for (let k = 0; k < 3; k++) sum[k] += data[i + k] * a;
+        sum[3] += a;
+      }
+      const rgb = sum.slice(0, 3).map((v) => Math.round(v / (sum[3] || 1)));
+      part.topAverageOf = top;
+      return (part.topAverage = `rgb(${rgb.join(', ')})`);
+    }
     // A part's top in the building colour, laid over its own colours as
     // strongly as the colour's opacity.
     function partTop(part) {
@@ -14697,12 +14715,28 @@
         // A flat top can be a slab of its own, as thick as its Roof Height, on top of the walls.
         const slab = tilted && (part.roofStyle ?? 'flat') === 'flat' ? flatRoofHeight(part) * view.scale : 0;
         const slabSlices = slab ? Math.max(1, Math.ceil((slab * Math.max(1, Math.tan(canvasTilt.angle))) / 1.5)) : 0;
+        // An overhang pushes the outline out, so a rectangle stays one, and the
+        // roof is drawn to fill it: its own picture at its true size over its
+        // colour, and a slab's sides that shape in the wall colour.
+        const eaves = roofOverhang(part) && part.roofStyle !== 'dome' ? roofPolygon(part) : null;
+        const fillEaves = (color) => {
+          c.beginPath();
+          eaves.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y)));
+          c.closePath();
+          c.fillStyle = color;
+          c.fill();
+        };
         for (let i = 1; i <= slices + slabSlices; i++) {
           c.setTransform(inCanvas(liftMatrix(i <= slices ? (top * i) / slices : top + (slab * (i - slices)) / slabSlices)));
           // Under a dome, the roof is the dome's own first layer.
           const roof = i === slices + slabSlices && part.roofStyle !== 'dome';
-          const box = roof || i > slices ? roofRect(part) : r;
-          c.drawImage(roof ? partTop(part) : partWall(part), box.x, box.y, box.w, box.h);
+          if (eaves && (roof || i > slices)) {
+            fillEaves(roof ? partTopColor(part) : colorOf(buildingsSideColor));
+            if (roof) c.drawImage(partTop(part), r.x, r.y, r.w, r.h);
+          } else {
+            const box = roof || i > slices ? roofRect(part) : r;
+            c.drawImage(roof ? partTop(part) : partWall(part), box.x, box.y, box.w, box.h);
+          }
           if (roof && outlined) {
             const { canvas: rimmed, pad } = partOutline(part, true);
             c.drawImage(rimmed, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);

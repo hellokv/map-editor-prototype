@@ -14846,7 +14846,8 @@
     function paintBuildingEditor() {
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = colorOf(canvasColor);
+      // The building stands on the map's own ground, the frame's inside colour.
+      ctx.fillStyle = colorOf(boardColor);
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
@@ -16630,7 +16631,7 @@
       const topDown = !camera && (blank || !pathTools.hidden || inLocation() || (flatView() && !flat));
       const deg = camera ? camera.deg : topDown ? 0 : flat ? 45 : presentation === '2d' ? 0 : Math.min(75, Math.max(0, Number(mapTiltInput.value) || 0));
       const turn = camera ? camera.turn : topDown ? 0 : (Number(mapRotationInput.value) || 0) % 360;
-      canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(canvasColor);
+      canvas.parentElement.style.backgroundColor = blank ? '' : colorOf(camera ? boardColor : canvasColor);
       tiltAngles = deg || turn ? { deg, turn, flat } : null;
       // Split screen tilts each panel on its own, as it paints them.
       const whole = tiltAngles && !panelViews;

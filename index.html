@@ -14187,7 +14187,33 @@
       const H = buildingsImage.naturalHeight;
       const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
       const b = buildingsRect();
-      return outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
+      return squareCorners(outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]));
+    }
+    // An outline traced from the image can cut a corner with a sliver of an
+    // edge where its samples missed the corner; that edge is dropped and its
+    // neighbours run on to meet, so a rectangle has four corners again.
+    function squareCorners(poly) {
+      let out = poly;
+      for (let pass = 0; pass < poly.length && out.length > 3; pass++) {
+        const lens = out.map((a, i) => Math.hypot(out[(i + 1) % out.length][0] - a[0], out[(i + 1) % out.length][1] - a[1]));
+        const tiny = Math.max(...lens) * 0.05;
+        const i = lens.findIndex((len) => len < tiny);
+        if (i < 0) break;
+        const n = out.length;
+        const [z, a, b, c] = [out[(i + n - 1) % n], out[i], out[(i + 1) % n], out[(i + 2) % n]];
+        // Where the line through z and a meets the one through b and c.
+        const d1 = [a[0] - z[0], a[1] - z[1]];
+        const d2 = [c[0] - b[0], c[1] - b[1]];
+        const cross = d1[0] * d2[1] - d1[1] * d2[0];
+        const meet = Math.abs(cross) > 1e-9 && (() => {
+          const t = ((b[0] - z[0]) * d2[1] - (b[1] - z[1]) * d2[0]) / cross;
+          return [z[0] + d1[0] * t, z[1] + d1[1] * t];
+        })();
+        const near = meet && Math.hypot(meet[0] - a[0], meet[1] - a[1]) < Math.max(4 * lens[i], tiny);
+        out = out.flatMap((q, k) => (k === i ? (near ? [meet] : [a]) : k === (i + 1) % n ? (near ? [] : [b]) : [q]));
+        if (!near) break;
+      }
+      return out;
     }
     // How far a building's roof reaches past its walls, in map units.
     const roofOverhang = (part) => Math.max(0, part.roofOverhang ?? 0);
@@ -14209,11 +14235,22 @@
       const o = roofOverhang(part);
       return { x: r.x - o, y: r.y - o, w: r.w + 2 * o, h: r.h + 2 * o };
     }
+    // An overhang widens the slopes, not the roof's height: heights on the
+    // pushed-out outline are scaled so the top peaks where it would without one.
     function hipFaces(part) {
       const r = partRect(part);
       const key = `${r.x},${r.y},${r.w},${r.h},${roofOverhang(part)}`;
       if (part.facesKey === key) return part.faces;
-      const poly = roofPolygon(part);
+      const faces = hipFacesOf(roofPolygon(part));
+      if (roofOverhang(part)) {
+        const peak = (list) => Math.max(0, ...list.flatMap((face) => face.heights));
+        const k = peak(hipFacesOf(partPolygon(part))) / (peak(faces) || 1);
+        for (const face of faces) face.heights = face.heights.map((h) => h * k);
+      }
+      part.facesKey = key;
+      return (part.faces = faces);
+    }
+    function hipFacesOf(poly) {
       const n = poly.length;
       const edges = poly.map((a, i) => {
         const q = poly[(i + 1) % n];
@@ -14231,8 +14268,7 @@
         }
         return { points: face, heights: face.map((p) => Math.max(0, dist(e, p))), outward: [-e.nx, -e.ny] };
       }).filter((face) => face.points.length >= 3);
-      part.facesKey = key;
-      return (part.faces = faces);
+      return faces;
     }
     // An inset top: the angled top cut off at the inset distance from the
     // outline, so its slopes run in that far and a flat top fills the middle.
@@ -14297,11 +14333,13 @@
       const faces = [];
       if (best) {
         const { across, mid } = best;
-        // An overhang widens the slopes, raising the ridge to keep their pitch,
+        // An overhang widens the slopes, flattening them under the same ridge,
         // while the gables stay on the walls.
         const half = best.half + o;
         const offset = (p) => p[0] * across[0] + p[1] * across[1] - mid;
-        const heightAt = (p) => Math.max(0, half - Math.abs(offset(p)));
+        const heightAt = (p) => (Math.max(0, half - Math.abs(offset(p))) * best.half) / half;
+        // The slope's height where it passes over the long walls.
+        const eave = (o * best.half) / half;
         for (const side of [1, -1]) {
           const slope = clipPolygon(roof, (p) => -side * offset(p));
           if (slope.length >= 3) faces.push({ points: slope, heights: slope.map(heightAt), outward: [across[0] * side, across[1] * side] });
@@ -14315,7 +14353,7 @@
             const b = points[j];
             const [ha, hb] = [heights[i], heights[j]];
             // Edges under the eaves are hidden by the overhanging slope.
-            if (Math.max(ha, hb) <= o + 1e-6 || (Math.abs(offset(a)) < 1e-6 && Math.abs(offset(b)) < 1e-6)) return;
+            if (Math.max(ha, hb) <= eave + 1e-6 || (Math.abs(offset(a)) < 1e-6 && Math.abs(offset(b)) < 1e-6)) return;
             const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
             let n = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len];
             if (n[0] * ((a[0] + b[0]) / 2 - cx) + n[1] * ((a[1] + b[1]) / 2 - cy) < 0) n = [-n[0], -n[1]];

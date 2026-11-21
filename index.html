@@ -2663,6 +2663,13 @@
         </label>
       </div>
       <div class="label-section">
+        <button id="edit-use-reference" class="new-style" type="button">Use Shape as Reference<span class="material-symbols-rounded">select</span></button>
+        <label id="edit-reference-color-field" class="field" hidden>
+          Reference
+          <span class="color-field"><input id="edit-reference-color" type="color" value="#000000"><input class="opacity" type="number" min="0" max="100" step="1" value="100" aria-label="Reference opacity">%</span>
+        </label>
+      </div>
+      <div class="label-section">
         <div class="field-group">
           <div class="field">
             Top
@@ -4061,7 +4068,7 @@
       return [...buildingParts.filter((p) => !p.removed && p.group === id), ...shapes.filter((sh) => isBuildingShape(sh) && sh.buildingGroup === id).map(shapeBuildingPart)];
     }
     // A building's own settings, which the editor and undo keep.
-    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang', 'roofThickness'];
+    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang', 'roofThickness', 'reference', 'referenceColor'];
     // A color input followed by an opacity percentage makes one #rrggbbaa
     // color with it.
     function colorOf(input) {
@@ -14452,6 +14459,8 @@
         roofInset: { get: () => shape.roofInset ?? 10, set: (v) => { shape.roofInset = v; } },
         roofOverhang: { get: () => shape.roofOverhang ?? 0, set: (v) => { shape.roofOverhang = v; } },
         roofThickness: { get: () => shape.roofThickness ?? 0, set: (v) => { shape.roofThickness = v; } },
+        reference: { get: () => shape.buildingReference ?? null, set: (v) => { shape.buildingReference = v; } },
+        referenceColor: { get: () => shape.buildingReferenceColor ?? null, set: (v) => { shape.buildingReferenceColor = v; } },
       });
       shapeParts.set(shape, part);
       return part;
@@ -15107,7 +15116,42 @@
       ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
       ctx.translate(view.x, view.y);
       ctx.scale(view.scale, view.scale);
+      drawBuildingReference(ctx);
       drawLiftedBuildings(ctx);
+    }
+    // A reference: the editor's shapes as they were when it was taken, flat
+    // on the ground in a dashed line, to design against. It's kept on the
+    // building, relative to its box, so it goes where the building goes.
+    function drawBuildingReference(c) {
+      const main = livePart(buildingEditing.part);
+      if (!main.reference) return;
+      const r = partRect(main);
+      c.save();
+      c.strokeStyle = main.referenceColor ?? '#000000';
+      c.lineWidth = 1.5 / view.scale;
+      c.setLineDash([6 / view.scale, 4 / view.scale]);
+      for (const outline of main.reference) {
+        c.beginPath();
+        outline.forEach(([x, y], i) => (i ? c.lineTo(r.x + x, r.y + y) : c.moveTo(r.x + x, r.y + y)));
+        c.closePath();
+        c.stroke();
+      }
+      c.restore();
+    }
+    const editReferenceColor = document.getElementById('edit-reference-color');
+    document.getElementById('edit-use-reference').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      const main = livePart(buildingEditing.part);
+      const r = partRect(main);
+      main.reference = allBuildingParts().map((part) => partPolygon(part).map(([x, y]) => [x - r.x, y - r.y]));
+      draw();
+    });
+    for (const input of [editReferenceColor, editReferenceColor.nextElementSibling]) {
+      input.addEventListener('input', () => {
+        if (!buildingEditing) return;
+        livePart(buildingEditing.part).referenceColor = colorOf(editReferenceColor);
+        draw();
+      });
     }
     const editHeight = document.getElementById('edit-building-height');
     const editHeightSlider = linkSlider(editHeight);
@@ -15122,6 +15166,11 @@
     const editRoofOverhangSlider = linkSlider(editRoofOverhang);
     const editTop = document.getElementById('edit-building-top');
     function showBuildingEditorPanel() {
+      const main = livePart(buildingEditing.part);
+      document.getElementById('edit-reference-color-field').hidden = !main.reference;
+      if (main.reference && document.activeElement !== editReferenceColor && document.activeElement !== editReferenceColor.nextElementSibling) {
+        showColor(editReferenceColor, main.referenceColor ?? '#000000');
+      }
       const part = editorTarget();
       const show = (input, slider, value) => { if (document.activeElement !== input) input.value = slider.value = value; };
       show(editHeight, editHeightSlider, partHeight(part) ?? 100);
@@ -17362,6 +17411,7 @@
       file.buildingRoofThicknesses = buildingParts.map((part) => part.roofThickness ?? 0);
       file.buildingPlaces = buildingParts.map(({ x, y, w, h }) => [x, y, w, h]);
       file.buildingGroups = buildingParts.map((part) => part.group ?? null);
+      file.buildingReferences = buildingParts.map((part) => (part.reference ? { outlines: part.reference, color: part.referenceColor ?? null } : null));
       file.buildingRemoved = buildingParts.map((part) => !!part.removed);
       file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
@@ -17532,6 +17582,9 @@
         if (buildingParts[i] && place) [buildingParts[i].x, buildingParts[i].y, buildingParts[i].w, buildingParts[i].h] = place;
       });
       (file.buildingGroups ?? []).forEach((group, i) => { if (buildingParts[i] && group != null) buildingParts[i].group = group; });
+      (file.buildingReferences ?? []).forEach((ref, i) => {
+        if (buildingParts[i] && ref) Object.assign(buildingParts[i], { reference: ref.outlines, referenceColor: ref.color });
+      });
       (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));

@@ -2445,6 +2445,7 @@
         <button type="button" data-top="flat" aria-pressed="true">Flat Top</button>
         <button type="button" data-top="dome" aria-pressed="false">Dome Top</button>
         <button type="button" data-top="angled" aria-pressed="false">Angled Top</button>
+        <button type="button" data-top="pitched" aria-pressed="false">Pitched Top</button>
         <button type="button" data-top="inset" aria-pressed="false">Inset Top</button>
       </div>
     </div>
@@ -2693,12 +2694,13 @@
         <div class="field-group">
           <div class="field">
             Top
-            <div id="edit-building-tops" class="toggle-group">
-              <button type="button" data-top="flat">Flat</button>
-              <button type="button" data-top="dome">Dome</button>
-              <button type="button" data-top="angled">Angled</button>
-              <button type="button" data-top="inset">Inset</button>
-            </div>
+            <select id="edit-building-top">
+              <option value="flat">Flat</option>
+              <option value="dome">Dome</option>
+              <option value="angled">Angled</option>
+              <option value="pitched">Pitched</option>
+              <option value="inset">Inset</option>
+            </select>
           </div>
           <label id="edit-roof-height-field" class="field">
             Roof Height
@@ -14148,18 +14150,20 @@
     // edge rises inward at 45°, so a point's height is its distance to the
     // nearest edge, and each edge's face is where that edge is nearest. The
     // ridges fall wherever faces meet, at whatever angle the outline makes them.
+    // A part's outline in map units.
+    function partPolygon(part) {
+      if (part.mapOutline) return part.mapOutline;
+      const W = buildingsImage.naturalWidth;
+      const H = buildingsImage.naturalHeight;
+      const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
+      const b = buildingsRect();
+      return outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
+    }
     function hipFaces(part) {
       const r = partRect(part);
       const key = `${r.x},${r.y},${r.w},${r.h}`;
       if (part.facesKey === key) return part.faces;
-      const toMap = () => {
-        const W = buildingsImage.naturalWidth;
-        const H = buildingsImage.naturalHeight;
-        const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
-        const b = buildingsRect();
-        return outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
-      };
-      const poly = part.mapOutline ?? toMap();
+      const poly = partPolygon(part);
       const n = poly.length;
       const edges = poly.map((a, i) => {
         const q = poly[(i + 1) % n];
@@ -14213,8 +14217,59 @@
       }
       return faces;
     }
-    const roofFaces = (part) => (part.roofStyle === 'inset' ? insetFaces(part) : hipFaces(part));
-    const faceted = (part) => part.roofStyle === 'angled' || part.roofStyle === 'inset';
+    // A pitched top: two slopes rising at 45° from the long sides to a ridge
+    // down the middle, the long axis being that of the outline's smallest
+    // enclosing rectangle. The walls go straight up under the slopes at the
+    // ends, as gables; those faces are marked wall.
+    function pitchedFaces(part) {
+      const r = partRect(part);
+      const key = `${r.x},${r.y},${r.w},${r.h}`;
+      if (part.pitchedKey === key) return part.pitched;
+      const poly = partPolygon(part);
+      let best = null;
+      poly.forEach((a, i) => {
+        const b = poly[(i + 1) % poly.length];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!len) return;
+        const u = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+        const v = [-u[1], u[0]];
+        const us = poly.map((p) => p[0] * u[0] + p[1] * u[1]);
+        const vs = poly.map((p) => p[0] * v[0] + p[1] * v[1]);
+        const [du, dv] = [Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs)];
+        if (!best || du * dv < best.area) {
+          // The ridge runs along the longer side.
+          const [along, across, lo, hi] = du >= dv ? [u, v, Math.min(...vs), Math.max(...vs)] : [v, u, Math.min(...us), Math.max(...us)];
+          best = { area: du * dv, along, across, mid: (lo + hi) / 2, half: (hi - lo) / 2 };
+        }
+      });
+      const faces = [];
+      if (best) {
+        const { across, mid, half } = best;
+        const offset = (p) => p[0] * across[0] + p[1] * across[1] - mid;
+        for (const side of [1, -1]) {
+          const points = clipPolygon(poly, (p) => -side * offset(p));
+          if (points.length < 3) continue;
+          const heights = points.map((p) => Math.max(0, half - Math.abs(offset(p))));
+          faces.push({ points, heights, outward: [across[0] * side, across[1] * side] });
+          // Gables: under every outline edge the slope doesn't come down to, a wall up to it.
+          const [cx, cy] = [points.reduce((t, p) => t + p[0], 0) / points.length, points.reduce((t, p) => t + p[1], 0) / points.length];
+          points.forEach((a, i) => {
+            const j = (i + 1) % points.length;
+            const b = points[j];
+            const [ha, hb] = [heights[i], heights[j]];
+            if (ha + hb < 1e-6 || (Math.abs(offset(a)) < 1e-6 && Math.abs(offset(b)) < 1e-6)) return;
+            const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            let n = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len];
+            if (n[0] * ((a[0] + b[0]) / 2 - cx) + n[1] * ((a[1] + b[1]) / 2 - cy) < 0) n = [-n[0], -n[1]];
+            faces.push({ points: [a, b, b, a], heights: [0, 0, hb, ha], outward: n, wall: true });
+          });
+        }
+      }
+      part.pitchedKey = key;
+      return (part.pitched = faces);
+    }
+    const roofFaces = (part) => (part.roofStyle === 'inset' ? insetFaces(part) : part.roofStyle === 'pitched' ? pitchedFaces(part) : hipFaces(part));
+    const faceted = (part) => ['angled', 'inset', 'pitched'].includes(part.roofStyle);
     // The polygon's part where f(p) <= 0, f being linear.
     function clipPolygon(poly, f) {
       const out = [];
@@ -14581,7 +14636,7 @@
                 else c.moveTo(q.x, q.y);
               });
               c.closePath();
-              c.fillStyle = face.outward ? hipColor(face.outward) : buildingsColor.value;
+              c.fillStyle = face.wall ? colorOf(buildingsSideColor) : face.outward ? hipColor(face.outward) : buildingsColor.value;
               c.fill();
               c.strokeStyle = c.fillStyle;
               c.lineWidth = 0.75;
@@ -14860,14 +14915,14 @@
     const editRoofInset = document.getElementById('edit-roof-inset');
     const editRoofInsetSlider = linkSlider(editRoofInset);
     const editHeightReset = document.getElementById('edit-building-height-reset');
-    const editTops = document.querySelectorAll('#edit-building-tops button');
+    const editTop = document.getElementById('edit-building-top');
     function showBuildingEditorPanel() {
       const { part } = buildingEditing;
       const show = (input, slider, value) => { if (document.activeElement !== input) input.value = slider.value = value; };
       show(editHeight, editHeightSlider, partHeight(part) ?? 100);
       editHeightReset.hidden = part.height == null;
       const top = part.roofStyle ?? 'flat';
-      for (const button of editTops) button.setAttribute('aria-pressed', String(button.dataset.top === top));
+      if (document.activeElement !== editTop) editTop.value = top;
       document.getElementById('edit-roof-height-field').hidden = top === 'flat';
       show(editRoofHeight, editRoofHeightSlider, part.roofHeight ?? 100);
       document.getElementById('edit-roof-inset-field').hidden = top !== 'inset';
@@ -14887,13 +14942,11 @@
       buildingEditing.part.height = null;
       draw();
     });
-    for (const button of editTops) {
-      button.addEventListener('click', () => {
-        button.blur();
-        buildingEditing.part.roofStyle = button.dataset.top;
-        draw();
-      });
-    }
+    editTop.addEventListener('change', () => {
+      editTop.blur();
+      buildingEditing.part.roofStyle = editTop.value;
+      draw();
+    });
     document.getElementById('building-edit').addEventListener('click', () => {
       if (selectedBuilding) editBuilding(selectedBuilding);
     });

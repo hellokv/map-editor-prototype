@@ -14798,13 +14798,14 @@
           }
         }
         if (outlined && tilted) strokeBuildingEdges(c, part, top, inCanvas);
-        if (part === selectedBuilding) {
+        const picked = buildingEditing ? buildingEditing.selected && livePart(buildingEditing.selected) === part : part === selectedBuilding;
+        if (picked) {
           c.strokeStyle = '#2f80ed';
           c.lineWidth = 2 / view.scale;
           c.setLineDash([6 / view.scale, 4 / view.scale]);
           c.strokeRect(r.x, r.y, r.w, r.h);
           c.setLineDash([]);
-          if (!part.shape) {
+          if (!part.shape && !buildingEditing) {
             // Corner handles on the ground, where they're picked from.
             c.setTransform(1, 0, 0, 1, 0, 0);
             const dpr = window.devicePixelRatio || 1;
@@ -14949,6 +14950,12 @@
       editorViewSelect.blur();
       setEditorView(editorViewSelect.value);
     });
+    // A shape building's part is remade whenever the shape changes, so it's
+    // looked up again from its shape rather than kept.
+    const livePart = (part) => (part?.shape ? shapeBuildingPart(part.shape) : part);
+    // What the panel edits: the selected shape, else the building itself.
+    const editorTarget = () => livePart(buildingEditing.selected ?? buildingEditing.part);
+    const placeOf = (part) => (part.shape ? { x: part.shape.x, y: part.shape.y } : { x: part.x, y: part.y, w: part.w, h: part.h });
     function editBuilding(part) {
       // Opens on the view the map is showing, where that shows height.
       const views = editorViews();
@@ -14956,9 +14963,11 @@
       buildingEditing = {
         camera: { ...(showing && (showing.flat || showing.deg) ? showing : views[0]) },
         added: [],
+        selected: null,
         part,
         before: snapshot(),
         settings: Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, part[key]])),
+        place: placeOf(part),
         view: { ...view },
         panelOpen: !panel.classList.contains('closed'),
       };
@@ -14976,10 +14985,11 @@
       draw();
     }
     function leaveBuildingEditor(keep) {
-      const { part, before, settings, view: was, panelOpen } = buildingEditing;
+      const { part, before, settings, place, view: was, panelOpen } = buildingEditing;
       if (keep) recordUndo(before);
       else {
         for (const key of BUILDING_EDIT_KEYS) part[key] = settings[key];
+        Object.assign(part.shape ?? part, place);
         for (const shape of buildingEditing.added) shapes.splice(shapes.indexOf(shape), 1);
       }
       setEditorTool('pan');
@@ -14990,13 +15000,13 @@
       buildingEditorPanel.hidden = true;
       Object.assign(view, was);
       setPanelOpen(panelOpen);
-      selectedBuilding = part;
+      selectedBuilding = livePart(part);
       draw();
     }
     // The building fills the middle of the canvas, its walls and roof included,
     // measured where its corners land in the view as it's turned and tipped.
     function fitBuildingEditor() {
-      const { part } = buildingEditing;
+      const part = livePart(buildingEditing.part);
       const r = partRect(part);
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
@@ -15050,7 +15060,7 @@
     const editRoofOverhangSlider = linkSlider(editRoofOverhang);
     const editTop = document.getElementById('edit-building-top');
     function showBuildingEditorPanel() {
-      const { part } = buildingEditing;
+      const part = editorTarget();
       const show = (input, slider, value) => { if (document.activeElement !== input) input.value = slider.value = value; };
       show(editHeight, editHeightSlider, partHeight(part) ?? 100);
       editHeightReset.hidden = part.height == null;
@@ -15069,20 +15079,20 @@
       apply(Number(input.value) || 0);
       draw();
     });
-    editField(editHeight, (v) => { buildingEditing.part.height = Math.max(0, v); });
-    editField(editRoofHeight, (v) => { buildingEditing.part.roofHeight = v; });
-    editField(editRoofInset, (v) => { buildingEditing.part.roofInset = v; });
-    editField(editRoofOverhang, (v) => { buildingEditing.part.roofOverhang = Math.max(0, v); });
-    editField(editRoofThickness, (v) => { buildingEditing.part.roofThickness = Math.max(0, v); });
+    editField(editHeight, (v) => { editorTarget().height = Math.max(0, v); });
+    editField(editRoofHeight, (v) => { editorTarget().roofHeight = v; });
+    editField(editRoofInset, (v) => { editorTarget().roofInset = v; });
+    editField(editRoofOverhang, (v) => { editorTarget().roofOverhang = Math.max(0, v); });
+    editField(editRoofThickness, (v) => { editorTarget().roofThickness = Math.max(0, v); });
     editHeightReset.addEventListener('click', (e) => {
       e.preventDefault();
       editHeightReset.blur();
-      buildingEditing.part.height = null;
+      editorTarget().height = null;
       draw();
     });
     editTop.addEventListener('change', () => {
       editTop.blur();
-      buildingEditing.part.roofStyle = editTop.value;
+      editorTarget().roofStyle = editTop.value;
       draw();
     });
     document.getElementById('building-edit').addEventListener('click', () => {
@@ -15121,7 +15131,7 @@
     function startEditorShape(e) {
       const s = canvasPoint(e);
       const at = toBackground(s.x, s.y);
-      const { part } = buildingEditing;
+      const part = editorTarget();
       const shape = {
         kind: editorTool, x: at.x, y: at.y, w: 0, h: 0, color: colorOf(buildingsColor), layers: newLayers(), building: true,
         ...(part.height != null && { buildingHeight: part.height }),
@@ -15145,6 +15155,7 @@
       if (!moved) Object.assign(shape, { x: anchor.x - size / 2, y: anchor.y - size / 2, w: size, h: size });
       shape.w = Math.max(SHAPE_MIN_SIZE, shape.w);
       shape.h = Math.max(SHAPE_MIN_SIZE, shape.h);
+      buildingEditing.selected = shapeBuildingPart(shape);
       setEditorTool('pan');
     }
     // The editor's canvas pans by dragging (or turns with Shift), zooms by the
@@ -15156,10 +15167,22 @@
       if (!onEditorCanvas(e)) return;
       e.stopPropagation();
       e.preventDefault();
+      // Held back from the canvas, the click wouldn't take focus from a field, so Delete would go to it.
+      document.activeElement?.blur?.();
       if (e.button !== 0) return;
       const { camera } = buildingEditing;
       editorPan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, orbit: e.shiftKey, turn: camera.turn, deg: camera.deg };
       if (editorTool !== 'pan' && !e.shiftKey) editorPan.drawn = startEditorShape(e);
+      else if (!e.shiftKey) {
+        // A click on a shape picks it, and dragging then moves it; elsewhere picks nothing and pans.
+        const hit = editorPartAt(e);
+        buildingEditing.selected = hit;
+        if (hit) {
+          const s = canvasPoint(e);
+          editorPan.move = { part: hit, start: toBackground(s.x, s.y), place: placeOf(hit) };
+        }
+        draw();
+      }
       e.target.setPointerCapture(e.pointerId);
       if (!editorPan.drawn) canvasArea.classList.add('panning');
     }, { capture: true });
@@ -15170,6 +15193,17 @@
       const dx = e.clientX - editorPan.x;
       const dy = e.clientY - editorPan.y;
       if (editorPan.drawn) dragEditorShape(editorPan.drawn, e);
+      else if (editorPan.move) {
+        const { part, start, place } = editorPan.move;
+        const s = canvasPoint(e);
+        const p = toBackground(s.x, s.y);
+        const [dx, dy] = [p.x - start.x, p.y - start.y];
+        if (part.shape) Object.assign(part.shape, { x: place.x + dx, y: place.y + dy });
+        else {
+          const b = buildingsRect();
+          Object.assign(part, { x: place.x + (dx * buildingsImage.naturalWidth) / b.w, y: place.y + (dy * buildingsImage.naturalHeight) / b.h });
+        }
+      }
       else if (editorPan.orbit) {
         // Across turns it, up and down tips it; a free view stands the building on tipped ground.
         const { camera } = buildingEditing;
@@ -15199,10 +15233,48 @@
         canvasArea.classList.remove('panning');
       }, { capture: true });
     }
+    // The editor's shape under a pointer, looking down through roofs and walls.
+    function editorPartAt(e) {
+      const s = canvasPoint(e);
+      const parts = allBuildingParts().reverse();
+      for (const t of canvasTilt?.angle ? [1, 0.75, 0.5, 0.25, 0] : [0]) {
+        for (const part of parts) {
+          const q = liftMatrix(partLift(part) * view.scale * t).inverse().transformPoint(new DOMPoint(s.x, s.y));
+          if (insidePolygon(partPolygon(part), toBackground(q.x, q.y))) return part;
+        }
+      }
+      return null;
+    }
+    function insidePolygon(poly, p) {
+      let inside = false;
+      poly.forEach((a, i) => {
+        const b = poly[(i + 1) % poly.length];
+        if ((a[1] > p.y) !== (b[1] > p.y) && p.x < a[0] + ((p.y - a[1]) * (b[0] - a[0])) / (b[1] - a[1])) inside = !inside;
+      });
+      return inside;
+    }
+    // Deletes the selected shape; the building itself goes as Delete Building does.
+    function deleteEditorSelection() {
+      const picked = buildingEditing.selected;
+      if (!picked) return;
+      const added = buildingEditing.added.indexOf(picked.shape);
+      if (added < 0) {
+        document.getElementById('edit-building-delete').click();
+        return;
+      }
+      shapes.splice(shapes.indexOf(picked.shape), 1);
+      buildingEditing.added.splice(added, 1);
+      buildingEditing.selected = null;
+      draw();
+    }
     // While editing, Escape cancels and the map's other shortcuts are held off.
     window.addEventListener('keydown', (e) => {
       if (!buildingEditing) return;
       if (e.key === 'Escape') leaveBuildingEditor(false);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.target.closest('input, textarea, select')) {
+        e.preventDefault();
+        deleteEditorSelection();
+      }
       if (!e.target.closest('input, textarea, select') || e.key === 'Escape') e.stopImmediatePropagation();
     }, { capture: true });
     // A building from the image is moved by dragging it, and scaled by
@@ -16905,7 +16977,7 @@
     function layTilt(el, rect, budget) {
       const { deg, turn, flat } = tiltAngles;
       // The map turns and tips about its box; the building editor's view, about its building.
-      const area = buildingEditing ? partRect(buildingEditing.part) : { x: 0, y: 0, w: board.w, h: board.h };
+      const area = buildingEditing ? partRect(livePart(buildingEditing.part)) : { x: 0, y: 0, w: board.w, h: board.h };
       const centre = toScreen({ x: area.x + area.w / 2, y: area.y + area.h / 2 });
       const cx = centre.x;
       const cy = centre.y;

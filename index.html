@@ -724,10 +724,48 @@
     #building-editor[hidden] {
       display: none;
     }
-    #building-editor button {
+    #building-editor > button {
       position: absolute;
       top: 16px;
       pointer-events: auto;
+    }
+    #building-editor-tools {
+      position: absolute;
+      top: 64px;
+      left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      pointer-events: auto;
+    }
+    #building-editor-tools button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #building-editor-tools button:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    #building-editor-tools button[aria-pressed="true"] {
+      color: #fff;
+      background: #000;
+    }
+    #building-editor-tools .material-symbols-rounded {
+      font-size: 20px;
+    }
+    #canvas-area.building-editing.drawing canvas {
+      cursor: crosshair !important;
     }
     #building-editor-cancel {
       left: 16px;
@@ -763,7 +801,7 @@
     #panel.building-editing #panel-header button {
       display: none !important;
     }
-    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor button) .material-symbols-rounded {
+    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor > button) .material-symbols-rounded {
       font-size: 18px;
     }
     #frame-edges {
@@ -788,7 +826,7 @@
     #frame-snap[aria-expanded="true"] {
       background: #333;
     }
-    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor button) {
+    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor > button) {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -802,7 +840,7 @@
       font: 13px 'National Park', system-ui, sans-serif;
       cursor: pointer;
     }
-    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor button):hover {
+    :is(#frame-actions button, #frame-fits button, #fit-frame, #building-editor > button):hover {
       background: #333;
     }
     #resolution-low {
@@ -2428,6 +2466,13 @@
     <div id="building-editor" hidden>
       <button id="building-editor-cancel" type="button"><span class="material-symbols-rounded">close</span>Cancel</button>
       <select id="building-editor-view" aria-label="View"></select>
+      <div id="building-editor-tools" role="toolbar" aria-label="Tools">
+        <button type="button" data-tool="pan" aria-label="Pan" aria-pressed="true"><span class="material-symbols-rounded">pan_tool</span></button>
+        <button type="button" data-tool="square" aria-label="Rectangle" aria-pressed="false"><span class="material-symbols-rounded">square</span></button>
+        <button type="button" data-tool="circle" aria-label="Ellipse" aria-pressed="false"><span class="material-symbols-rounded">circle</span></button>
+        <button type="button" data-tool="triangle" aria-label="Triangle" aria-pressed="false"><span class="material-symbols-rounded">change_history</span></button>
+        <button type="button" data-tool="polygon" aria-label="Polygon" aria-pressed="false"><span class="material-symbols-rounded">pentagon</span></button>
+      </div>
       <button id="building-editor-save" type="button"><span class="material-symbols-rounded">save</span>Save</button>
     </div>
     <div id="frame-actions" hidden>
@@ -14269,7 +14314,8 @@
     }
     // Parts deleted from the buildings image stay in the list, so saved settings keep their places.
     // In the building editor only its building is drawn.
-    const editingOnly = (part) => !buildingEditing || part === buildingEditing.part || (part.shape && part.shape === buildingEditing.part.shape);
+    const editingOnly = (part) => !buildingEditing || part === buildingEditing.part
+      || (part.shape && (part.shape === buildingEditing.part.shape || buildingEditing.added.includes(part.shape)));
     const shownParts = () => buildingParts.filter((part) => !part.removed && editingOnly(part));
     const allBuildingParts = () => [...shownParts(), ...shapes.filter(isBuildingShape).map(shapeBuildingPart).filter(editingOnly)];
     // Selected shapes get a switch above them to make them buildings.
@@ -14687,6 +14733,7 @@
       const showing = views.find((v) => v.id === (showing3d() ? '3d' : '2d'));
       buildingEditing = {
         camera: { ...(showing && (showing.flat || showing.deg) ? showing : views[0]) },
+        added: [],
         part,
         before: snapshot(),
         settings: Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, part[key]])),
@@ -14709,7 +14756,11 @@
     function leaveBuildingEditor(keep) {
       const { part, before, settings, view: was, panelOpen } = buildingEditing;
       if (keep) recordUndo(before);
-      else for (const key of BUILDING_EDIT_KEYS) part[key] = settings[key];
+      else {
+        for (const key of BUILDING_EDIT_KEYS) part[key] = settings[key];
+        for (const shape of buildingEditing.added) shapes.splice(shapes.indexOf(shape), 1);
+      }
+      setEditorTool('pan');
       buildingEditing = null;
       canvasArea.classList.remove('building-editing');
       panel.classList.remove('building-editing');
@@ -14822,8 +14873,53 @@
       selectBuilding(null);
       draw();
     });
-    // The editor's canvas only pans, by dragging, and zooms, by the wheel or a
-    // pinch as on the map; its pointer events go no further.
+    // Shape tools draw new building shapes on the ground beside the building,
+    // taking its height and top; they're kept on Save and dropped on Cancel.
+    let editorTool = 'pan';
+    const editorToolButtons = document.querySelectorAll('#building-editor-tools button');
+    function setEditorTool(tool) {
+      editorTool = tool;
+      for (const button of editorToolButtons) button.setAttribute('aria-pressed', String(button.dataset.tool === tool));
+      canvasArea.classList.toggle('drawing', tool !== 'pan');
+    }
+    for (const button of editorToolButtons) {
+      button.addEventListener('click', () => {
+        button.blur();
+        setEditorTool(button.dataset.tool);
+      });
+    }
+    function startEditorShape(e) {
+      const s = canvasPoint(e);
+      const at = toBackground(s.x, s.y);
+      const { part } = buildingEditing;
+      const shape = {
+        kind: editorTool, x: at.x, y: at.y, w: 0, h: 0, color: colorOf(buildingsColor), layers: newLayers(), building: true,
+        ...(part.height != null && { buildingHeight: part.height }),
+        roofStyle: part.roofStyle ?? 'flat', roofHeight: part.roofHeight ?? 100, roofInset: part.roofInset ?? 10,
+      };
+      if (editorTool === 'polygon') shape.sides = POLYGON_SIDES;
+      shapes.push(shape);
+      buildingEditing.added.push(shape);
+      return { shape, anchor: at, moved: false };
+    }
+    function dragEditorShape(drawn, e) {
+      const s = canvasPoint(e);
+      const at = toBackground(s.x, s.y);
+      const { shape, anchor } = drawn;
+      Object.assign(shape, { x: Math.min(anchor.x, at.x), y: Math.min(anchor.y, at.y), w: Math.abs(at.x - anchor.x), h: Math.abs(at.y - anchor.y) });
+      drawn.moved = true;
+    }
+    // A click without a drag makes a shape of a standard size on screen, centred there.
+    function finishEditorShape({ shape, anchor, moved }) {
+      const size = SHAPE_CLICK_SIZE / view.scale;
+      if (!moved) Object.assign(shape, { x: anchor.x - size / 2, y: anchor.y - size / 2, w: size, h: size });
+      shape.w = Math.max(SHAPE_MIN_SIZE, shape.w);
+      shape.h = Math.max(SHAPE_MIN_SIZE, shape.h);
+      setEditorTool('pan');
+    }
+    // The editor's canvas pans by dragging (or turns with Shift), zooms by the
+    // wheel or a pinch as on the map, and draws with a shape tool; its pointer
+    // events go no further.
     let editorPan = null;
     const onEditorCanvas = (e) => buildingEditing && (e.target === canvas || e.target === tiltView);
     canvasArea.addEventListener('pointerdown', (e) => {
@@ -14833,8 +14929,9 @@
       if (e.button !== 0) return;
       const { camera } = buildingEditing;
       editorPan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, orbit: e.shiftKey, turn: camera.turn, deg: camera.deg };
+      if (editorTool !== 'pan' && !e.shiftKey) editorPan.drawn = startEditorShape(e);
       e.target.setPointerCapture(e.pointerId);
-      canvasArea.classList.add('panning');
+      if (!editorPan.drawn) canvasArea.classList.add('panning');
     }, { capture: true });
     canvasArea.addEventListener('pointermove', (e) => {
       if (!onEditorCanvas(e)) return;
@@ -14842,7 +14939,8 @@
       if (!editorPan) return;
       const dx = e.clientX - editorPan.x;
       const dy = e.clientY - editorPan.y;
-      if (editorPan.orbit) {
+      if (editorPan.drawn) dragEditorShape(editorPan.drawn, e);
+      else if (editorPan.orbit) {
         // Across turns it, up and down tips it; a free view stands the building on tipped ground.
         const { camera } = buildingEditing;
         const fresh = camera.id !== 'custom';
@@ -14863,6 +14961,10 @@
       canvasArea.addEventListener(type, (e) => {
         if (!onEditorCanvas(e)) return;
         e.stopPropagation();
+        if (editorPan?.drawn) {
+          finishEditorShape(editorPan.drawn);
+          draw();
+        }
         editorPan = null;
         canvasArea.classList.remove('panning');
       }, { capture: true });

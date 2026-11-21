@@ -14117,7 +14117,9 @@
       rc.drawImage(full.canvas, x0, y0, aw, ah, 0, 0, aw, ah);
       const alpha = new Uint8Array(aw * ah);
       for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++) alpha[y * aw + x] = data[((y + y0) * cw + x + x0) * 4 + 3];
-      return { x: x0 / k, y: y0 / k, w: aw / k, h: ah / k, k, aw, ah, roof, alpha, wall: null, lift: null };
+      // The roof is redrawn from source at the resolution it's shown at
+      // (partResolution); the alpha mask stays at this one, for clicks.
+      return { x: x0 / k, y: y0 / k, w: aw / k, h: ah / k, k, aw, ah, roof, alpha, hitK: k, hitW: aw, hitH: ah, baseK: k, source: image, wall: null, lift: null };
     }
     // A part's outline in the side colour, for the walls under its lifted roof.
     function partWall(part) {
@@ -14292,7 +14294,7 @@
       const old = shapeParts.get(shape);
       if (old?.key === key) return old;
       const box = shapesBox([shape]);
-      const k = Math.min(4, 2048 / Math.max(box.w, box.h, 1));
+      const k = Math.min(32, 2048 / Math.max(box.w, box.h, 1));
       const aw = Math.max(1, Math.ceil(box.w * k));
       const ah = Math.max(1, Math.ceil(box.h * k));
       const roof = new OffscreenCanvas(aw, ah);
@@ -14482,7 +14484,41 @@
     }
     // Lifted buildings are stacked slices, each raised a little further,
     // farthest part first so nearer ones stand in front.
+    // An image part's roof, and the pictures made from it, redrawn from its
+    // vector at rk pixels to an image unit.
+    function partResolution(part, rk) {
+      if (!part.source || part.k === rk) return;
+      const aw = Math.max(1, Math.round(part.w * rk));
+      const ah = Math.max(1, Math.round(part.h * rk));
+      const roof = new OffscreenCanvas(aw, ah);
+      roof.getContext('2d').drawImage(part.source, part.x, part.y, part.w, part.h, 0, 0, aw, ah);
+      Object.assign(part, { k: rk, aw, ah, roof, top: null, topColor: null, wall: null, dark: null, outlines: {} });
+    }
+    // Parts on screen are drawn sharp at the zoom they're shown at, in steps
+    // of two; the rest go back to the small picture they were cut at.
+    const PART_PIXELS = 4e6;
+    function sharpenParts(c) {
+      if (!buildingsImage) return;
+      const t = c.getTransform();
+      const want = Math.hypot(t.a, t.b) * (buildingsRect().w / buildingsImage.naturalWidth);
+      const step = 2 ** Math.ceil(Math.log2(Math.max(want, 1e-3)));
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      for (const part of shownParts()) {
+        const r = partRect(part);
+        const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([x, y]) => {
+          const q = toScreen({ x, y });
+          return windowPoint(q.x, q.y);
+        });
+        const xs = corners.map((q) => q.x);
+        const ys = corners.map((q) => q.y);
+        const seen = Math.max(...xs) > -W / 2 && Math.min(...xs) < W * 1.5 && Math.max(...ys) > -H && Math.min(...ys) < H * 1.5;
+        const most = Math.sqrt(PART_PIXELS / Math.max(part.w * part.h, 1));
+        partResolution(part, seen ? Math.max(part.baseK, Math.min(32, most, step)) : part.baseK);
+      }
+    }
     function drawLiftedBuildings(c) {
+      sharpenParts(c);
       drawBuildingShadows(c);
       const tilted = !!canvasTilt?.angle;
       const dpr = window.devicePixelRatio || 1;
@@ -14575,9 +14611,9 @@
     function onPart(part, p, r = buildingsRect(), W = buildingsImage.naturalWidth, H = buildingsImage.naturalHeight) {
       const u = ((p.x - r.x) * W) / r.w - part.x;
       const v = ((p.y - r.y) * H) / r.h - part.y;
-      const x = Math.floor(u * part.k);
-      const y = Math.floor(v * part.k);
-      return x >= 0 && y >= 0 && x < part.aw && y < part.ah && part.alpha[y * part.aw + x] > 20;
+      const x = Math.floor(u * part.hitK);
+      const y = Math.floor(v * part.hitK);
+      return x >= 0 && y >= 0 && x < part.hitW && y < part.hitH && part.alpha[y * part.hitW + x] > 20;
     }
     // Area fills leave out water and the ground under buildings.
     function treeBlocked(p) {

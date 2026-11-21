@@ -2706,6 +2706,10 @@
             Roof Height
             <span class="slider"><span class="percent-field"><input id="edit-roof-height" type="number" min="0" max="300" step="1"></span><input type="range" min="0" max="300" step="1" aria-label="Roof height"></span>
           </label>
+          <label class="field">
+            Overhang
+            <span class="slider"><input id="edit-roof-overhang" type="number" min="0" max="40" step="1"><input type="range" min="0" max="40" step="1" aria-label="Roof overhang"></span>
+          </label>
           <label id="edit-roof-inset-field" class="field">
             Inset
             <span class="slider"><input id="edit-roof-inset" type="number" min="1" max="60" step="1"><input type="range" min="1" max="60" step="1" aria-label="Roof inset"></span>
@@ -4072,7 +4076,7 @@
     // The building open in the building editor, if any. Drawing reads it from the start.
     let buildingEditing = null;
     // A building's own settings, which the editor and undo keep.
-    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset'];
+    const BUILDING_EDIT_KEYS = ['height', 'roofStyle', 'roofHeight', 'roofInset', 'roofOverhang'];
     // A color input followed by an opacity percentage makes one #rrggbbaa
     // color with it.
     function colorOf(input) {
@@ -13712,7 +13716,7 @@
     let selectedBuilding = null;
     const buildingsUpload = document.getElementById('buildings-upload');
     const buildingsPreview = document.getElementById('buildings-preview');
-    async function setBuildingsImage(src, heights = [], tops = [], roofHeights = [], roofInsets = [], lifts = []) {
+    async function setBuildingsImage(src, heights = [], tops = [], roofHeights = [], roofInsets = [], lifts = [], overhangs = []) {
       const img = src ? await loadImage(src).catch(() => null) : null;
       buildingParts = img ? await splitBuildings(src, img) : [];
       buildingParts.forEach((part, i) => {
@@ -13721,6 +13725,7 @@
         part.roofStyle = tops[i] ?? 'flat';
         part.roofHeight = roofHeights[i] ?? 100;
         part.roofInset = roofInsets[i] ?? 10;
+        part.roofOverhang = overhangs[i] ?? 0;
       });
       selectBuilding(null);
       buildingsImage = img;
@@ -14159,11 +14164,31 @@
       const b = buildingsRect();
       return outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]);
     }
+    // How far a building's roof reaches past its walls, in map units.
+    const roofOverhang = (part) => Math.max(0, part.roofOverhang ?? 0);
+    const polygonArea = (poly) => poly.reduce((sum, p, i) => {
+      const q = poly[(i + 1) % poly.length];
+      return sum + p[0] * q[1] - q[0] * p[1];
+    }, 0) / 2;
+    // The outline pushed out by the overhang, whichever way round it runs.
+    function roofPolygon(part) {
+      const poly = partPolygon(part);
+      const o = roofOverhang(part);
+      if (!o) return poly;
+      const grown = growHull(poly, o);
+      return Math.abs(polygonArea(grown)) >= Math.abs(polygonArea(poly)) ? grown : growHull(poly, -o);
+    }
+    // A flat or domed roof's box, grown by the overhang.
+    function roofRect(part) {
+      const r = partRect(part);
+      const o = roofOverhang(part);
+      return { x: r.x - o, y: r.y - o, w: r.w + 2 * o, h: r.h + 2 * o };
+    }
     function hipFaces(part) {
       const r = partRect(part);
-      const key = `${r.x},${r.y},${r.w},${r.h}`;
+      const key = `${r.x},${r.y},${r.w},${r.h},${roofOverhang(part)}`;
       if (part.facesKey === key) return part.faces;
-      const poly = partPolygon(part);
+      const poly = roofPolygon(part);
       const n = poly.length;
       const edges = poly.map((a, i) => {
         const q = poly[(i + 1) % n];
@@ -14223,9 +14248,11 @@
     // ends, as gables; those faces are marked wall.
     function pitchedFaces(part) {
       const r = partRect(part);
-      const key = `${r.x},${r.y},${r.w},${r.h}`;
+      const o = roofOverhang(part);
+      const key = `${r.x},${r.y},${r.w},${r.h},${o}`;
       if (part.pitchedKey === key) return part.pitched;
       const poly = partPolygon(part);
+      const roof = roofPolygon(part);
       let best = null;
       poly.forEach((a, i) => {
         const b = poly[(i + 1) % poly.length];
@@ -14244,20 +14271,26 @@
       });
       const faces = [];
       if (best) {
-        const { across, mid, half } = best;
+        const { across, mid } = best;
+        // An overhang widens the slopes, raising the ridge to keep their pitch,
+        // while the gables stay on the walls.
+        const half = best.half + o;
         const offset = (p) => p[0] * across[0] + p[1] * across[1] - mid;
+        const heightAt = (p) => Math.max(0, half - Math.abs(offset(p)));
         for (const side of [1, -1]) {
+          const slope = clipPolygon(roof, (p) => -side * offset(p));
+          if (slope.length >= 3) faces.push({ points: slope, heights: slope.map(heightAt), outward: [across[0] * side, across[1] * side] });
           const points = clipPolygon(poly, (p) => -side * offset(p));
           if (points.length < 3) continue;
-          const heights = points.map((p) => Math.max(0, half - Math.abs(offset(p))));
-          faces.push({ points, heights, outward: [across[0] * side, across[1] * side] });
+          const heights = points.map(heightAt);
           // Gables: under every outline edge the slope doesn't come down to, a wall up to it.
           const [cx, cy] = [points.reduce((t, p) => t + p[0], 0) / points.length, points.reduce((t, p) => t + p[1], 0) / points.length];
           points.forEach((a, i) => {
             const j = (i + 1) % points.length;
             const b = points[j];
             const [ha, hb] = [heights[i], heights[j]];
-            if (ha + hb < 1e-6 || (Math.abs(offset(a)) < 1e-6 && Math.abs(offset(b)) < 1e-6)) return;
+            // Edges under the eaves are hidden by the overhanging slope.
+            if (Math.max(ha, hb) <= o + 1e-6 || (Math.abs(offset(a)) < 1e-6 && Math.abs(offset(b)) < 1e-6)) return;
             const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
             let n = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len];
             if (n[0] * ((a[0] + b[0]) / 2 - cx) + n[1] * ((a[1] + b[1]) / 2 - cy) < 0) n = [-n[0], -n[1]];
@@ -14367,6 +14400,7 @@
         roofStyle: { get: () => shape.roofStyle ?? 'flat', set: (v) => { shape.roofStyle = v; } },
         roofHeight: { get: () => shape.roofHeight ?? 100, set: (v) => { shape.roofHeight = v; } },
         roofInset: { get: () => shape.roofInset ?? 10, set: (v) => { shape.roofInset = v; } },
+        roofOverhang: { get: () => shape.roofOverhang ?? 0, set: (v) => { shape.roofOverhang = v; } },
       });
       shapeParts.set(shape, part);
       return part;
@@ -14607,7 +14641,8 @@
           c.setTransform(inCanvas(liftMatrix((top * i) / slices)));
           // Under a dome, the roof is the dome's own first layer.
           const roof = i === slices && part.roofStyle !== 'dome';
-          c.drawImage(roof ? partTop(part) : partWall(part), r.x, r.y, r.w, r.h);
+          const box = roof ? roofRect(part) : r;
+          c.drawImage(roof ? partTop(part) : partWall(part), box.x, box.y, box.w, box.h);
           if (roof && outlined) {
             const { canvas: rimmed, pad } = partOutline(part, true);
             c.drawImage(rimmed, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad);
@@ -14646,7 +14681,7 @@
           for (let i = 0; i < layers && part.roofStyle === 'dome'; i++) {
             const t = i / layers;
             c.setTransform(inCanvas(liftMatrix(tilted ? (partLift(part) + rise * t) * view.scale : 0)));
-            const box = roofBox(part, r, t);
+            const box = roofBox(part, roofRect(part), t);
             c.drawImage(partTop(part), ...box);
             c.globalAlpha = (1 - t) * 0.4;
             c.drawImage(partDark(part), ...box);
@@ -14915,6 +14950,8 @@
     const editRoofInset = document.getElementById('edit-roof-inset');
     const editRoofInsetSlider = linkSlider(editRoofInset);
     const editHeightReset = document.getElementById('edit-building-height-reset');
+    const editRoofOverhang = document.getElementById('edit-roof-overhang');
+    const editRoofOverhangSlider = linkSlider(editRoofOverhang);
     const editTop = document.getElementById('edit-building-top');
     function showBuildingEditorPanel() {
       const { part } = buildingEditing;
@@ -14927,6 +14964,7 @@
       show(editRoofHeight, editRoofHeightSlider, part.roofHeight ?? 100);
       document.getElementById('edit-roof-inset-field').hidden = top !== 'inset';
       show(editRoofInset, editRoofInsetSlider, part.roofInset ?? 10);
+      show(editRoofOverhang, editRoofOverhangSlider, part.roofOverhang ?? 0);
     }
     const editField = (input, apply) => input.addEventListener('input', () => {
       if (!buildingEditing || input.value === '') return;
@@ -14936,6 +14974,7 @@
     editField(editHeight, (v) => { buildingEditing.part.height = Math.max(0, v); });
     editField(editRoofHeight, (v) => { buildingEditing.part.roofHeight = v; });
     editField(editRoofInset, (v) => { buildingEditing.part.roofInset = v; });
+    editField(editRoofOverhang, (v) => { buildingEditing.part.roofOverhang = Math.max(0, v); });
     editHeightReset.addEventListener('click', (e) => {
       e.preventDefault();
       editHeightReset.blur();
@@ -17018,6 +17057,7 @@
       file.buildingTops = buildingParts.map((part) => part.roofStyle ?? 'flat');
       file.buildingRoofHeights = buildingParts.map((part) => part.roofHeight ?? 100);
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
+      file.buildingRoofOverhangs = buildingParts.map((part) => part.roofOverhang ?? 0);
       file.buildingRemoved = buildingParts.map((part) => !!part.removed);
       file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
@@ -17183,7 +17223,7 @@
       selectedTerrain = [];
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
-      await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? []);
+      await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? [], file.buildingRoofOverhangs ?? []);
       (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));

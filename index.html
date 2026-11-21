@@ -163,17 +163,6 @@
       align-items: center;
       gap: 8px;
     }
-    #building-lift-pop #building-tops button {
-      padding: 5px 12px;
-      font: inherit;
-      border: 1px solid #e3e1dc;
-      border-radius: 6px;
-    }
-    #building-lift-pop #building-tops button[aria-pressed="true"] {
-      color: #fff;
-      background: #000;
-      border-color: #000;
-    }
     #building-lift-pop output {
       min-width: 64px;
     }
@@ -2430,23 +2419,6 @@
         <button id="building-lift-reset" type="button" aria-label="Use the panel's building height"><span class="material-symbols-rounded">restart_alt</span></button>
         <button id="building-edit" type="button" aria-label="Edit building"><span class="material-symbols-rounded">edit</span></button>
         <button id="building-delete" type="button" aria-label="Delete building"><span class="material-symbols-rounded">delete</span></button>
-      </div>
-      <div id="building-roof-height" class="pop-row">
-        <span>Roof Height</span>
-        <input type="range" min="0" max="300" step="1" value="100" aria-label="Roof height">
-        <output></output>
-      </div>
-      <div id="building-roof-inset" class="pop-row">
-        <span>Inset</span>
-        <input type="range" min="1" max="60" step="1" value="10" aria-label="Roof inset">
-        <output></output>
-      </div>
-      <div id="building-tops" class="pop-row">
-        <button type="button" data-top="flat" aria-pressed="true">Flat Top</button>
-        <button type="button" data-top="dome" aria-pressed="false">Dome Top</button>
-        <button type="button" data-top="angled" aria-pressed="false">Angled Top</button>
-        <button type="button" data-top="pitched" aria-pressed="false">Pitched Top</button>
-        <button type="button" data-top="inset" aria-pressed="false">Inset Top</button>
       </div>
     </div>
     <div id="capture-box" hidden>
@@ -5536,7 +5508,7 @@
           terrain: { ...terrain },
           removedBase: [...removedBase],
           removedParts: buildingParts.map((part) => !!part.removed),
-          partSettings: buildingParts.map((part) => Object.fromEntries(BUILDING_EDIT_KEYS.map((key) => [key, part[key]]))),
+          partSettings: buildingParts.map((part) => Object.fromEntries([...BUILDING_EDIT_KEYS, 'x', 'y', 'w', 'h'].map((key) => [key, part[key]]))),
           trees: trees.map((tree) => ({ ...tree })),
           fillAreas: fillAreas.map((area) => ({ ...area, points: area.points.map((q) => ({ ...q })) })),
         },
@@ -14151,7 +14123,8 @@
       for (let y = 0; y < ah; y++) for (let x = 0; x < aw; x++) alpha[y * aw + x] = data[((y + y0) * cw + x + x0) * 4 + 3];
       // The roof is redrawn from source at the resolution it's shown at
       // (partResolution); the alpha mask stays at this one, for clicks.
-      return { x: x0 / k, y: y0 / k, w: aw / k, h: ah / k, k, aw, ah, roof, alpha, hitK: k, hitW: aw, hitH: ah, baseK: k, source: image, wall: null, lift: null };
+      const crop = { x: x0 / k, y: y0 / k, w: aw / k, h: ah / k };
+      return { ...crop, crop, k, aw, ah, roof, alpha, hitW: aw, hitH: ah, baseK: k, source: image, wall: null, lift: null };
     }
     // A part's outline in the side colour, for the walls under its lifted roof.
     function partWall(part) {
@@ -14185,7 +14158,10 @@
       if (part.mapOutline) return part.mapOutline;
       const W = buildingsImage.naturalWidth;
       const H = buildingsImage.naturalHeight;
-      const outline = part.outline ?? [[part.x, part.y], [part.x + part.w, part.y], [part.x + part.w, part.y + part.h], [part.x, part.y + part.h]];
+      // The outline was traced where the part was cut, and goes where it's been moved and scaled to.
+      const crop = part.crop ?? part;
+      const outline = (part.outline ?? [[crop.x, crop.y], [crop.x + crop.w, crop.y], [crop.x + crop.w, crop.y + crop.h], [crop.x, crop.y + crop.h]])
+        .map(([x, y]) => [part.x + ((x - crop.x) * part.w) / crop.w, part.y + ((y - crop.y) * part.h) / crop.h]);
       const b = buildingsRect();
       return squareCorners(outline.map(([x, y]) => [b.x + (x * b.w) / W, b.y + (y * b.h) / H]));
     }
@@ -14695,7 +14671,8 @@
       const aw = Math.max(1, Math.round(part.w * rk));
       const ah = Math.max(1, Math.round(part.h * rk));
       const roof = new OffscreenCanvas(aw, ah);
-      roof.getContext('2d').drawImage(part.source, part.x, part.y, part.w, part.h, 0, 0, aw, ah);
+      const { crop } = part;
+      roof.getContext('2d').drawImage(part.source, crop.x, crop.y, crop.w, crop.h, 0, 0, aw, ah);
       Object.assign(part, { k: rk, aw, ah, roof, top: null, topColor: null, wall: null, dark: null, outlines: {} });
     }
     // Parts on screen are drawn sharp at the zoom they're shown at, in steps
@@ -14827,6 +14804,18 @@
           c.setLineDash([6 / view.scale, 4 / view.scale]);
           c.strokeRect(r.x, r.y, r.w, r.h);
           c.setLineDash([]);
+          if (!part.shape) {
+            // Corner handles on the ground, where they're picked from.
+            c.setTransform(1, 0, 0, 1, 0, 0);
+            const dpr = window.devicePixelRatio || 1;
+            c.fillStyle = '#fff';
+            c.lineWidth = 1.5 * dpr;
+            for (const corner of buildingCorners(part)) {
+              const q = inCanvas(new DOMMatrix()).transformPoint(new DOMPoint(corner.x, corner.y));
+              c.fillRect(q.x - 4 * dpr, q.y - 4 * dpr, 8 * dpr, 8 * dpr);
+              c.strokeRect(q.x - 4 * dpr, q.y - 4 * dpr, 8 * dpr, 8 * dpr);
+            }
+          }
         }
       }
       c.setTransform(base);
@@ -14836,8 +14825,8 @@
     function onPart(part, p, r = buildingsRect(), W = buildingsImage.naturalWidth, H = buildingsImage.naturalHeight) {
       const u = ((p.x - r.x) * W) / r.w - part.x;
       const v = ((p.y - r.y) * H) / r.h - part.y;
-      const x = Math.floor(u * part.hitK);
-      const y = Math.floor(v * part.hitK);
+      const x = Math.floor((u * part.hitW) / part.w);
+      const y = Math.floor((v * part.hitH) / part.h);
       return x >= 0 && y >= 0 && x < part.hitW && y < part.hitH && part.alpha[y * part.hitW + x] > 20;
     }
     // Area fills leave out water and the ground under buildings.
@@ -14883,17 +14872,6 @@
       const height = partHeight(selectedBuilding) ?? 100;
       buildingPopSlider.value = height;
       if (document.activeElement !== buildingPopValue) buildingPopValue.value = height;
-      for (const button of document.querySelectorAll('#building-tops button')) {
-        button.setAttribute('aria-pressed', String(button.dataset.top === (selectedBuilding.roofStyle ?? 'flat')));
-      }
-      const roofHeight = document.getElementById('building-roof-height');
-      roofHeight.hidden = (selectedBuilding.roofStyle ?? 'flat') === 'flat';
-      roofHeight.querySelector('input').value = selectedBuilding.roofHeight ?? 100;
-      roofHeight.querySelector('output').value = `${selectedBuilding.roofHeight ?? 100}%`;
-      const inset = document.getElementById('building-roof-inset');
-      inset.hidden = selectedBuilding.roofStyle !== 'inset';
-      inset.querySelector('input').value = selectedBuilding.roofInset ?? 10;
-      inset.querySelector('output').value = selectedBuilding.roofInset ?? 10;
       // Under the building's footprint on the ground, so changing its lift doesn't move it.
       const r = partRect(selectedBuilding);
       const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([x, y]) => {
@@ -14919,23 +14897,6 @@
     buildingPopSlider.addEventListener('input', () => {
       if (!selectedBuilding) return;
       selectedBuilding.height = Number(buildingPopSlider.value);
-      draw();
-    });
-    for (const button of document.querySelectorAll('#building-tops button')) {
-      button.addEventListener('click', () => {
-        if (!selectedBuilding) return;
-        selectedBuilding.roofStyle = button.dataset.top;
-        draw();
-      });
-    }
-    document.querySelector('#building-roof-inset input').addEventListener('input', (e) => {
-      if (!selectedBuilding) return;
-      selectedBuilding.roofInset = Number(e.target.value);
-      draw();
-    });
-    document.querySelector('#building-roof-height input').addEventListener('input', (e) => {
-      if (!selectedBuilding) return;
-      selectedBuilding.roofHeight = Number(e.target.value);
       draw();
     });
     document.getElementById('building-lift-reset').addEventListener('click', () => {
@@ -15244,12 +15205,29 @@
       if (e.key === 'Escape') leaveBuildingEditor(false);
       if (!e.target.closest('input, textarea, select') || e.key === 'Escape') e.stopImmediatePropagation();
     }, { capture: true });
+    // A building from the image is moved by dragging it, and scaled by
+    // dragging a corner of its box, about the opposite corner, keeping its shape.
+    const buildingCorners = (part) => {
+      const r = partRect(part);
+      return [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]].map(([x, y]) => ({ x, y }));
+    };
+    function buildingHandleAt(e) {
+      if (!selectedBuilding || selectedBuilding.shape) return -1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      return buildingCorners(selectedBuilding).findIndex((corner) => {
+        const q = toScreen(corner);
+        const w = windowPoint(q.x, q.y);
+        return Math.hypot(w.x - (e.clientX - rect.left), w.y - (e.clientY - rect.top)) <= 8;
+      });
+    }
+    let buildingDrag = null;
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || spaceHeld || backgroundTools.hidden || !buildingsImage || backgroundTool !== 'select'
         || document.getElementById('background-panel').dataset.tab !== 'buildings') return;
       const s = canvasPoint(e);
+      const handle = buildingHandleAt(e);
       // Drawn shapes sit above the buildings image, so a click on one picks the shape.
-      const part = shapeAt(toBackground(s.x, s.y)) ? null : buildingAt(s);
+      const part = handle >= 0 ? selectedBuilding : shapeAt(toBackground(s.x, s.y)) ? null : buildingAt(s);
       if (!part) {
         if (selectedBuilding) selectBuilding(null);
         return;
@@ -15257,8 +15235,50 @@
       e.stopImmediatePropagation();
       e.preventDefault();
       selectBuilding(part);
+      buildingDrag = { part, handle, start: toBackground(s.x, s.y), was: { x: part.x, y: part.y, w: part.w, h: part.h }, before: snapshot(), moved: false };
+      canvas.setPointerCapture(e.pointerId);
       draw();
     }, { capture: true });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!buildingDrag) return;
+      e.stopImmediatePropagation();
+      const { part, handle, start, was, before } = buildingDrag;
+      const s = canvasPoint(e);
+      const p = toBackground(s.x, s.y);
+      if (!buildingDrag.moved) recordUndo(before);
+      buildingDrag.moved = true;
+      // Map units to the buildings image's own.
+      const b = buildingsRect();
+      const kx = buildingsImage.naturalWidth / b.w;
+      const ky = buildingsImage.naturalHeight / b.h;
+      if (handle < 0) {
+        part.x = was.x + (p.x - start.x) * kx;
+        part.y = was.y + (p.y - start.y) * ky;
+      } else {
+        // The opposite corner stays put; the scale follows the pointer's distance from it.
+        const fx = handle === 1 || handle === 2 ? 0 : 1;
+        const fy = handle >= 2 ? 0 : 1;
+        const ax = was.x + was.w * fx;
+        const ay = was.y + was.h * fy;
+        const px = b.x + ax / kx;
+        const py = b.y + ay / ky;
+        const from = Math.hypot(start.x - px, start.y - py) || 1;
+        const k = Math.max(0.05, Math.hypot(p.x - px, p.y - py) / from);
+        part.w = was.w * k;
+        part.h = was.h * k;
+        part.x = ax - part.w * fx;
+        part.y = ay - part.h * fy;
+      }
+      draw();
+    }, { capture: true });
+    for (const type of ['pointerup', 'pointercancel']) {
+      canvas.addEventListener(type, (e) => {
+        if (!buildingDrag) return;
+        e.stopImmediatePropagation();
+        buildingDrag = null;
+        draw();
+      }, { capture: true });
+    }
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && selectedBuilding) {
         selectBuilding(null);
@@ -17197,6 +17217,7 @@
       file.buildingRoofInsets = buildingParts.map((part) => part.roofInset ?? 10);
       file.buildingRoofOverhangs = buildingParts.map((part) => part.roofOverhang ?? 0);
       file.buildingRoofThicknesses = buildingParts.map((part) => part.roofThickness ?? 0);
+      file.buildingPlaces = buildingParts.map(({ x, y, w, h }) => [x, y, w, h]);
       file.buildingRemoved = buildingParts.map((part) => !!part.removed);
       file.removedBase = [...removedBase];
       file.trees = trees.map(({ x, y, shape }) => ({ x, y, shape }));
@@ -17363,6 +17384,9 @@
       if (file.background) await setBackgroundImage(file.background);
       else clearBackgroundImage();
       await setBuildingsImage(file.buildings ?? null, file.buildingHeights ?? [], file.buildingTops ?? [], file.buildingRoofHeights ?? [], file.buildingRoofInsets ?? [], file.buildingHeights ? [] : file.buildingLifts ?? [], file.buildingRoofOverhangs ?? [], file.buildingRoofThicknesses ?? []);
+      (file.buildingPlaces ?? []).forEach((place, i) => {
+        if (buildingParts[i] && place) [buildingParts[i].x, buildingParts[i].y, buildingParts[i].w, buildingParts[i].h] = place;
+      });
       (file.buildingRemoved ?? []).forEach((removed, i) => { if (removed && buildingParts[i]) buildingParts[i].removed = true; });
       const known = (name) => !!TREE_SHAPES[OLD_STAMPS[name] ?? name];
       trees = (file.trees ?? []).filter((t) => known(t.shape)).map((t) => ({ ...t, shape: OLD_STAMPS[t.shape] ?? t.shape }));

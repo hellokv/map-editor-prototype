@@ -14583,6 +14583,55 @@
     }
     // Lifted buildings are stacked slices, each raised a little further,
     // farthest part first so nearer ones stand in front.
+    // The outline on the edges inside a raised building's silhouette: the
+    // walls' corners and feet, and its top's ridges and face edges. Only edges
+    // of faces turned towards the viewer are drawn, so the far side's stay hidden.
+    function strokeBuildingEdges(c, part, top, inCanvas) {
+      const spin = leanSpin();
+      const facing = ([ox, oy]) => spin.b * ox + spin.d * oy > 0;
+      const at = ([x, y], h) => inCanvas(liftMatrix(h)).transformPoint(new DOMPoint(x, y));
+      const line = (p, q) => {
+        c.moveTo(p.x, p.y);
+        c.lineTo(q.x, q.y);
+      };
+      const poly = partPolygon(part);
+      const n = poly.length;
+      const [cx, cy] = [poly.reduce((t, p) => t + p[0], 0) / n, poly.reduce((t, p) => t + p[1], 0) / n];
+      const front = poly.map((a, i) => {
+        const b = poly[(i + 1) % n];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        let normal = [(b[1] - a[1]) / len, -(b[0] - a[0]) / len];
+        if (normal[0] * ((a[0] + b[0]) / 2 - cx) + normal[1] * ((a[1] + b[1]) / 2 - cy) < 0) normal = [-normal[0], -normal[1]];
+        return facing(normal);
+      });
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.strokeStyle = colorOf(buildingOutlineColor);
+      c.lineWidth = buildingOutlineHalf() * 2 * view.scale * (window.devicePixelRatio || 1);
+      c.lineJoin = c.lineCap = 'round';
+      c.beginPath();
+      // Corners only where the outline turns sharply, so curved walls get none.
+      const corner = (i) => {
+        const [z, a, b] = [poly[(i + n - 1) % n], poly[i], poly[(i + 1) % n]];
+        const turn = Math.abs(Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.atan2(a[1] - z[1], a[0] - z[0]));
+        return Math.min(turn, 2 * Math.PI - turn) > Math.PI / 6;
+      };
+      poly.forEach((a, i) => {
+        const b = poly[(i + 1) % n];
+        if (front[i]) line(at(a, 0), at(b, 0));
+        if ((front[i] || front[(i + n - 1) % n]) && corner(i)) line(at(a, 0), at(a, top));
+      });
+      if (faceted(part) && roofRise(part)) {
+        const lift = partLift(part);
+        for (const face of roofFaces(part)) {
+          if (face.outward && !facing(face.outward)) continue;
+          const pts = face.points.map((p, i) => at(p, (lift + face.heights[i] * roofScale(part)) * view.scale));
+          pts.forEach((p, i) => line(p, pts[(i + 1) % pts.length]));
+        }
+      }
+      c.stroke();
+      c.restore();
+    }
     // An image part's roof, and the pictures made from it, redrawn from its
     // vector at rk pixels to an image unit.
     function partResolution(part, rk) {
@@ -14699,6 +14748,7 @@
             c.globalAlpha = 1;
           }
         }
+        if (outlined && tilted) strokeBuildingEdges(c, part, top, inCanvas);
         if (part === selectedBuilding) {
           c.strokeStyle = '#2f80ed';
           c.lineWidth = 2 / view.scale;
